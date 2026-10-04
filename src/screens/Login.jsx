@@ -19,7 +19,8 @@ export default function Login() {
   return (
     <main className="flex min-h-full flex-col justify-center px-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm">
-        <h1 className="mb-8 text-center text-3xl font-semibold">Expense Tracker</h1>
+        <img src="/app-icon.png" alt="" className="mx-auto mb-5 size-24 rounded-[26px] shadow-[0_6px_20px_-8px_rgba(11,27,69,0.35)]" />
+        <h1 className="mb-8 text-center font-display text-3xl font-bold tracking-tight">Expense Tracker</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="email"
@@ -28,7 +29,7 @@ export default function Login() {
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-slate-900"
+            className="w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt"
           />
           <input
             type="password"
@@ -37,13 +38,13 @@ export default function Login() {
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base outline-none focus:border-slate-900"
+            className="w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt"
           />
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-loss">{error}</p>}
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-xl bg-slate-900 py-3 text-base font-medium text-white disabled:opacity-50"
+            className="w-full rounded-xl bg-cobalt py-3.5 text-base font-semibold text-white disabled:opacity-50"
           >
             {busy ? 'Signing in…' : 'Sign in'}
           </button>

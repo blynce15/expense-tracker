@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Figtree", ui-sans-serif, sans-serif;
+
+  --color-paper: #f4f7fd;
+  --color-card: #ffffff;
+  --color-ink: #0b1b45;
+  --color-muted: #5a6b8c;
+  --color-line: #dce4f5;
+  --color-cobalt: #1f4fe0;
+  --color-cobalt-deep: #1638a8;
+  --color-gain: #0f8a5f;
+  --color-loss: #c23b22;
+}
+
 html,
 body,
 #root {
@@ -7,6 +22,26 @@ body,
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-paper font-sans text-ink antialiased;
   -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+/* Amounts line up in columns */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-cobalt);
+  outline-offset: 2px;
+}
+
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
