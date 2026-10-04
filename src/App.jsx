@@ -9,6 +9,7 @@ import Accounts from './screens/Accounts'
 import Login from './screens/Login'
 import Placeholder from './screens/Placeholder'
 import Settings from './screens/Settings'
+import Transactions from './screens/Transactions'
 import TransactionSheet from './screens/TransactionSheet'
 
 function App() {
@@ -54,7 +55,7 @@ function App() {
 function screenFor(route, session, dataVersion) {
   switch (route) {
     case '/transactions':
-      return { title: 'Transactions', body: <Placeholder text="Your transactions will appear here." /> }
+      return { title: 'Transactions', body: <Transactions key={dataVersion} /> }
     case '/analytics':
       return { title: 'Analytics', body: <Placeholder text="Spending insights arrive in phase 3." /> }
     case '/savings':
