@@ -6,6 +6,7 @@ import { useRoute } from './lib/useRoute'
 import { useSession } from './lib/useSession'
 import Account from './screens/Account'
 import Accounts from './screens/Accounts'
+import Categories from './screens/Categories'
 import Login from './screens/Login'
 import Placeholder from './screens/Placeholder'
 import Settings from './screens/Settings'
@@ -64,6 +65,8 @@ function screenFor(route, session, dataVersion) {
       return { title: 'Settings', back: '/home', body: <Settings /> }
     case '/settings/accounts':
       return { title: 'Accounts & cards', back: '/settings', body: <Accounts key={dataVersion} /> }
+    case '/settings/categories':
+      return { title: 'Categories', back: '/settings', body: <Categories /> }
     case '/account':
       return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:

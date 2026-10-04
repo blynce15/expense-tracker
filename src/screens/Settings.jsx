@@ -1,7 +1,10 @@
 import Icon from '../components/Icon'
 import { navigate } from '../lib/useRoute'
 
-const ITEMS = [{ path: '/settings/accounts', label: 'Accounts & cards', icon: 'card' }]
+const ITEMS = [
+  { path: '/settings/accounts', label: 'Accounts & cards', icon: 'card' },
+  { path: '/settings/categories', label: 'Categories', icon: 'tag' },
+]
 
 export default function Settings() {
   return (

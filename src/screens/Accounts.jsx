@@ -118,7 +118,7 @@ function AccountForm({ account, onClose, onSaved }) {
   async function save(e) {
     e.preventDefault()
     const cents = balance.trim() === '' ? 0 : parseToCents(balance)
-    if (cents === null) return setError('Enter the balance as a number, like 250 or 1250.50.')
+    if (cents === null) return setError('Enter the balance as a number, like 250 or 1250,50.')
 
     setBusy(true)
     setError(null)
@@ -218,7 +218,7 @@ function AccountForm({ account, onClose, onSaved }) {
                 inputMode="decimal"
                 value={balance}
                 onChange={(e) => setBalance(e.target.value)}
-                placeholder="0.00"
+                placeholder="0,00"
                 className={`${inputClass} tabular pl-9`}
               />
             </div>

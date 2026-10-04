@@ -3,7 +3,7 @@ import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { formatDay, todayISO } from '../lib/dates'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
-import { centsToInput, parseToCents } from '../lib/money'
+import { formatTyping, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
 const TYPES = [
@@ -25,12 +25,12 @@ function pressKey(amount, key) {
   return amount + key
 }
 
-// Shows "1234.5" as "1,234.5" while typing
-function displayAmount(amount) {
-  if (!amount) return '0'
-  const [whole, decimals] = amount.split('.')
-  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return decimals === undefined ? grouped : `${grouped}.${decimals}`
+// 1250 → "12.5" (number-pad text; dot is the decimal point internally)
+function centsToPad(cents) {
+  const euros = Math.trunc(cents / 100)
+  const rest = cents % 100
+  if (rest === 0) return String(euros)
+  return `${euros}.${String(rest).padStart(2, '0').replace(/0$/, '')}`
 }
 
 // transaction: null to add a new one, or an existing row to edit it
@@ -38,7 +38,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const isNew = !transaction
   const [lookups, setLookups] = useState(lookupCache.lookups)
   const [type, setType] = useState(transaction?.type ?? 'expense')
-  const [amount, setAmount] = useState(transaction ? centsToInput(transaction.amount_cents).replace(/\.00$/, '') : '')
+  const [amount, setAmount] = useState(transaction ? centsToPad(transaction.amount_cents) : '')
   const [categoryId, setCategoryId] = useState(transaction?.category_id ?? null)
   const [accountId, setAccountId] = useState(() =>
     transaction ? transaction.account_id : lookupCache.lookups && defaultAccountId(lookupCache.lookups, lookupCache.lastUsedAccountId),
@@ -196,7 +196,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
           aria-live="polite"
         >
           <span className="mr-1 text-3xl align-[0.35em] text-muted">€</span>
-          {displayAmount(amount)}
+          {formatTyping(amount)}
         </p>
 
         {/* Account, date, note */}
@@ -213,14 +213,17 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
             </button>
           )}
           <label className={`${chip} relative`}>
-            {formatDay(date)}
+            <span className="text-base leading-none">📅</span>
+            {date !== todayISO() && formatDay(date)}
             <input
               type="date"
               value={date}
               max="2100-12-31"
               onChange={(e) => e.target.value && setDate(e.target.value)}
-              className="absolute inset-0 opacity-0"
-              aria-label="Date"
+              // Open the calendar wherever the chip is tapped/clicked
+              onClick={(e) => e.currentTarget.showPicker?.()}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label={`Date: ${formatDay(date)}`}
             />
           </label>
           {!showNote && (
@@ -231,6 +234,8 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         </div>
         {showNote && (
           <input
+            // Focus straight away so typing goes into the note, not the amount
+            autoFocus={isNew || !transaction.note}
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Note"
@@ -266,7 +271,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
               className="grid h-13 place-items-center rounded-xl bg-card font-display text-2xl font-semibold active:bg-line"
               aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
             >
-              {k === 'back' ? <Icon name="chevronLeft" /> : k}
+              {k === 'back' ? <Icon name="chevronLeft" /> : k === '.' ? ',' : k}
             </button>
           ))}
         </div>
