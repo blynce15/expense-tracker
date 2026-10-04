@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TabBar, TopBar } from './components/AppShell'
 import { ensureDefaultCategories } from './lib/defaults'
+import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
 import { useRoute } from './lib/useRoute'
 import { useSession } from './lib/useSession'
 import Account from './screens/Account'
@@ -8,21 +9,28 @@ import Accounts from './screens/Accounts'
 import Login from './screens/Login'
 import Placeholder from './screens/Placeholder'
 import Settings from './screens/Settings'
+import TransactionSheet from './screens/TransactionSheet'
 
 function App() {
   const session = useSession()
   const route = useRoute()
   const [adding, setAdding] = useState(false)
+  // Bumped after a save so screens reload their data
+  const [dataVersion, setDataVersion] = useState(0)
 
   const userId = session?.user.id
   useEffect(() => {
-    if (userId) ensureDefaultCategories().catch((e) => console.error('Default categories:', e))
+    if (!userId) return
+    // Load accounts/categories early so the Add screen opens instantly
+    ensureDefaultCategories()
+      .then(() => Promise.all([fetchLookups(), fetchLastUsedAccountId()]))
+      .catch((e) => console.error('Startup data:', e))
   }, [userId])
 
   if (session === undefined) return null
   if (!session) return <Login />
 
-  const screen = screenFor(route, session)
+  const screen = screenFor(route, session, dataVersion)
 
   return (
     <div className="min-h-full pb-[calc(5rem+env(safe-area-inset-bottom))]">
@@ -30,16 +38,20 @@ function App() {
       <main>{screen.body}</main>
       <TabBar route={route} onAdd={() => setAdding(true)} />
       {adding && (
-        // Replaced by the real "Add transaction" screen in the next step
-        <div className="fixed inset-0 z-50 grid place-items-center bg-ink/40 p-6" onClick={() => setAdding(false)}>
-          <p className="rounded-2xl bg-card p-6 text-center">Add transaction is coming in the next step.</p>
-        </div>
+        <TransactionSheet
+          transaction={null}
+          onClose={() => setAdding(false)}
+          onSaved={() => {
+            setAdding(false)
+            setDataVersion((v) => v + 1)
+          }}
+        />
       )}
     </div>
   )
 }
 
-function screenFor(route, session) {
+function screenFor(route, session, dataVersion) {
   switch (route) {
     case '/transactions':
       return { title: 'Transactions', body: <Placeholder text="Your transactions will appear here." /> }
@@ -50,7 +62,7 @@ function screenFor(route, session) {
     case '/settings':
       return { title: 'Settings', back: '/home', body: <Settings /> }
     case '/settings/accounts':
-      return { title: 'Accounts & cards', back: '/settings', body: <Accounts /> }
+      return { title: 'Accounts & cards', back: '/settings', body: <Accounts key={dataVersion} /> }
     case '/account':
       return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:
