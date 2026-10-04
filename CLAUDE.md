@@ -25,7 +25,7 @@ Bottom tab bar: Home · Transactions · [+] · Analytics · Savings
 ## Data model (Supabase tables)
 Every table has `user_id uuid default auth.uid()` and `created_at`.
 - accounts: name, type (debit | credit | cash | savings), starting_balance_cents, color, archived
-- categories: name, icon, color, kind (expense | income), archived
+- categories: name, icon, color, kind (expense | income), archived, sort_order (owner-chosen order)
 - transactions: type (expense | income | transfer), amount_cents (always positive), date, account_id, to_account_id (transfers only), category_id (null for transfers), note
 - savings_goals: name, target_cents, saved_cents, deadline (optional)
 

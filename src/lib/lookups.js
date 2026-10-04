@@ -8,7 +8,11 @@ export const lookupCache = { lookups: null, lastUsedAccountId: null }
 export async function fetchLookups() {
   const [accounts, categories] = await Promise.all([
     supabase.from('accounts').select('id, name, type, color, archived').order('created_at'),
-    supabase.from('categories').select('id, name, icon, color, kind, archived').order('created_at'),
+    supabase
+      .from('categories')
+      .select('id, name, icon, color, kind, archived, sort_order')
+      .order('sort_order')
+      .order('created_at'),
   ])
   if (accounts.error) throw accounts.error
   if (categories.error) throw categories.error

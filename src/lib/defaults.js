@@ -26,6 +26,9 @@ export async function ensureDefaultCategories() {
 
   const { error: insertError } = await supabase
     .from('categories')
-    .upsert(DEFAULT_CATEGORIES, { onConflict: 'user_id,kind,name', ignoreDuplicates: true })
+    .upsert(
+      DEFAULT_CATEGORIES.map((c, i) => ({ ...c, sort_order: i + 1 })),
+      { onConflict: 'user_id,kind,name', ignoreDuplicates: true },
+    )
   if (insertError) throw insertError
 }

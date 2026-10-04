@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { fetchLookups } from '../lib/lookups'
 import { supabase } from '../lib/supabase'
@@ -23,6 +24,7 @@ export default function Categories() {
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null) // null | { kind } for new | category
   const [showArchived, setShowArchived] = useState(false)
+  const [reordering, setReordering] = useState(null) // null | 'expense' | 'income'
 
   const load = useCallback(() => {
     fetchLookups()
@@ -39,21 +41,40 @@ export default function Categories() {
 
   return (
     <div className="px-4 pt-1 pb-6">
-      {KINDS.map((kind) => (
-        <section key={kind.value} className="mt-4 first:mt-1">
-          <h2 className="px-1 pb-1.5 text-sm font-semibold text-muted">{kind.label}</h2>
-          <CategoryList
-            categories={categories.filter((c) => c.kind === kind.value && !c.archived)}
-            onSelect={setEditing}
-          />
-          <button
-            onClick={() => setEditing({ kind: kind.value })}
-            className="mt-2 w-full rounded-2xl bg-card py-3.5 text-base font-medium text-cobalt"
-          >
-            Add {kind.value} category
-          </button>
-        </section>
-      ))}
+      {KINDS.map((kind) => {
+        const active = categories.filter((c) => c.kind === kind.value && !c.archived)
+        return (
+          <section key={kind.value} className="mt-4 first:mt-1">
+            <div className="flex items-center justify-between px-1 pb-1.5">
+              <h2 className="text-sm font-semibold text-muted">{kind.label}</h2>
+              {active.length > 1 && reordering !== kind.value && (
+                <button onClick={() => setReordering(kind.value)} className="py-1 text-sm font-semibold text-cobalt">
+                  Reorder
+                </button>
+              )}
+            </div>
+            {reordering === kind.value ? (
+              <ReorderList
+                categories={active}
+                onDone={() => {
+                  setReordering(null)
+                  load()
+                }}
+              />
+            ) : (
+              <>
+                <CategoryList categories={active} onSelect={setEditing} />
+                <button
+                  onClick={() => setEditing({ kind: kind.value })}
+                  className="mt-2 w-full rounded-2xl bg-card py-3.5 text-base font-medium text-cobalt"
+                >
+                  Add {kind.value} category
+                </button>
+              </>
+            )}
+          </section>
+        )
+      })}
 
       {archived.length > 0 && (
         <div className="mt-8">
@@ -68,6 +89,8 @@ export default function Categories() {
         <CategoryForm
           category={editing.id ? editing : null}
           kind={editing.kind}
+          // New categories go to the end of their list
+          nextSortOrder={Math.max(0, ...categories.filter((c) => c.kind === editing.kind).map((c) => c.sort_order)) + 1}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
@@ -98,7 +121,72 @@ function CategoryList({ categories, onSelect }) {
   )
 }
 
-function CategoryForm({ category, kind, onClose, onSaved }) {
+function ReorderList({ categories, onDone }) {
+  const [order, setOrder] = useState(categories)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  function move(index, delta) {
+    const next = [...order]
+    const [item] = next.splice(index, 1)
+    next.splice(index + delta, 0, item)
+    setOrder(next)
+  }
+
+  async function save() {
+    setBusy(true)
+    setError(null)
+    // Only update the categories whose position actually changed
+    const changed = order
+      .map((c, i) => ({ id: c.id, sort_order: i + 1, before: c.sort_order }))
+      .filter((c) => c.sort_order !== c.before)
+    const results = await Promise.all(
+      changed.map((c) => supabase.from('categories').update({ sort_order: c.sort_order }).eq('id', c.id)),
+    )
+    setBusy(false)
+    const failed = results.find((r) => r.error)
+    if (failed) return setError(failed.error.message)
+    onDone()
+  }
+
+  const arrow = 'grid size-11 place-items-center rounded-full text-ink disabled:text-line'
+
+  return (
+    <>
+      <ul className="overflow-hidden rounded-2xl bg-card">
+        {order.map((c, i) => (
+          <li key={c.id} className="flex items-center gap-3 border-b border-line py-1.5 pr-1 pl-4 last:border-0">
+            <span className="grid size-10 place-items-center rounded-xl text-lg" style={{ backgroundColor: `${c.color}22` }}>
+              {c.icon}
+            </span>
+            <span className="flex-1 text-base font-medium">{c.name}</span>
+            <button onClick={() => move(i, -1)} disabled={i === 0} className={arrow} aria-label={`Move ${c.name} up`}>
+              <Icon name="chevronUp" />
+            </button>
+            <button
+              onClick={() => move(i, 1)}
+              disabled={i === order.length - 1}
+              className={arrow}
+              aria-label={`Move ${c.name} down`}
+            >
+              <Icon name="chevronDown" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {error && <p className="mt-2 text-sm text-loss">{error}</p>}
+      <button
+        onClick={save}
+        disabled={busy}
+        className="mt-2 w-full rounded-2xl bg-cobalt py-3.5 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
+      >
+        Done
+      </button>
+    </>
+  )
+}
+
+function CategoryForm({ category, kind, nextSortOrder, onClose, onSaved }) {
   const isNew = !category
   const [name, setName] = useState(category?.name ?? '')
   const [icon, setIcon] = useState(category?.icon ?? '📦')
@@ -124,7 +212,7 @@ function CategoryForm({ category, kind, onClose, onSaved }) {
     const row = { name: name.trim(), icon: icon.trim() || '📦', color }
     run(() =>
       isNew
-        ? supabase.from('categories').insert({ ...row, kind })
+        ? supabase.from('categories').insert({ ...row, kind, sort_order: nextSortOrder })
         : supabase.from('categories').update(row).eq('id', category.id),
     )
   }
