@@ -32,3 +32,16 @@ export function formatDay(iso) {
     ...(sameYear ? {} : { year: 'numeric' }),
   })
 }
+
+// First and last day of the month containing `iso`, e.g. ["2026-10-01", "2026-10-31"]
+export function monthRange(iso) {
+  const [y, m] = iso.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  const mm = String(m).padStart(2, '0')
+  return [`${y}-${mm}-01`, `${y}-${mm}-${last}`]
+}
+
+// "October"
+export function monthName(iso) {
+  return parseISO(iso).toLocaleDateString('en-GB', { month: 'long' })
+}

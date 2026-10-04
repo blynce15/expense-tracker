@@ -7,6 +7,7 @@ import { useSession } from './lib/useSession'
 import Account from './screens/Account'
 import Accounts from './screens/Accounts'
 import Categories from './screens/Categories'
+import Home from './screens/Home'
 import Login from './screens/Login'
 import Placeholder from './screens/Placeholder'
 import Settings from './screens/Settings'
@@ -70,7 +71,7 @@ function screenFor(route, session, dataVersion) {
     case '/account':
       return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:
-      return { title: 'Home', body: <Placeholder text="Your monthly overview arrives in phase 2." /> }
+      return { title: 'Home', body: <Home key={dataVersion} /> }
   }
 }
 
