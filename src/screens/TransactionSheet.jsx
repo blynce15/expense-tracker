@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { formatDay, todayISO } from '../lib/dates'
@@ -47,7 +48,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const [date, setDate] = useState(transaction?.date ?? todayISO())
   const [note, setNote] = useState(transaction?.note ?? '')
   const [showNote, setShowNote] = useState(Boolean(transaction?.note))
-  const [picking, setPicking] = useState(null) // null | 'account' | 'toAccount'
+  const [picking, setPicking] = useState(null) // null | 'account' | 'toAccount' | 'date'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -145,6 +146,20 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
     )
   }
 
+  if (picking === 'date') {
+    return (
+      <Sheet title="Date" onClose={() => setPicking(null)} tall>
+        <DatePicker
+          value={date}
+          onChange={(iso) => {
+            setDate(iso)
+            setPicking(null)
+          }}
+        />
+      </Sheet>
+    )
+  }
+
   if (picking) {
     const current = picking === 'account' ? accountId : toAccountId
     return (
@@ -212,20 +227,10 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
               To {accountById(toAccountId)?.name ?? 'account…'}
             </button>
           )}
-          <label className={`${chip} relative`}>
+          <button onClick={() => setPicking('date')} className={chip} aria-label={`Date: ${formatDay(date)}`}>
             <span className="text-base leading-none">📅</span>
             {date !== todayISO() && formatDay(date)}
-            <input
-              type="date"
-              value={date}
-              max="2100-12-31"
-              onChange={(e) => e.target.value && setDate(e.target.value)}
-              // Open the calendar wherever the chip is tapped/clicked
-              onClick={(e) => e.currentTarget.showPicker?.()}
-              className="absolute inset-0 cursor-pointer opacity-0"
-              aria-label={`Date: ${formatDay(date)}`}
-            />
-          </label>
+          </button>
           {!showNote && (
             <button onClick={() => setShowNote(true)} className={`${chip} text-muted`}>
               Add note
@@ -233,14 +238,30 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
           )}
         </div>
         {showNote && (
-          <input
-            // Focus straight away so typing goes into the note, not the amount
-            autoFocus={isNew || !transaction.note}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Note"
-            className="w-full rounded-xl border border-line bg-card px-4 py-2.5 text-base outline-none focus:border-cobalt"
-          />
+          <div className="relative">
+            <input
+              // Focus straight away so typing goes into the note, not the amount
+              autoFocus={isNew || !transaction.note}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              // Leaving it empty closes the note again
+              onBlur={() => !note.trim() && setShowNote(false)}
+              placeholder="Note"
+              className="w-full rounded-xl border border-line bg-card py-2.5 pr-12 pl-4 text-base outline-none focus:border-cobalt"
+            />
+            <button
+              // Prevent the blur from firing first, which would swallow this tap
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setNote('')
+                setShowNote(false)
+              }}
+              className="absolute top-0 right-0 grid h-full w-12 place-items-center text-muted"
+              aria-label="Remove note"
+            >
+              <Icon name="close" size={20} />
+            </button>
+          </div>
         )}
 
         {/* Categories */}

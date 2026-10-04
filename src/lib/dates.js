@@ -11,7 +11,7 @@ function parseISO(iso) {
   return new Date(y, m - 1, d)
 }
 
-function shiftDays(iso, days) {
+export function shiftDays(iso, days) {
   const d = parseISO(iso)
   d.setDate(d.getDate() + days)
   const pad = (n) => String(n).padStart(2, '0')
