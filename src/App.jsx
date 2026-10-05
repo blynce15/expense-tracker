@@ -11,7 +11,7 @@ import Analytics from './screens/Analytics'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
 import Login from './screens/Login'
-import Placeholder from './screens/Placeholder'
+import Savings from './screens/Savings'
 import Settings from './screens/Settings'
 import Transactions from './screens/Transactions'
 import TransactionSheet from './screens/TransactionSheet'
@@ -91,7 +91,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/analytics':
       return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
     case '/savings':
-      return { title: 'Savings', body: <Placeholder text="Savings goals arrive in phase 4." /> }
+      return { title: 'Savings', body: <Savings key={dataVersion} /> }
     case '/settings':
       return { title: 'Settings', back: '/home', body: <Settings /> }
     case '/settings/accounts':
