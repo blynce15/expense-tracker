@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
-import { formatLongToday } from './lib/dates'
+import { formatTodayLabel } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
 import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
 import { useRoute } from './lib/useRoute'
@@ -102,7 +102,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/account':
       return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:
-      return { title: 'Home', center: formatLongToday(), body: <Home key={dataVersion} /> }
+      return { title: 'Home', center: formatTodayLabel(), body: <Home key={dataVersion} /> }
   }
 }
 
