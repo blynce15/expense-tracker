@@ -248,7 +248,7 @@ function Upcoming({ payments, onPay }) {
               <li key={p.id} className="w-44 shrink-0 snap-start">
                 <div className={`flex h-full flex-col rounded-3xl p-4 ${first ? 'bg-cobalt text-white' : 'bg-card'}`}>
                   <span className={`grid size-11 place-items-center rounded-full text-xl ${first ? 'bg-white' : 'bg-paper'}`}>{p.icon}</span>
-                  <p className="mt-3 truncate font-display text-lg leading-tight font-bold">{p.name}</p>
+                  <p className="mt-3 line-clamp-2 font-display text-lg leading-tight font-bold break-words">{p.name}</p>
                   <p className="tabular mt-1 text-base font-semibold">
                     {formatCents(p.amount_cents)}
                     <span className={`text-sm font-normal ${first ? 'text-white/70' : 'text-muted'}`}>/{per}</span>
