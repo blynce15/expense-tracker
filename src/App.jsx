@@ -7,6 +7,7 @@ import { useRoute } from './lib/useRoute'
 import { useSession } from './lib/useSession'
 import Account from './screens/Account'
 import Accounts from './screens/Accounts'
+import Analytics from './screens/Analytics'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
 import Login from './screens/Login'
@@ -88,7 +89,7 @@ function screenFor(route, session, dataVersion, tx) {
         ),
       }
     case '/analytics':
-      return { title: 'Analytics', body: <Placeholder text="Spending insights arrive in phase 3." /> }
+      return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
     case '/savings':
       return { title: 'Savings', body: <Placeholder text="Savings goals arrive in phase 4." /> }
     case '/settings':
