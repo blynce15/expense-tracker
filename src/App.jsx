@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { TabBar, TopBar } from './components/AppShell'
+import Icon from './components/Icon'
 import { ensureDefaultCategories } from './lib/defaults'
 import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
 import { useRoute } from './lib/useRoute'
@@ -20,6 +21,9 @@ function App() {
   const [adding, setAdding] = useState(false)
   // Bumped after a save so screens reload their data
   const [dataVersion, setDataVersion] = useState(0)
+  // Transactions filter lives here so it's kept when switching tabs
+  const [txFilter, setTxFilter] = useState({ type: 'all', categoryIds: [] })
+  const [filterOpen, setFilterOpen] = useState(false)
 
   const userId = session?.user.id
   useEffect(() => {
@@ -33,11 +37,11 @@ function App() {
   if (session === undefined) return null
   if (!session) return <Login />
 
-  const screen = screenFor(route, session, dataVersion)
+  const screen = screenFor(route, session, dataVersion, { txFilter, setTxFilter, filterOpen, setFilterOpen })
 
   return (
     <div className="min-h-full pb-[calc(5rem+env(safe-area-inset-bottom))]">
-      <TopBar title={screen.title} back={screen.back} />
+      <TopBar title={screen.title} back={screen.back} action={screen.action} />
       <main>{screen.body}</main>
       <TabBar route={route} onAdd={() => setAdding(true)} />
       {adding && (
@@ -54,10 +58,35 @@ function App() {
   )
 }
 
-function screenFor(route, session, dataVersion) {
+function screenFor(route, session, dataVersion, tx) {
   switch (route) {
     case '/transactions':
-      return { title: 'Transactions', body: <Transactions key={dataVersion} /> }
+      return {
+        title: 'Transactions',
+        action: (
+          <button
+            onClick={() => tx.setFilterOpen(true)}
+            className={`relative grid size-11 place-items-center rounded-full ${tx.txFilter.categoryIds.length ? 'text-cobalt' : 'text-muted'}`}
+            aria-label="Filter by category"
+          >
+            <Icon name="filter" size={22} />
+            {tx.txFilter.categoryIds.length > 0 && (
+              <span className="absolute top-1.5 right-1.5 grid size-4 place-items-center rounded-full bg-cobalt text-[10px] font-bold text-white">
+                {tx.txFilter.categoryIds.length}
+              </span>
+            )}
+          </button>
+        ),
+        body: (
+          <Transactions
+            key={dataVersion}
+            filter={tx.txFilter}
+            onFilterChange={tx.setTxFilter}
+            filterOpen={tx.filterOpen}
+            onFilterClose={() => tx.setFilterOpen(false)}
+          />
+        ),
+      }
     case '/analytics':
       return { title: 'Analytics', body: <Placeholder text="Spending insights arrive in phase 3." /> }
     case '/savings':

@@ -9,7 +9,7 @@ const TABS = [
   { path: '/savings', label: 'Savings', icon: 'savings' },
 ]
 
-export function TopBar({ title, back }) {
+export function TopBar({ title, back, action }) {
   return (
     <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="flex h-14 items-center gap-1 px-2">
@@ -21,6 +21,7 @@ export function TopBar({ title, back }) {
           <div className="w-2" />
         )}
         <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
+        {action}
         {!back && (
           <>
             <button onClick={() => navigate('/settings')} className="grid size-11 place-items-center rounded-full text-muted" aria-label="Settings">
