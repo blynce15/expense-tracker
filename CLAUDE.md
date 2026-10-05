@@ -67,7 +67,11 @@ Done:
 - Deployed to Vercel via CLI: https://expense-tracker-phi-ivory-98.vercel.app (publish with `npx vercel deploy --prod --yes`; env vars set in Vercel).
 - Display style: European numbers (€1.234,56), comma key on the number pad.
 
+Also done (same day):
+- Recurring payments (expenses only): table recurring_payments, full list screen (#/recurring), Upcoming payments cards on Home with a Paid confirmation.
+- Phase 5: vite-plugin-pwa manifest + service worker (app shell offline, data never cached, auto-update on next open), icons and iPhone launch screens in public/icons and public/splash, offline notice.
+
 Next:
-- Monthly budget per category: owner declined for now (would need a data-model change).
-- Phase 5: PWA polish (manifest, icons, splash, offline shell).
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
+- Monthly budget per category: owner declined for now (would need a data-model change).
+- Later: CSV export.
