@@ -4,6 +4,7 @@ import { navigate } from '../lib/useRoute'
 const ITEMS = [
   { path: '/settings/accounts', label: 'Accounts & cards', icon: 'card' },
   { path: '/settings/categories', label: 'Categories', icon: 'tag' },
+  { path: '/recurring', label: 'Recurring payments', icon: 'repeat' },
 ]
 
 export default function Settings() {

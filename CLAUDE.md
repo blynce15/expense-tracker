@@ -28,6 +28,7 @@ Every table has `user_id uuid default auth.uid()` and `created_at`.
 - categories: name, icon, color, kind (expense | income), archived, sort_order (owner-chosen order)
 - transactions: type (expense | income | transfer), amount_cents (always positive), date, account_id, to_account_id (transfers only), category_id (null for transfers), note
 - savings_goals: name, target_cents, saved_cents, deadline (optional)
+- recurring_payments: name, icon, amount_cents, frequency (weekly | monthly | yearly), start_date (sets day of month), next_due, account_id, category_id, active. "Paid" creates an expense and moves next_due forward; nothing is created automatically.
 
 ## Rules
 - Store money as integer cents. Never floats. Format as € only for display.

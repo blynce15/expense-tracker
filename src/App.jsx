@@ -12,6 +12,7 @@ import Analytics from './screens/Analytics'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
 import Login from './screens/Login'
+import Recurring from './screens/Recurring'
 import Savings from './screens/Savings'
 import Settings from './screens/Settings'
 import Transactions from './screens/Transactions'
@@ -99,6 +100,8 @@ function screenFor(route, session, dataVersion, tx) {
       return { title: 'Accounts & cards', back: '/settings', body: <Accounts key={dataVersion} /> }
     case '/settings/categories':
       return { title: 'Categories', back: '/settings', body: <Categories /> }
+    case '/recurring':
+      return { title: 'Recurring payments', back: '/home', body: <Recurring key={dataVersion} /> }
     case '/account':
       return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:

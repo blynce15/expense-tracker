@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
+import { EMOJIS } from '../lib/emojis'
 import { fetchLookups } from '../lib/lookups'
 import { supabase } from '../lib/supabase'
 
 const COLORS = ['#1f9d55', '#e8590c', '#1f4fe0', '#6741d9', '#495057', '#d6336c', '#0c8599', '#f08c00', '#1c7ed6', '#c23b22', '#0f8a5f', '#868e96']
-
-// Quick picks; any emoji can also be typed in the box
-const EMOJIS = [
-  '🛒', '🍽️', '☕', '🍺', '🍕', '🥐', '🚆', '🚗', '⛽', '🚕', '🅿️', '🚲',
-  '🏠', '💡', '🧾', '📱', '🌐', '🛍️', '👕', '💄', '🩺', '💊', '🏋️', '💇',
-  '🎬', '🎮', '🎵', '📚', '🎁', '✈️', '🏨', '🐶', '👶', '🎓', '💻', '🔧',
-  '💼', '💶', '💰', '📈', '🏦', '↩️', '📦', '❤️', '🧸', '🍷', '🚬', '🎾',
-]
 
 const KINDS = [
   { value: 'expense', label: 'Expenses' },

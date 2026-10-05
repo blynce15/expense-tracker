@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import Icon from '../components/Icon'
+import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
 import { monthRange, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
+import { daysUntil, dueLabel, fetchRecurring, FREQUENCIES } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
 import TransactionSheet from './TransactionSheet'
@@ -24,12 +26,13 @@ export default function Home() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [paying, setPaying] = useState(null)
   const [hidden, setHidden] = useState(readHidden)
 
   const load = useCallback(async () => {
     try {
       const [monthStart] = monthRange(todayISO())
-      const [accounts, lookups, sinceMonthStart, recent] = await Promise.all([
+      const [accounts, lookups, sinceMonthStart, recent, recurring] = await Promise.all([
         fetchAccountsWithBalances(),
         fetchLookups(),
         supabase.from('transactions').select('type, amount_cents, account_id, to_account_id').gte('date', monthStart),
@@ -39,6 +42,7 @@ export default function Home() {
           .order('date', { ascending: false })
           .order('created_at', { ascending: false })
           .limit(RECENT_COUNT),
+        fetchRecurring(),
       ])
       if (sinceMonthStart.error) throw sinceMonthStart.error
       if (recent.error) throw recent.error
@@ -61,6 +65,7 @@ export default function Home() {
           .map((a) => ({ ...a, change_cents: change.get(a.id) ?? 0 })),
         lookups,
         recent: recent.data,
+        upcoming: recurring.filter((p) => p.active),
       })
     } catch (e) {
       setError(e.message)
@@ -88,7 +93,19 @@ export default function Home() {
   return (
     <div className="space-y-6 pt-1 pb-6">
       <BalanceCard accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} />
+      <Upcoming payments={data.upcoming} onPay={setPaying} />
       <Recent data={data} onSelect={setEditing} />
+
+      {paying && (
+        <PaySheet
+          payment={paying}
+          onClose={() => setPaying(null)}
+          onPaid={() => {
+            setPaying(null)
+            load()
+          }}
+        />
+      )}
 
       {editing && (
         <TransactionSheet
@@ -202,6 +219,57 @@ function BalanceCard({ accounts, hidden, onToggleHidden }) {
         <button onClick={() => navigate('/settings/accounts')} className="mt-3 w-full rounded-2xl bg-card py-4 text-cobalt">
           Add your first account
         </button>
+      )}
+    </section>
+  )
+}
+
+// Recurring payments, soonest first; the first card is highlighted
+function Upcoming({ payments, onPay }) {
+  return (
+    <section>
+      <div className="flex items-baseline justify-between px-5 pb-2">
+        <h2 className="font-display text-lg font-bold">Upcoming payments</h2>
+        <button onClick={() => navigate('/recurring')} className="text-sm font-semibold text-cobalt">
+          {payments.length ? 'See all' : 'Add'}
+        </button>
+      </div>
+      {payments.length === 0 ? (
+        <button onClick={() => navigate('/recurring')} className="mx-4 w-[calc(100%-2rem)] rounded-2xl bg-card px-4 py-4 text-left text-muted">
+          Add rent, subscriptions and bills to see what's due next.
+        </button>
+      ) : (
+        <ul className="flex snap-x gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {payments.map((p, i) => {
+            const first = i === 0
+            const days = daysUntil(p.next_due)
+            const per = FREQUENCIES.find((f) => f.value === p.frequency)?.per
+            return (
+              <li key={p.id} className="w-44 shrink-0 snap-start">
+                <div className={`flex h-full flex-col rounded-3xl p-4 ${first ? 'bg-cobalt text-white' : 'bg-card'}`}>
+                  <span className={`grid size-11 place-items-center rounded-full text-xl ${first ? 'bg-white' : 'bg-paper'}`}>{p.icon}</span>
+                  <p className="mt-3 truncate font-display text-lg leading-tight font-bold">{p.name}</p>
+                  <p className="tabular mt-1 text-base font-semibold">
+                    {formatCents(p.amount_cents)}
+                    <span className={`text-sm font-normal ${first ? 'text-white/70' : 'text-muted'}`}>/{per}</span>
+                  </p>
+                  <p className={`mt-1 text-sm ${days < 0 ? (first ? 'font-semibold text-white' : 'font-semibold text-loss') : first ? 'text-white/80' : 'text-muted'}`}>
+                    {dueLabel(p.next_due)}
+                  </p>
+                  {days <= 0 && (
+                    <button
+                      onClick={() => onPay(p)}
+                      className={`mt-3 rounded-full py-2 text-sm font-semibold ${first ? 'bg-white text-cobalt' : 'bg-cobalt text-white'}`}
+                    >
+                      Paid
+                    </button>
+                  )}
+                </div>
+              </li>
+            )
+          })}
+          <li aria-hidden="true" className="w-1 shrink-0" />
+        </ul>
       )}
     </section>
   )
