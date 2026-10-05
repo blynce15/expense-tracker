@@ -5,6 +5,7 @@ import { formatTodayLabel } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
 import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
 import { useRoute } from './lib/useRoute'
+import { useOnline } from './lib/useOnline'
 import { useSession } from './lib/useSession'
 import Account from './screens/Account'
 import Accounts from './screens/Accounts'
@@ -21,6 +22,7 @@ import TransactionSheet from './screens/TransactionSheet'
 function App() {
   const session = useSession()
   const route = useRoute()
+  const online = useOnline()
   const [adding, setAdding] = useState(false)
   // Bumped after a save so screens reload their data
   const [dataVersion, setDataVersion] = useState(0)
@@ -45,6 +47,11 @@ function App() {
   return (
     <div className="min-h-full pb-[calc(5rem+env(safe-area-inset-bottom))]">
       <TopBar title={screen.title} back={screen.back} action={screen.action} center={screen.center} />
+      {!online && (
+        <p role="status" className="mx-4 mb-2 rounded-xl bg-ink px-4 py-2.5 text-sm text-white">
+          You're offline. Your data will load again when you're back online.
+        </p>
+      )}
       <main>{screen.body}</main>
       <TabBar route={route} onAdd={() => setAdding(true)} />
       {adding && (
