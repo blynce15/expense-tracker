@@ -56,3 +56,17 @@ Later (not v1): recurring transactions, CSV export.
 
 ## Progress
 (Update this section at the end of each work session: what's done, what's next.)
+
+### 2026-10-05
+Done:
+- Phase 1: login, accounts, categories (editor + owner-chosen order), add/edit/delete transactions, transactions list with All/Income/Expense switch and category filter.
+- Phase 2: Home with dark total-balance card (tappable account edges, hide amounts) and recent transactions.
+- Phase 3 (partial): Analytics tab with month picker, spending by category, last 6 months, daily spending.
+- Phase 4: Savings goals (progress, add/take out money, deadlines).
+- Deployed to Vercel via CLI: https://expense-tracker-phi-ivory-98.vercel.app (publish with `npx vercel deploy --prod --yes`; env vars set in Vercel).
+- Display style: European numbers (€1.234,56), comma key on the number pad.
+
+Next:
+- Monthly budget per category: owner declined for now (would need a data-model change).
+- Phase 5: PWA polish (manifest, icons, splash, offline shell).
+- Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
