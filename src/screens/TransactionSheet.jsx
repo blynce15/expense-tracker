@@ -228,7 +228,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
             </button>
           )}
           <button onClick={() => setPicking('date')} className={chip} aria-label={`Date: ${formatDay(date)}`}>
-            <span className="text-base leading-none">📅</span>
+            <span className="text-base leading-none">🗓️</span>
             {date !== todayISO() && formatDay(date)}
           </button>
           {!showNote && (

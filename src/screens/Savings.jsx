@@ -332,7 +332,7 @@ function GoalForm({ goal, onClose, onSaved }) {
           <span className="mb-1.5 block text-sm font-medium text-muted">Deadline (optional)</span>
           <div className="flex gap-2">
             <button type="button" onClick={() => setPickingDate(true)} className={`${inputClass} flex-1 text-left`}>
-              📅 {deadline ? formatDeadline(deadline) : <span className="text-muted">No deadline</span>}
+              🗓️ {deadline ? formatDeadline(deadline) : <span className="text-muted">No deadline</span>}
             </button>
             {deadline && (
               <button type="button" onClick={() => setDeadline(null)} className="rounded-xl bg-card px-4 text-base font-medium text-muted">
