@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
+import { formatLongToday } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
 import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
 import { useRoute } from './lib/useRoute'
@@ -42,7 +43,7 @@ function App() {
 
   return (
     <div className="min-h-full pb-[calc(5rem+env(safe-area-inset-bottom))]">
-      <TopBar title={screen.title} back={screen.back} action={screen.action} />
+      <TopBar title={screen.title} back={screen.back} action={screen.action} center={screen.center} />
       <main>{screen.body}</main>
       <TabBar route={route} onAdd={() => setAdding(true)} />
       {adding && (
@@ -101,7 +102,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/account':
       return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:
-      return { title: 'Home', body: <Home key={dataVersion} /> }
+      return { title: 'Home', center: formatLongToday(), body: <Home key={dataVersion} /> }
   }
 }
 

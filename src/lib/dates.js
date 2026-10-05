@@ -18,6 +18,11 @@ export function shiftDays(iso, days) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+// "Monday, 5 Oct"
+export function formatLongToday() {
+  return new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })
+}
+
 // "Today", "Yesterday", or e.g. "Mon 29 Sep" (adds the year if not this year)
 export function formatDay(iso) {
   const today = todayISO()

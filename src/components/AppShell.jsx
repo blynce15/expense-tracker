@@ -9,10 +9,13 @@ const TABS = [
   { path: '/savings', label: 'Savings', icon: 'savings' },
 ]
 
-export function TopBar({ title, back, action }) {
+export function TopBar({ title, back, action, center }) {
   return (
     <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="flex h-14 items-center gap-1 px-2">
+      <div className="relative flex h-14 items-center gap-1 px-2">
+        {center && (
+          <p className="pointer-events-none absolute inset-x-0 text-center text-sm font-semibold text-muted">{center}</p>
+        )}
         {back ? (
           <button onClick={() => navigate(back)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back">
             <Icon name="chevronLeft" />
