@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Icon from '../components/Icon'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
@@ -87,7 +87,7 @@ export default function Home() {
 
   return (
     <div className="space-y-6 pt-1 pb-6">
-      <BalanceCarousel accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} />
+      <BalanceCard accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} />
       <Recent data={data} onSelect={setEditing} />
 
       {editing && (
@@ -104,101 +104,102 @@ export default function Home() {
   )
 }
 
-// Change since the start of the month, as "↑ 12%" (or an amount when a % makes no sense)
+// "↓ 15% this month" (or an amount when a % makes no sense)
 function Change({ now, change, hidden }) {
-  if (change === 0) return <span className="text-sm opacity-70">No change</span>
+  if (change === 0) return <span className="text-sm text-white/60">No change this month</span>
   const before = now - change
   const up = change > 0
-  const label =
-    before > 0 ? `${Math.round((Math.abs(change) / before) * 100)}%` : hidden ? '••••' : formatCents(Math.abs(change))
+  const amount = before > 0 ? `${Math.round((Math.abs(change) / before) * 100)}%` : hidden ? '••••' : formatCents(Math.abs(change))
   return (
-    <span className={`flex items-center gap-1 text-base font-semibold ${up ? 'text-[#5ee0a5]' : 'text-[#ff9b8a]'}`}>
-      <Icon name={up ? 'arrowUp' : 'arrowDown'} size={18} strokeWidth={2.4} />
-      <span className="tabular">{label}</span>
+    <span className="flex items-center gap-1 text-sm text-white/70">
+      <span className={`flex items-center gap-0.5 font-semibold ${up ? 'text-[#5ee0a5]' : 'text-[#ff9b8a]'}`}>
+        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={16} strokeWidth={2.4} />
+        <span className="tabular">{amount}</span>
+      </span>
+      this month
     </span>
   )
 }
 
-function BalanceCarousel({ accounts, hidden, onToggleHidden }) {
-  const scroller = useRef(null)
-  const [active, setActive] = useState(0)
+// "€7.854" big, ",43" small and faded
+function BigAmount({ cents, hidden }) {
+  if (hidden) return <p className="font-display text-[44px] leading-none font-bold tracking-tight">€ ••••</p>
+  const [whole, decimals] = formatCents(cents).split(',')
+  return (
+    <p className="tabular truncate font-display leading-none font-bold tracking-tight">
+      <span className="text-[44px]">{whole}</span>
+      <span className="text-2xl text-white/45">,{decimals}</span>
+    </p>
+  )
+}
+
+function BalanceCard({ accounts, hidden, onToggleHidden }) {
+  const [selectedId, setSelectedId] = useState(null)
+  const selected = accounts.find((a) => a.id === selectedId)
   const total = accounts.reduce((s, a) => s + a.balance_cents, 0)
   const totalChange = accounts.reduce((s, a) => s + a.change_cents, 0)
-  const money = (cents) => (hidden ? '€ ••••' : formatCents(cents))
 
-  const cards = [{ id: 'total', name: 'Total balance', balance_cents: total, change_cents: totalChange }, ...accounts]
+  const shown = selected
+    ? { label: selected.name, cents: selected.balance_cents, change: selected.change_cents }
+    : { label: 'Total balance', cents: total, change: totalChange }
 
-  function onScroll() {
-    const el = scroller.current
-    const card = el.firstElementChild
-    if (!card) return
-    setActive(Math.round(el.scrollLeft / (card.offsetWidth + 12)))
-  }
+  // Card edges peeking from the right; they get narrower when there are many accounts
+  const step = accounts.length ? Math.min(30, Math.floor(120 / accounts.length)) : 0
+  const stackWidth = accounts.length ? accounts.length * step + 14 : 0
 
   return (
-    <section>
-      <ul
-        ref={scroller}
-        onScroll={onScroll}
-        className="flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    <section className="px-4">
+      <div
+        className="relative h-48 overflow-hidden rounded-3xl text-white shadow-[0_14px_30px_-16px_rgba(11,27,69,0.8)]"
+        style={{ background: 'radial-gradient(120% 140% at 85% 10%, #22386f 0%, #0f1f4a 45%, #0a1533 100%)' }}
       >
-        {cards.map((c) => {
-          const isTotal = c.id === 'total'
-          return (
-            <li key={c.id} className="w-[86%] shrink-0 snap-start">
-              <div
-                className="relative flex h-44 flex-col overflow-hidden rounded-3xl p-5 text-white shadow-[0_12px_28px_-14px_rgba(11,27,69,0.7)]"
-                style={{
-                  background: isTotal
-                    ? 'linear-gradient(140deg, #1b2f6b 0%, #0b1b45 55%, #081332 100%)'
-                    : `linear-gradient(140deg, color-mix(in srgb, ${c.color} 82%, white) 0%, ${c.color} 60%, color-mix(in srgb, ${c.color} 75%, black) 100%)`,
-                }}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-base font-medium opacity-90">{c.name}</span>
-                  {isTotal && (
-                    <button
-                      onClick={onToggleHidden}
-                      className="-m-2 grid size-10 place-items-center rounded-full opacity-90"
-                      aria-label={hidden ? 'Show balances' : 'Hide balances'}
-                    >
-                      <Icon name={hidden ? 'eyeOff' : 'eye'} size={20} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => navigate('/settings/accounts')}
-                    className="-m-2 ml-auto grid size-10 place-items-center rounded-full opacity-90"
-                    aria-label="Manage accounts"
-                  >
-                    <Icon name="chevronRight" size={22} />
-                  </button>
-                </div>
-
-                <div className="mt-3 flex items-end justify-between gap-3">
-                  <p className="tabular truncate font-display text-[38px] leading-none font-bold tracking-tight">
-                    {money(c.balance_cents)}
-                  </p>
-                  <Change now={c.balance_cents} change={c.change_cents} hidden={hidden} />
-                </div>
-                <p className="mt-auto text-sm opacity-75">Compared to the start of the month</p>
-              </div>
-            </li>
-          )
-        })}
-        {/* Lets the last card scroll fully into place */}
-        <li aria-hidden="true" className="w-1 shrink-0" />
-      </ul>
-
-      {cards.length > 1 && (
-        <div className="mt-3 flex justify-center gap-1.5" aria-hidden="true">
-          {cards.map((c, i) => (
-            <span key={c.id} className={`h-1.5 rounded-full transition-all ${i === active ? 'w-5 bg-ink' : 'w-1.5 bg-line'}`} />
-          ))}
+        <div className="flex h-full flex-col justify-center gap-3 py-5 pl-5" style={{ paddingRight: stackWidth + 12 }}>
+          <div className="flex items-center gap-2">
+            <span className="truncate text-base font-medium text-white/70">{shown.label}</span>
+            <button
+              onClick={onToggleHidden}
+              className="-m-2 grid size-10 shrink-0 place-items-center rounded-full text-white/70"
+              aria-label={hidden ? 'Show balances' : 'Hide balances'}
+            >
+              <Icon name={hidden ? 'eyeOff' : 'eye'} size={19} />
+            </button>
+          </div>
+          <BigAmount cents={shown.cents} hidden={hidden} />
+          <div className="flex items-center gap-3">
+            <Change now={shown.cents} change={shown.change} hidden={hidden} />
+          </div>
+          {selected && (
+            <button onClick={() => setSelectedId(null)} className="-my-1 self-start py-1 text-sm font-semibold text-white/85 underline-offset-4 hover:underline">
+              Back to total
+            </button>
+          )}
         </div>
-      )}
+
+        {/* One card edge per account; tap to show that account */}
+        <div className="absolute top-5 right-0 bottom-5" style={{ width: stackWidth }}>
+          {accounts.map((a, i) => {
+            const isSelected = a.id === selectedId
+            return (
+              <button
+                key={a.id}
+                onClick={() => setSelectedId(isSelected ? null : a.id)}
+                aria-pressed={isSelected}
+                aria-label={`Show ${a.name}`}
+                className="absolute top-0 bottom-0 w-32 rounded-2xl shadow-[-6px_0_14px_-6px_rgba(0,0,0,0.55)] ring-1 ring-white/35 transition-transform duration-200 ease-out"
+                style={{
+                  left: i * step,
+                  zIndex: i + 1,
+                  backgroundColor: a.color,
+                  transform: isSelected ? 'translateX(-10px) scale(1.03)' : 'none',
+                }}
+              />
+            )
+          })}
+        </div>
+      </div>
 
       {accounts.length === 0 && (
-        <button onClick={() => navigate('/settings/accounts')} className="mx-4 mt-3 w-[calc(100%-2rem)] rounded-2xl bg-card py-4 text-cobalt">
+        <button onClick={() => navigate('/settings/accounts')} className="mt-3 w-full rounded-2xl bg-card py-4 text-cobalt">
           Add your first account
         </button>
       )}
