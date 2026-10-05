@@ -18,11 +18,13 @@ export function shiftDays(iso, days) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-// "📅 Mon 5 Oct"
+// "🗓️ Mon, 5 Oct"
 export function formatTodayLabel() {
   // en-GB writes September as "Sept"; keep every month at three letters
-  const text = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
-  return `📅 ${text}`
+  const d = new Date()
+  const weekday = d.toLocaleDateString('en-GB', { weekday: 'short' })
+  const dayMonth = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
+  return `🗓️ ${weekday}, ${dayMonth}`
 }
 
 // "Today", "Yesterday", or e.g. "Mon 29 Sep" (adds the year if not this year)
