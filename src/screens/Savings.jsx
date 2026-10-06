@@ -6,7 +6,15 @@ import { todayISO } from '../lib/dates'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
-const inputClass = 'w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt'
+const DEFAULT_ICON = '🐷'
+
+// Quick picks for goals; any emoji can also be typed in the box
+const GOAL_EMOJIS = [
+  '🐷', '💰', '🛡️', '✈️', '🏖️', '🌍', '🏠', '🛋️', '🚗', '🚲', '💻', '📱',
+  '🎓', '💍', '👶', '🐶', '🎁', '🎸', '📷', '⛷️', '🏕️', '🎮', '🩺', '📈',
+]
+
+const inputClass ='w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt'
 
 function formatDeadline(iso) {
   const [y, m, d] = iso.split('-').map(Number)
@@ -133,13 +141,18 @@ function GoalCard({ goal, onOpen }) {
 
   return (
     <button onClick={onOpen} className="w-full rounded-3xl bg-card p-5 text-left">
-      <div className="flex items-baseline gap-2">
-        <span className="flex-1 truncate font-display text-lg font-bold">{goal.name}</span>
-        <span className={`tabular text-base font-semibold ${done ? 'text-gain' : 'text-cobalt'}`}>{done ? '🎉 Done' : `${pct}%`}</span>
+      <div className="flex items-center gap-3">
+        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-paper text-2xl">{goal.icon || DEFAULT_ICON}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="flex-1 truncate font-display text-lg font-bold">{goal.name}</span>
+            <span className={`tabular text-base font-semibold ${done ? 'text-gain' : 'text-cobalt'}`}>{done ? '🎉 Done' : `${pct}%`}</span>
+          </div>
+          <p className="text-sm text-muted">
+            <span className="tabular font-semibold text-ink">{formatCents(goal.saved_cents)}</span> of {formatCents(goal.target_cents)}
+          </p>
+        </div>
       </div>
-      <p className="mt-1 text-sm text-muted">
-        <span className="tabular font-semibold text-ink">{formatCents(goal.saved_cents)}</span> of {formatCents(goal.target_cents)}
-      </p>
       <div className="mt-3">
         <ProgressBar goal={goal} />
       </div>
@@ -174,7 +187,7 @@ function GoalSheet({ goal, onClose, onChanged, onEdit }) {
   }
 
   return (
-    <Sheet title={goal.name} onClose={onClose}>
+    <Sheet title={`${goal.icon || DEFAULT_ICON} ${goal.name}`} onClose={onClose}>
       <div className="space-y-5">
         <div>
           <p className="tabular font-display text-4xl font-bold tracking-tight">
@@ -240,6 +253,7 @@ function GoalSheet({ goal, onClose, onChanged, onEdit }) {
 function GoalForm({ goal, onClose, onSaved }) {
   const isNew = !goal
   const [name, setName] = useState(goal?.name ?? '')
+  const [icon, setIcon] = useState(goal?.icon ?? DEFAULT_ICON)
   const [target, setTarget] = useState(goal ? centsToInput(goal.target_cents) : '')
   const [saved, setSaved] = useState(goal ? centsToInput(goal.saved_cents) : '')
   const [deadline, setDeadline] = useState(goal?.deadline ?? null)
@@ -256,7 +270,7 @@ function GoalForm({ goal, onClose, onSaved }) {
 
     setBusy(true)
     setError(null)
-    const row = { name: name.trim(), target_cents: targetCents, saved_cents: savedCents, deadline }
+    const row = { name: name.trim(), icon: icon.trim() || DEFAULT_ICON, target_cents: targetCents, saved_cents: savedCents, deadline }
     const { error } = isNew
       ? await supabase.from('savings_goals').insert(row)
       : await supabase.from('savings_goals').update(row).eq('id', goal.id)
@@ -293,10 +307,30 @@ function GoalForm({ goal, onClose, onSaved }) {
   return (
     <Sheet title={isNew ? 'New goal' : 'Edit goal'} onClose={onClose}>
       <form onSubmit={save} className="space-y-5">
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-muted">Name</span>
-          <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Trip to Japan" className={inputClass} />
-        </label>
+        <div className="flex gap-2">
+          <label className="w-20 shrink-0">
+            <span className="mb-1.5 block text-sm font-medium text-muted">Emoji</span>
+            <input value={icon} onChange={(e) => setIcon(e.target.value)} className={`${inputClass} px-0 text-center text-2xl`} aria-label="Emoji" />
+          </label>
+          <label className="flex-1">
+            <span className="mb-1.5 block text-sm font-medium text-muted">Name</span>
+            <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Trip to Japan" className={`${inputClass} py-3.5`} />
+          </label>
+        </div>
+
+        <div className="grid grid-cols-8 gap-1 rounded-xl bg-card p-2">
+          {GOAL_EMOJIS.map((em) => (
+            <button
+              key={em}
+              type="button"
+              onClick={() => setIcon(em)}
+              aria-pressed={icon === em}
+              className={`grid aspect-square place-items-center rounded-lg text-xl ${icon === em ? 'bg-cobalt/15 ring-2 ring-cobalt' : ''}`}
+            >
+              {em}
+            </button>
+          ))}
+        </div>
 
         <div className="flex gap-2">
           <label className="flex-1">
