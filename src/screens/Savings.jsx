@@ -21,6 +21,12 @@ function formatDeadline(iso) {
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+// "Mar 2027"
+function formatMonthYear(iso) {
+  const [y, m] = iso.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace('Sept', 'Sep')
+}
+
 // Whole months left until the deadline (at least 1 while it's still ahead)
 function monthsLeft(deadline) {
   const [ty, tm, td] = todayISO().split('-').map(Number)
@@ -40,8 +46,53 @@ function pace(goal) {
   return { text: `${formatCents(perMonth)} a month to reach it by ${formatDeadline(goal.deadline)}` }
 }
 
+const MONTHS_SHOWN = 6
+
+// "2026-10" style month keys
+function shiftMonth(key, delta) {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(y, m - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+const shortMonth = (key) =>
+  new Date(Number(key.slice(0, 4)), Number(key.slice(5)) - 1, 1).toLocaleDateString('en-GB', { month: 'short' }).replace('Sept', 'Sep')
+
+// Money in minus money out of the savings accounts, per month (last 6 months).
+// Transfers between two savings accounts cancel out. Returns null if there's no savings account.
+async function fetchSavingsFlow() {
+  const thisMonth = todayISO().slice(0, 7)
+  const keys = Array.from({ length: MONTHS_SHOWN }, (_, i) => shiftMonth(thisMonth, i - (MONTHS_SHOWN - 1)))
+
+  const accRes = await supabase.from('accounts').select('id').eq('type', 'savings')
+  if (accRes.error) throw accRes.error
+  const ids = new Set(accRes.data.map((a) => a.id))
+  if (ids.size === 0) return null
+
+  const list = [...ids].join(',')
+  const txRes = await supabase
+    .from('transactions')
+    .select('type, amount_cents, date, account_id, to_account_id')
+    .or(`account_id.in.(${list}),to_account_id.in.(${list})`)
+    .gte('date', `${keys[0]}-01`)
+  if (txRes.error) throw txRes.error
+
+  const net = new Map(keys.map((k) => [k, 0]))
+  for (const t of txRes.data) {
+    const k = t.date.slice(0, 7)
+    if (!net.has(k)) continue
+    let change = 0
+    if (t.type === 'income') change = t.amount_cents
+    else if (t.type === 'expense') change = -t.amount_cents
+    else if (t.type === 'transfer')
+      change = (ids.has(t.to_account_id) ? t.amount_cents : 0) - (ids.has(t.account_id) ? t.amount_cents : 0)
+    net.set(k, net.get(k) + change)
+  }
+  return keys.map((k) => ({ key: k, cents: net.get(k), partial: k === thisMonth }))
+}
+
 export default function Savings() {
   const [goals, setGoals] = useState(null)
+  const [flow, setFlow] = useState(undefined) // undefined = loading, null = no savings account
   const [error, setError] = useState(null)
   const [openGoal, setOpenGoal] = useState(null)
   const [editing, setEditing] = useState(null) // null | 'new' | goal
@@ -56,6 +107,9 @@ export default function Savings() {
 
   useEffect(() => {
     load()
+    fetchSavingsFlow()
+      .then(setFlow)
+      .catch((e) => setError(e.message))
   }, [load])
 
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your goals: {error}</p>
@@ -63,42 +117,40 @@ export default function Savings() {
 
   const saved = goals.reduce((s, g) => s + g.saved_cents, 0)
   const target = goals.reduce((s, g) => s + g.target_cents, 0)
+  // Reached goals are hidden from the list but still count in the total
+  const active = goals.filter((g) => g.saved_cents < g.target_cents)
 
   return (
-    <div className="space-y-5 px-4 pt-1 pb-6">
+    <div className="space-y-3 px-4 pt-1 pb-6">
+      {goals.length > 0 && <TotalRing saved={saved} target={target} />}
+
+      {flow !== undefined && <SavingsChart flow={flow} />}
+
+      <div className="flex items-center justify-between px-1 pt-3">
+        <h2 className="text-xs font-semibold tracking-[0.08em] text-muted uppercase">Goals · {active.length}</h2>
+        <button onClick={() => setEditing('new')} className="-my-2 flex items-center gap-1 py-2 pl-3 text-[15px] font-semibold text-cobalt">
+          <Icon name="plus" size={17} strokeWidth={2.6} />
+          New
+        </button>
+      </div>
+
       {goals.length === 0 ? (
         <div className="rounded-3xl bg-card px-5 py-8 text-center">
           <p className="text-4xl">🐷</p>
           <p className="mt-2 font-display text-lg font-bold">Start your first savings goal</p>
           <p className="mt-1 text-muted">A trip, an emergency fund, a new laptop. Set a target and track your progress.</p>
         </div>
+      ) : active.length === 0 ? (
+        <p className="rounded-3xl bg-card px-5 py-6 text-center text-muted">🎉 Every goal is reached. Tap New to start another.</p>
       ) : (
-        <>
-          <section className="rounded-3xl bg-card p-5">
-            <p className="text-base font-medium text-muted">Saved in total</p>
-            <p className="tabular mt-1 font-display text-[44px] leading-none font-bold tracking-tight">{formatCents(saved)}</p>
-            <p className="mt-2 text-sm text-muted">
-              of <span className="tabular font-semibold text-ink">{formatCents(target)}</span> across {goals.length}{' '}
-              {goals.length === 1 ? 'goal' : 'goals'}
-            </p>
-          </section>
-
-          <ul className="space-y-3">
-            {goals.map((g) => (
-              <li key={g.id}>
-                <GoalCard goal={g} onOpen={() => setOpenGoal(g)} />
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul className="space-y-2.5">
+          {active.map((g) => (
+            <li key={g.id}>
+              <GoalCard goal={g} onOpen={() => setOpenGoal(g)} />
+            </li>
+          ))}
+        </ul>
       )}
-
-      <button
-        onClick={() => setEditing('new')}
-        className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep"
-      >
-        New goal
-      </button>
 
       {openGoal && !editing && (
         <GoalSheet
@@ -124,11 +176,141 @@ export default function Savings() {
   )
 }
 
+function TotalRing({ saved, target }) {
+  const ratio = Math.min(1, saved / target)
+  const r = 37
+  const c = 2 * Math.PI * r
+  return (
+    <section className="flex items-center gap-4 px-1 pt-1 pb-2">
+      <div className="relative grid size-[84px] shrink-0 place-items-center">
+        <svg width="84" height="84" viewBox="0 0 84 84" className="absolute inset-0 -rotate-90" aria-hidden="true">
+          <circle cx="42" cy="42" r={r} fill="none" strokeWidth="9" className="stroke-line" />
+          {saved > 0 && (
+            <circle
+              cx="42"
+              cy="42"
+              r={r}
+              fill="none"
+              strokeWidth="9"
+              strokeLinecap="round"
+              strokeDasharray={c}
+              strokeDashoffset={c * (1 - ratio)}
+              className="stroke-cobalt"
+            />
+          )}
+        </svg>
+        <span className="tabular relative font-display text-lg font-extrabold">{Math.floor(ratio * 100)}%</span>
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-muted">Total saved</p>
+        <p className="tabular font-display text-[34px] leading-tight font-extrabold tracking-tight">{formatCents(saved)}</p>
+        <p className="tabular text-sm text-muted">of {formatCents(target)}</p>
+      </div>
+    </section>
+  )
+}
+
+// Bar chart: net money into the savings account(s) each month
+function SavingsChart({ flow }) {
+  const [picked, setPicked] = useState(null)
+
+  if (!flow) {
+    return (
+      <section className="rounded-3xl bg-card p-5 text-sm text-muted">
+        Mark an account as <span className="font-semibold text-ink">Savings</span> in Settings → Accounts & cards to see how much goes into it
+        each month.
+      </section>
+    )
+  }
+
+  const W = 300
+  const H = 150
+  const top = 18
+  const bottom = 22
+  const colW = W / flow.length
+  const barW = 26
+  const max = Math.max(0, ...flow.map((d) => d.cents))
+  const min = Math.min(0, ...flow.map((d) => d.cents))
+  const span = max - min || 1
+  const y = (v) => top + ((max - v) / span) * (H - top - bottom)
+  const zero = y(0)
+  const net = flow.reduce((s, d) => s + d.cents, 0)
+  const label = (cents) => (cents > 0 ? '+' : '−') + Math.round(Math.abs(cents) / 100)
+  const signed = (cents) => (cents > 0 ? '+' : '') + formatCents(cents)
+  const p = picked === null ? null : flow[picked]
+
+  return (
+    <section className="rounded-3xl bg-card px-4 pt-4 pb-3">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-semibold">Savings account</h2>
+        <span className={`tabular text-sm font-bold ${net < 0 ? 'text-loss' : 'text-gain'}`}>{signed(net)}</span>
+      </div>
+      <p className="text-xs text-muted">Money in minus money out, last 6 months</p>
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 block h-auto w-full overflow-visible" role="img" aria-label="Monthly change of your savings account">
+        <line x1="0" x2={W} y1={zero} y2={zero} strokeWidth="1" className="stroke-line" />
+        {flow.map((d, i) => {
+          const pos = d.cents >= 0
+          const x = i * colW + (colW - barW) / 2
+          const h = Math.max(2, Math.abs(y(d.cents) - zero))
+          return (
+            <g key={d.key} onClick={() => setPicked(i)} className="cursor-pointer">
+              <rect x={i * colW} y="0" width={colW} height={H} fill="transparent" />
+              <rect
+                x={x}
+                y={pos ? zero - h : zero}
+                width={barW}
+                height={h}
+                rx="5"
+                className={pos ? 'fill-cobalt' : 'fill-loss'}
+                opacity={d.partial ? 0.45 : 1}
+              />
+              {/* Value labels sit above the zero line for negative months, so they never touch the month names */}
+              {d.cents !== 0 && (
+                <text
+                  x={x + barW / 2}
+                  y={(pos ? zero - h : zero) - 5}
+                  textAnchor="middle"
+                  fontSize="10.5"
+                  fontWeight="600"
+                  className={pos ? 'fill-ink' : 'fill-loss'}
+                >
+                  {label(d.cents)}
+                </text>
+              )}
+              <text
+                x={x + barW / 2}
+                y={H - 4}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight={picked === i ? '700' : '400'}
+                className={picked === i ? 'fill-ink' : 'fill-muted'}
+              >
+                {shortMonth(d.key)}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+      <p className="mt-1 min-h-5 text-center text-[13px] text-muted">
+        {p ? (
+          <>
+            {shortMonth(p.key)}
+            {p.partial && ' (so far)'}:{' '}
+            <span className={`tabular font-semibold ${p.cents < 0 ? 'text-loss' : 'text-ink'}`}>{signed(p.cents)}</span>
+          </>
+        ) : (
+          'Tap a bar for details'
+        )}
+      </p>
+    </section>
+  )
+}
+
 function ProgressBar({ goal, thick = false }) {
   const pct = Math.min(100, (goal.saved_cents / goal.target_cents) * 100)
   const done = goal.saved_cents >= goal.target_cents
   return (
-    <div className={`${thick ? 'h-3.5' : 'h-2.5'} overflow-hidden rounded-full bg-paper`}>
+    <div className={`${thick ? 'h-3.5' : 'h-1.5'} overflow-hidden rounded-full bg-paper`}>
       <div className={`h-full rounded-full ${done ? 'bg-gain' : 'bg-cobalt'}`} style={{ width: `${Math.max(pct, goal.saved_cents > 0 ? 2 : 0)}%` }} />
     </div>
   )
@@ -136,27 +318,21 @@ function ProgressBar({ goal, thick = false }) {
 
 function GoalCard({ goal, onOpen }) {
   const pct = Math.floor((goal.saved_cents / goal.target_cents) * 100)
-  const done = goal.saved_cents >= goal.target_cents
-  const p = pace(goal)
 
   return (
-    <button onClick={onOpen} className="w-full rounded-3xl bg-card p-5 text-left">
-      <div className="flex items-center gap-3">
-        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-paper text-2xl">{goal.icon || DEFAULT_ICON}</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2">
-            <span className="flex-1 truncate font-display text-lg font-bold">{goal.name}</span>
-            <span className={`tabular text-base font-semibold ${done ? 'text-gain' : 'text-cobalt'}`}>{done ? '🎉 Done' : `${pct}%`}</span>
-          </div>
-          <p className="text-sm text-muted">
-            <span className="tabular font-semibold text-ink">{formatCents(goal.saved_cents)}</span> of {formatCents(goal.target_cents)}
-          </p>
+    <button onClick={onOpen} className="flex w-full items-center gap-3 rounded-3xl bg-card px-3.5 py-3 text-left">
+      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cobalt/10 text-2xl">{goal.icon || DEFAULT_ICON}</span>
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex items-baseline gap-2">
+          <span className="flex-1 truncate font-display text-base font-bold">{goal.name}</span>
+          <span className="tabular text-sm font-bold text-cobalt">{pct}%</span>
         </div>
-      </div>
-      <div className="mt-3">
         <ProgressBar goal={goal} />
+        <p className="tabular truncate text-[13px] text-muted">
+          <span className="font-semibold text-ink">{formatCents(goal.saved_cents)}</span> of {formatCents(goal.target_cents)}
+          {goal.deadline && ` · by ${formatMonthYear(goal.deadline)}`}
+        </p>
       </div>
-      {p && <p className={`mt-2.5 text-sm ${p.overdue ? 'text-loss' : 'text-muted'}`}>{p.text}</p>}
     </button>
   )
 }
