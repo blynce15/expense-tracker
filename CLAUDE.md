@@ -94,6 +94,7 @@ Done:
 - Amounts like "2.100" are now read as 2100 (dots in groups of three = thousands) everywhere.
 
 - Polished Transactions (soft tabs, filter chips, uppercase day headers with total pills), Analytics (blue summary card with Income/Left over, category colors + split bar, rounded month bars), Savings (navy total card with yellow ring, net tag, goal cards with gradient bar and monthly pace), Settings (grouped rows with live summaries, budget day, email + Sign out, logo). Account page still exists behind the top-bar person icon.
+- Home polish: change shown as a small pill; account list (tap the card) with type icons, check, "Manage accounts"; budget card with glow, circle and calendar icon (pace tag beside the label so big amounts aren't cut); rounder lists; friendly empty states.
 
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).

@@ -131,14 +131,14 @@ export default function Home() {
 
 // "↑ 15% this month" (or an amount when a % makes no sense)
 function Change({ now, change, hidden }) {
-  if (change === 0) return <p className="text-sm text-muted">No change this month</p>
+  if (change === 0) return <p className="mt-0.5 text-sm text-muted">No change this month</p>
   const before = now - change
   const up = change > 0
   const amount = before > 0 ? `${Math.round((Math.abs(change) / before) * 100)}%` : hidden ? '••••' : formatCents(Math.abs(change))
   return (
-    <p className="flex items-center gap-1 text-sm text-muted">
-      <span className={`flex items-center gap-0.5 font-semibold ${up ? 'text-gain' : 'text-loss'}`}>
-        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={15} strokeWidth={2.4} />
+    <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted">
+      <span className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${up ? 'bg-gain/10 text-gain' : 'bg-loss/10 text-loss'}`}>
+        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={13} strokeWidth={2.6} />
         <span className="tabular">{amount}</span>
       </span>
       this month
@@ -158,13 +158,26 @@ function BigAmount({ cents, hidden }) {
   )
 }
 
-// A small card in an account's color
-function MiniCard({ color, className = '', style }) {
+const TYPE_INFO = {
+  debit: { label: 'Bank', icon: 'bank' },
+  savings: { label: 'Savings', icon: 'coins' },
+  credit: { label: 'Credit card', icon: 'card' },
+  cash: { label: 'Cash', icon: 'cash' },
+}
+
+// Darker version of a #rrggbb color, for card gradients
+const shade = (hex, f) =>
+  '#' + hex.slice(1).match(/../g).map((h) => Math.round(parseInt(h, 16) * f).toString(16).padStart(2, '0')).join('')
+
+// A small card in an account's color (with the account type's icon when given)
+function MiniCard({ color, type, className = '', style }) {
   return (
     <span
-      className={`rounded-xl shadow-md ring-1 ring-white/40 ${className}`}
-      style={{ background: `linear-gradient(135deg, ${color}, ${color}bb)`, ...style }}
-    />
+      className={`grid place-items-center rounded-xl text-white shadow-md ring-1 ring-white/40 ${className}`}
+      style={{ background: `linear-gradient(135deg, ${color}, ${shade(color, 0.7)})`, ...style }}
+    >
+      {type && <Icon name={TYPE_INFO[type]?.icon ?? 'card'} size={15} strokeWidth={2} />}
+    </span>
   )
 }
 
@@ -187,9 +200,7 @@ function Balance({ accounts, hidden, onToggleHidden }) {
   if (accounts.length === 0) {
     return (
       <section className="px-4">
-        <button onClick={() => navigate('/settings/accounts')} className="w-full rounded-2xl bg-card py-4 text-cobalt">
-          Add your first account
-        </button>
+        <EmptyCard icon="card" title="Add your first account" text="Your bank account, cards and cash, with what's in each today." onClick={() => navigate('/settings/accounts')} />
       </section>
     )
   }
@@ -240,40 +251,49 @@ function Balance({ accounts, hidden, onToggleHidden }) {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <ul className="absolute top-full right-4 z-40 mt-1 w-[min(300px,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-card py-1 shadow-[0_20px_50px_-12px_rgba(11,27,69,0.45)] ring-1 ring-line">
-            <AccountOption
-              label="All accounts"
-              sub={`${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
-              cents={total}
-              hidden={hidden}
-              selected={!selected}
-              onClick={() => pick(null)}
-              swatch={
-                <span className="relative h-7 w-10 shrink-0">
-                  {accounts.slice(0, 3).map((a, i) => (
-                    <span
-                      key={a.id}
-                      className="absolute h-6 w-8 rounded-md ring-1 ring-white"
-                      style={{ left: i * 4, top: i * 1.5, backgroundColor: a.color }}
-                    />
-                  ))}
-                </span>
-              }
-            />
-            <li className="mx-3 border-t border-line" />
-            {accounts.map((a) => (
+          <div className="absolute top-full right-4 z-40 mt-1 w-[min(310px,calc(100vw-2rem))] overflow-hidden rounded-[22px] bg-card shadow-[0_24px_50px_-14px_rgba(11,27,69,0.5)] ring-1 ring-line">
+            <p className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wider text-muted uppercase">Your accounts</p>
+            <ul className="px-1.5 pb-1.5">
               <AccountOption
-                key={a.id}
-                label={a.name}
-                sub={a.type[0].toUpperCase() + a.type.slice(1)}
-                cents={a.balance_cents}
+                label="All accounts"
+                sub={`${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
+                cents={total}
                 hidden={hidden}
-                selected={a.id === selectedId}
-                onClick={() => pick(a.id)}
-                swatch={<MiniCard color={a.color} className="h-7 w-10 shrink-0 rounded-md shadow-sm" />}
+                selected={!selected}
+                onClick={() => pick(null)}
+                swatch={
+                  <span className="relative h-8 w-11 shrink-0">
+                    {accounts.slice(0, 3).map((a, i) => (
+                      <span
+                        key={a.id}
+                        className="absolute h-7 w-9 rounded-md ring-1 ring-white"
+                        style={{ left: i * 4, top: i * 1.5, background: `linear-gradient(135deg, ${a.color}, ${shade(a.color, 0.7)})` }}
+                      />
+                    ))}
+                  </span>
+                }
               />
-            ))}
-          </ul>
+              {accounts.map((a) => (
+                <AccountOption
+                  key={a.id}
+                  label={a.name}
+                  sub={TYPE_INFO[a.type]?.label ?? a.type}
+                  cents={a.balance_cents}
+                  hidden={hidden}
+                  selected={a.id === selectedId}
+                  onClick={() => pick(a.id)}
+                  swatch={<MiniCard color={a.color} type={a.type} className="h-8 w-11 shrink-0 rounded-lg shadow-sm" />}
+                />
+              ))}
+            </ul>
+            <button
+              onClick={() => navigate('/settings/accounts')}
+              className="flex w-full items-center justify-center gap-1 border-t border-line py-3 text-sm font-semibold text-cobalt"
+            >
+              Manage accounts
+              <Icon name="chevronRight" size={15} strokeWidth={2.4} />
+            </button>
+          </div>
         </>
       )}
     </section>
@@ -283,14 +303,16 @@ function Balance({ accounts, hidden, onToggleHidden }) {
 function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch }) {
   return (
     <li>
-      <button onClick={onClick} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${selected ? 'bg-cobalt/5' : ''}`}>
+      <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left ${selected ? 'bg-cobalt/[.06]' : ''}`}>
         {swatch}
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium">{label}</span>
+          <span className="block truncate font-semibold">{label}</span>
           <span className="block text-xs text-muted">{sub}</span>
         </span>
         <span className={`tabular font-display font-semibold ${cents < 0 ? 'text-loss' : ''}`}>{hidden ? HIDDEN : formatCents(cents)}</span>
-        <span className="w-4 text-cobalt">{selected && <Icon name="check" size={16} strokeWidth={2.6} />}</span>
+        <span className={`grid size-5 shrink-0 place-items-center rounded-full ${selected ? 'bg-cobalt text-white' : ''}`}>
+          {selected && <Icon name="check" size={12} strokeWidth={3.2} />}
+        </span>
       </button>
     </li>
   )
@@ -308,9 +330,16 @@ function BudgetCard({ budget, hidden }) {
   if (!budget.hasAccounts) {
     return (
       <section className="px-4">
-        <button onClick={() => navigate('/settings/accounts')} className="w-full rounded-[28px] bg-cobalt p-4 text-left text-white">
-          <span className="block font-semibold">Budget</span>
-          <span className="block text-sm text-white/80">Add a debit or cash account to see what you have left to spend.</span>
+        <button
+          onClick={() => navigate('/settings/accounts')}
+          className="relative w-full overflow-hidden rounded-[24px] bg-cobalt p-4 text-left text-white shadow-[0_18px_34px_-18px_#1f4fe0]"
+        >
+          <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/10" />
+          <span className="relative flex items-center gap-2 font-semibold">
+            <Icon name="calendar" size={18} />
+            Budget
+          </span>
+          <span className="relative mt-1 block text-sm text-white/80">Add a bank or cash account to see what you have left to spend.</span>
         </button>
       </section>
     )
@@ -337,34 +366,36 @@ function BudgetCard({ budget, hidden }) {
 
   return (
     <section className="px-4">
-      <div className="rounded-[28px] bg-cobalt px-4 py-3 text-white">
-        <div className="flex items-end justify-between gap-2">
-          <div className="min-w-0">
-            <p className="text-sm text-white/75">{day ? `By ${shortDate(dateOf(period.start, day))} you had spent` : 'Left to spend'}</p>
-            <p className="tabular truncate font-display text-[24px] leading-tight font-bold">
-              {day ? (
-                hidden ? '€ ••••' : formatCents(spentBy)
-              ) : (
-                <>
-                  {hidden ? '€ ••••' : formatCents(leftCents).replace(/,\d\d$/, '')}
-                  <span className="text-base font-semibold text-white/65"> of {money(budgetCents)}</span>
-                </>
-              )}
+      <div className="relative overflow-hidden rounded-[24px] bg-cobalt px-4 py-3 text-white shadow-[0_18px_34px_-18px_#1f4fe0]">
+        <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/10" />
+        <div className="relative">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex min-w-0 items-center gap-1.5 truncate text-sm text-white/75">
+              <Icon name="calendar" size={15} className="shrink-0" />
+              {day ? `By ${shortDate(dateOf(period.start, day))} you had spent` : 'Left to spend'}
             </p>
+            {budgetCents > 0 && (
+              <span className={`shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold ${diff > 0 ? 'text-[#ffd2c7]' : 'text-[#b8f5d6]'}`}>
+                {diff > 0 ? `▲ ${money(diff)} over pace` : `▼ ${money(-diff)} under pace`}
+              </span>
+            )}
           </div>
-          {budgetCents > 0 && (
-            <span
-              className={`mb-1 shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold ${diff > 0 ? 'text-[#ffd2c7]' : 'text-[#b8f5d6]'}`}
-            >
-              {diff > 0 ? `▲ ${money(diff)} over pace` : `▼ ${money(-diff)} under pace`}
-            </span>
-          )}
+          <p className="tabular truncate font-display text-[24px] leading-tight font-bold">
+            {day ? (
+              hidden ? '€ ••••' : formatCents(spentBy)
+            ) : (
+              <>
+                {hidden ? '€ ••••' : formatCents(leftCents).replace(/,\d\d$/, '')}
+                <span className="text-base font-semibold text-white/65"> of {money(budgetCents)}</span>
+              </>
+            )}
+          </p>
         </div>
 
         <svg
           ref={chartRef}
           viewBox={`-4 -6 ${W + 8} ${H + 10}`}
-          className="mt-1.5 w-full cursor-crosshair touch-none select-none"
+          className="relative mt-1.5 w-full cursor-crosshair touch-none select-none"
           onPointerDown={read}
           onPointerMove={(e) => (e.buttons || e.pointerType === 'mouse') && read(e)}
           onPointerLeave={() => setDay(null)}
@@ -377,7 +408,7 @@ function BudgetCard({ budget, hidden }) {
           <line x1={x(shownDay)} y1="-4" x2={x(shownDay)} y2={H} stroke="rgba(255,255,255,.3)" />
           <circle cx={x(shownDay)} cy={y(spentBy)} r="4" fill="#f7d84a" stroke="#1f4fe0" strokeWidth="2" />
         </svg>
-        <div className="flex justify-between text-[10px] leading-none text-white/60">
+        <div className="relative flex justify-between text-[10px] leading-none text-white/60">
           <span>{shortDate(period.start)}</span>
           <span>- - - even spending · touch the line</span>
           <span>{shortDate(period.end)}</span>
@@ -412,11 +443,11 @@ function ComingUp({ payments, onPay }) {
     <section>
       <SectionHead title="Coming up" onSeeAll={() => navigate('/recurring')} />
       {payments.length === 0 ? (
-        <button onClick={() => navigate('/recurring')} className="mx-4 w-[calc(100%-2rem)] rounded-2xl bg-card px-4 py-4 text-left text-muted">
-          Add rent, subscriptions and bills to see what's due next.
-        </button>
+        <div className="px-4">
+          <EmptyCard icon="repeat" title="Add regular payments" text="Rent, subscriptions and bills. See what's due next." onClick={() => navigate('/recurring')} />
+        </div>
       ) : (
-        <ul className="mx-4 overflow-hidden rounded-2xl bg-card">
+        <ul className="mx-4 overflow-hidden rounded-[20px] bg-card">
           {payments.map((p) => {
             const days = daysUntil(p.next_due)
             const due = days <= 0
@@ -462,9 +493,11 @@ function Recent({ data, onSelect }) {
     <section>
       <SectionHead title="Recent transactions" onSeeAll={data.recent.length ? () => navigate('/transactions') : null} />
       {data.recent.length === 0 ? (
-        <p className="mx-4 rounded-2xl bg-card px-4 py-5 text-center text-muted">Tap + to record your first transaction.</p>
+        <div className="px-4">
+          <EmptyCard icon="plus" title="No transactions yet" text="Tap the + button to record your first expense or income." />
+        </div>
       ) : (
-        <ul className="mx-4 overflow-hidden rounded-2xl bg-card">
+        <ul className="mx-4 overflow-hidden rounded-[20px] bg-card">
           {data.recent.map((t) => (
             <li key={t.id} className="border-b border-line last:border-0">
               <button onClick={() => onSelect(t)} className="flex w-full items-center gap-3 px-4 py-2 text-left">
@@ -475,5 +508,29 @@ function Recent({ data, onSelect }) {
         </ul>
       )}
     </section>
+  )
+}
+
+// A friendly placeholder with an icon tile; tappable when it has onClick
+function EmptyCard({ icon, title, text, onClick }) {
+  const inner = (
+    <>
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cobalt/10 text-cobalt">
+        <Icon name={icon} size={20} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold">{title}</span>
+        <span className="block text-sm text-muted">{text}</span>
+      </span>
+      {onClick && <Icon name="chevronRight" size={18} className="shrink-0 text-muted/60" />}
+    </>
+  )
+  const cls = 'flex w-full items-center gap-3 rounded-[20px] bg-card px-4 py-3.5 text-left'
+  return onClick ? (
+    <button onClick={onClick} className={cls}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
   )
 }
