@@ -2,26 +2,23 @@ import { shiftDays } from './dates'
 
 // The budget is the money you can spend: the balance of debit and cash accounts
 // (savings and credit cards are left out). Nothing is stored except the day
-// the budget period starts, which is a preference kept on this device.
+// the budget period starts, which lives in the user's profile.
 
-const START_DAY_KEY = 'budgetStartDay'
 export const BUDGET_ACCOUNT_TYPES = ['debit', 'cash']
 
-export function readStartDay() {
+// Before profiles existed the start day was kept on the device; still used until the profile has one
+const LEGACY_START_DAY_KEY = 'budgetStartDay'
+function legacyStartDay() {
   try {
-    const n = Number(localStorage.getItem(START_DAY_KEY))
-    return Number.isInteger(n) && n >= 1 && n <= 31 ? n : 1
+    const n = Number(localStorage.getItem(LEGACY_START_DAY_KEY))
+    return Number.isInteger(n) && n >= 1 && n <= 31 ? n : null
   } catch {
-    return 1
+    return null
   }
 }
 
-export function saveStartDay(day) {
-  try {
-    localStorage.setItem(START_DAY_KEY, String(day))
-  } catch {
-    // Not saved (e.g. private mode) — the default (1st) is used next time
-  }
+export function startDayOf(profile) {
+  return profile?.budget_start_day ?? legacyStartDay() ?? 1
 }
 
 const pad = (n) => String(n).padStart(2, '0')

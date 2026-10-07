@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 
-const DEFAULT_CATEGORIES = [
+export const DEFAULT_CATEGORIES = [
   { name: 'Groceries', icon: '🛒', color: '#1f9d55', kind: 'expense' },
   { name: 'Eating out', icon: '🍽️', color: '#e8590c', kind: 'expense' },
   { name: 'Transport', icon: '🚆', color: '#1f4fe0', kind: 'expense' },

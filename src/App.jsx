@@ -5,7 +5,9 @@ import { formatTodayLabel } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
 import { activeFilterCount, EMPTY_FILTER } from './lib/filters'
 import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
-import { useRoute } from './lib/useRoute'
+import { needsOnboarding } from './lib/onboarding'
+import { fetchProfile } from './lib/profile'
+import { navigate, useRoute } from './lib/useRoute'
 import { useOnline } from './lib/useOnline'
 import { useSession } from './lib/useSession'
 import Account from './screens/Account'
@@ -14,6 +16,7 @@ import Analytics from './screens/Analytics'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
 import Login from './screens/Login'
+import Onboarding from './screens/Onboarding'
 import Recurring from './screens/Recurring'
 import Savings from './screens/Savings'
 import Settings from './screens/Settings'
@@ -30,18 +33,43 @@ function App() {
   // Transactions filter lives here so it's kept when switching tabs
   const [txFilter, setTxFilter] = useState(EMPTY_FILTER)
   const [filterOpen, setFilterOpen] = useState(false)
+  // undefined while checking, then true for a new user who still has to set up
+  const [onboarding, setOnboarding] = useState(undefined)
 
   const userId = session?.user.id
   useEffect(() => {
     if (!userId) return
-    // Load accounts/categories early so the Add screen opens instantly
-    ensureDefaultCategories()
-      .then(() => Promise.all([fetchLookups(), fetchLastUsedAccountId()]))
+    setOnboarding(undefined)
+    fetchProfile()
+      .then(needsOnboarding)
+      .catch((e) => {
+        console.error('Onboarding check:', e)
+        return false
+      })
+      .then((isNew) => {
+        setOnboarding(isNew)
+        // New users choose their categories during setup
+        if (isNew) return
+        // Load accounts/categories early so the Add screen opens instantly
+        return ensureDefaultCategories().then(() => Promise.all([fetchLookups(), fetchLastUsedAccountId()]))
+      })
       .catch((e) => console.error('Startup data:', e))
   }, [userId])
 
   if (session === undefined) return null
   if (!session) return <Login />
+  if (onboarding === undefined) return null
+  if (onboarding) {
+    return (
+      <Onboarding
+        onDone={() => {
+          setOnboarding(false)
+          setDataVersion((v) => v + 1)
+          navigate('/home')
+        }}
+      />
+    )
+  }
 
   const screen = screenFor(route, session, dataVersion, { txFilter, setTxFilter, filterOpen, setFilterOpen })
 

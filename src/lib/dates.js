@@ -54,3 +54,8 @@ export function monthRange(iso) {
 export function monthName(iso) {
   return parseISO(iso).toLocaleDateString('en-GB', { month: 'long' })
 }
+
+// "25 Sep" (en-GB writes September as "Sept"; keep every month at three letters)
+export function formatDayMonth(iso) {
+  return parseISO(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
+}

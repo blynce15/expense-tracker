@@ -3,10 +3,11 @@ import Icon from '../components/Icon'
 import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
-import { budgetPeriod, computeBudget, readStartDay } from '../lib/budget'
-import { monthRange, todayISO } from '../lib/dates'
+import { budgetPeriod, computeBudget, startDayOf } from '../lib/budget'
+import { formatDayMonth, monthRange, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
+import { fetchProfile } from '../lib/profile'
 import { daysUntil, dueLabel, fetchRecurring, FREQUENCIES } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
@@ -25,11 +26,7 @@ function readHidden() {
   }
 }
 
-// "25 Sep" (en-GB writes September as "Sept"; keep every month at three letters)
-function shortDate(iso) {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
-}
+const shortDate = formatDayMonth
 
 export default function Home() {
   const [data, setData] = useState(null)
@@ -42,7 +39,7 @@ export default function Home() {
     try {
       const today = todayISO()
       const [monthStart] = monthRange(today)
-      const period = budgetPeriod(today, readStartDay())
+      const period = budgetPeriod(today, startDayOf(await fetchProfile()))
       const [accounts, lookups, sinceMonthStart, periodExpenses, recent, recurring] = await Promise.all([
         fetchAccountsWithBalances(),
         fetchLookups(),
