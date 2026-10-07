@@ -57,9 +57,9 @@ export default function Analytics() {
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load analytics: {error}</p>
 
   return (
-    <div className="space-y-5 px-4 pt-1 pb-6">
+    <div className="space-y-4 px-4 pt-1 pb-6">
       <div className="flex items-center rounded-2xl bg-card p-1">
-        <button onClick={() => setMonth((m) => shiftMonth(m, -1))} className="grid size-11 place-items-center rounded-xl" aria-label="Previous month">
+        <button onClick={() => setMonth((m) => shiftMonth(m, -1))} className="grid size-11 place-items-center rounded-xl text-ink" aria-label="Previous month">
           <Icon name="chevronLeft" />
         </button>
         <p className="flex-1 text-center font-display text-lg font-bold">{monthLabel(month)}</p>
@@ -112,50 +112,61 @@ function buildStats(rows, month) {
   return { spent, income, prevSpent, byMonth, byCategory, byDay }
 }
 
-function Card({ title, children }) {
+function Card({ title, note, children }) {
   return (
-    <section className="rounded-3xl bg-card p-5">
-      {title && <h2 className="mb-4 font-display text-lg font-bold">{title}</h2>}
+    <section className="rounded-[22px] bg-card p-4">
+      {title && (
+        <div className="mb-3 flex items-baseline justify-between gap-2">
+          <h2 className="font-display text-lg font-bold">{title}</h2>
+          {note && <span className="text-xs text-muted">{note}</span>}
+        </div>
+      )}
       {children}
     </section>
+  )
+}
+
+// "€1.190" big and ",45" small and faded
+function BigAmount({ cents }) {
+  const [whole, decimals] = formatCents(cents).split(',')
+  return (
+    <p className="tabular relative font-display leading-tight font-bold">
+      <span className="text-[38px]">{whole}</span>
+      <span className="text-xl text-white/55">,{decimals}</span>
+    </p>
   )
 }
 
 function Headline({ stats, month }) {
   const diff = stats.spent - stats.prevSpent
   const pct = stats.prevSpent > 0 ? Math.round((Math.abs(diff) / stats.prevSpent) * 100) : null
-  const prevName = monthLabel(shiftMonth(month, -1), { month: 'long' })
+  const prevShort = monthLabel(shiftMonth(month, -1), { month: 'short' }).replace('Sept', 'Sep')
+  const left = stats.income - stats.spent
 
   return (
-    <Card>
-      <p className="text-base font-medium text-muted">Spent</p>
-      <p className="tabular mt-1 font-display text-[44px] leading-none font-bold tracking-tight">{formatCents(stats.spent)}</p>
-      <p className="mt-3 text-sm text-muted">
-        {stats.prevSpent === 0 ? (
-          `Nothing recorded in ${prevName} to compare with.`
-        ) : diff === 0 ? (
-          `Same as ${prevName}.`
-        ) : (
-          <>
-            <span className={`font-semibold ${diff > 0 ? 'text-loss' : 'text-gain'}`}>
-              {diff > 0 ? '↑' : '↓'} {pct}% ({formatCents(Math.abs(diff))})
-            </span>{' '}
-            {diff > 0 ? 'more' : 'less'} than {prevName}
-          </>
-        )}
-      </p>
-      <div className="mt-4 flex gap-6 border-t border-line pt-3 text-sm">
-        <span className="text-muted">
-          Income <span className="tabular font-semibold text-ink">{formatCents(stats.income)}</span>
-        </span>
-        <span className="text-muted">
-          Left over{' '}
-          <span className={`tabular font-semibold ${stats.income - stats.spent < 0 ? 'text-loss' : 'text-ink'}`}>
-            {formatCents(stats.income - stats.spent)}
+    <section className="relative overflow-hidden rounded-[24px] bg-cobalt p-5 text-white shadow-[0_18px_34px_-18px_#1f4fe0]">
+      <span className="pointer-events-none absolute -top-16 -right-12 size-48 rounded-full bg-white/10" />
+      <div className="relative flex items-start justify-between gap-2">
+        <p className="text-sm text-white/75">Spent in {monthLabel(month, { month: 'long' })}</p>
+        {pct !== null && diff !== 0 && (
+          <span className={`shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold ${diff > 0 ? 'text-[#ffd2c7]' : 'text-[#b8f5d6]'}`}>
+            {diff > 0 ? '▲' : '▼'} {pct}% vs {prevShort}
           </span>
-        </span>
+        )}
       </div>
-    </Card>
+      <BigAmount cents={stats.spent} />
+      {stats.prevSpent === 0 && <p className="relative text-xs text-white/65">Nothing recorded in {prevShort} to compare with.</p>}
+      <div className="relative mt-4 grid grid-cols-2 gap-2">
+        <div className="rounded-2xl bg-white/[.12] px-3 py-2">
+          <p className="text-xs text-white/70">Income</p>
+          <p className="tabular font-display font-bold">{formatCents(stats.income)}</p>
+        </div>
+        <div className="rounded-2xl bg-white/[.12] px-3 py-2">
+          <p className="text-xs text-white/70">Left over</p>
+          <p className={`tabular font-display font-bold ${left < 0 ? 'text-[#ffd2c7]' : ''}`}>{formatCents(left)}</p>
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -164,27 +175,42 @@ function ByCategory({ stats, categories }) {
     .map(([id, cents]) => ({ cents, category: categories.find((c) => c.id === id) }))
     .sort((a, b) => b.cents - a.cents)
   const max = items[0]?.cents ?? 1
+  const color = (c) => c?.color ?? '#868e96'
 
   return (
-    <Card title="By category">
+    <Card title="By category" note={items.length ? `${items.length} ${items.length === 1 ? 'category' : 'categories'}` : null}>
       {items.length === 0 ? (
         <p className="text-muted">No spending recorded this month.</p>
       ) : (
-        <ul className="space-y-3.5">
-          {items.map(({ cents, category }) => (
-            <li key={category?.id ?? 'none'}>
-              <div className="flex items-baseline gap-2">
-                <span className="text-lg leading-none">{category?.icon ?? '❔'}</span>
-                <span className="flex-1 truncate text-base font-medium">{category?.name ?? 'No category'}</span>
-                <span className="tabular text-base font-semibold">{formatCents(cents)}</span>
-                <span className="tabular w-10 text-right text-sm text-muted">{Math.round((cents / stats.spent) * 100)}%</span>
-              </div>
-              <div className="mt-1.5 h-2 rounded-full bg-paper">
-                <div className="h-full rounded-full bg-cobalt" style={{ width: `${Math.max(2, (cents / max) * 100)}%` }} />
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          {/* How the month splits, one piece per category */}
+          <div className="mb-4 flex h-2.5 gap-[3px] overflow-hidden rounded-full">
+            {items.map(({ cents, category }) => (
+              <span key={category?.id ?? 'none'} className="rounded-full" style={{ flex: cents, backgroundColor: color(category) }} />
+            ))}
+          </div>
+          <ul className="space-y-3">
+            {items.map(({ cents, category }) => (
+              <li key={category?.id ?? 'none'} className="flex items-center gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl text-base" style={{ backgroundColor: `${color(category)}1f` }}>
+                  {category?.icon ?? '❔'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-baseline gap-2">
+                    <span className="flex-1 truncate text-sm font-semibold">{category?.name ?? 'No category'}</span>
+                    <span className="tabular text-sm font-semibold">{formatCents(cents)}</span>
+                  </span>
+                  <span className="mt-1.5 flex items-center gap-2">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-paper">
+                      <span className="block h-full rounded-full" style={{ width: `${Math.max(3, (cents / max) * 100)}%`, backgroundColor: color(category) }} />
+                    </span>
+                    <span className="tabular w-9 text-right text-xs text-muted">{Math.round((cents / stats.spent) * 100)}%</span>
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </Card>
   )
@@ -196,8 +222,8 @@ function MonthByMonth({ stats, month, onPick }) {
   const max = Math.max(...values, 1)
 
   return (
-    <Card title="Month by month">
-      <div className="flex h-44 items-end gap-2">
+    <Card title="Month by month" note="Tap a month">
+      <div className="flex h-40 items-end gap-2">
         {months.map((m, i) => {
           const selected = m === month
           return (
@@ -212,7 +238,7 @@ function MonthByMonth({ stats, month, onPick }) {
                 {values[i] > 0 ? compactCents(values[i]) : ''}
               </span>
               <span
-                className={`w-full max-w-10 rounded-t-[4px] ${selected ? 'bg-cobalt' : 'bg-cobalt/25'}`}
+                className={`w-full max-w-9 rounded-xl transition ${selected ? 'bg-cobalt shadow-[0_8px_16px_-8px_rgba(31,79,224,0.9)]' : 'bg-cobalt/15'}`}
                 style={{ height: `${(values[i] / max) * 75}%`, minHeight: values[i] > 0 ? 3 : 0 }}
               />
               <span className={`text-xs ${selected ? 'font-semibold text-ink' : 'text-muted'}`}>{monthLabel(m, { month: 'short' })}</span>
@@ -220,7 +246,6 @@ function MonthByMonth({ stats, month, onPick }) {
           )
         })}
       </div>
-      <p className="mt-3 text-xs text-muted">Tap a month to see its details.</p>
     </Card>
   )
 }
@@ -237,7 +262,7 @@ function Daily({ stats, month, isCurrent }) {
 
   return (
     <Card title="Daily spending">
-      <p className="-mt-2 mb-4 h-5 text-sm text-muted">
+      <p className="-mt-2 mb-3 h-5 text-sm text-muted">
         {picked ? (
           <>
             {picked} {monthLabel(month, { month: 'short' })}:{' '}
@@ -253,7 +278,7 @@ function Daily({ stats, month, isCurrent }) {
         {/* Average line */}
         {average > 0 && (
           <div
-            className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-muted/40"
+            className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-muted/30"
             style={{ bottom: `${(average / max) * 100}%` }}
           />
         )}
@@ -270,7 +295,7 @@ function Daily({ stats, month, isCurrent }) {
                 disabled={future}
               >
                 <span
-                  className={`w-full rounded-t-[3px] ${picked === day ? 'bg-ink' : 'bg-cobalt'}`}
+                  className={`w-full rounded-t-[4px] ${picked === day ? 'bg-ink' : 'bg-cobalt'}`}
                   style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 3 : 0 }}
                 />
               </button>
