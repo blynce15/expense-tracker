@@ -80,6 +80,8 @@ Done:
 Done:
 - Add-transaction redesign (design C): full-screen amount step, then a sheet with Name + categories and a Save button (owner wants an explicit Save, not save-on-tap). The Name is stored in transactions.note (no data-model change). Category is suggested from past transactions with the same name. Transfers pick the destination account in step 2.
 
+- Transactions page: tabs All · Income · Expense · Transfer; sliders icon opens a filter sheet (list of Date range / Cards / Categories, each opens its own page) with a live "Show N transactions" count; active filters show as removable chips. Filter logic in src/lib/filters.js. A transfer matches a card if money left or arrived there; categories don't apply on the Transfer tab.
+
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).

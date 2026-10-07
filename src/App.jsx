@@ -3,6 +3,7 @@ import { TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
 import { formatTodayLabel } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
+import { activeFilterCount, EMPTY_FILTER } from './lib/filters'
 import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
 import { useRoute } from './lib/useRoute'
 import { useOnline } from './lib/useOnline'
@@ -27,7 +28,7 @@ function App() {
   // Bumped after a save so screens reload their data
   const [dataVersion, setDataVersion] = useState(0)
   // Transactions filter lives here so it's kept when switching tabs
-  const [txFilter, setTxFilter] = useState({ type: 'all', categoryIds: [] })
+  const [txFilter, setTxFilter] = useState(EMPTY_FILTER)
   const [filterOpen, setFilterOpen] = useState(false)
 
   const userId = session?.user.id
@@ -70,19 +71,20 @@ function App() {
 
 function screenFor(route, session, dataVersion, tx) {
   switch (route) {
-    case '/transactions':
+    case '/transactions': {
+      const active = activeFilterCount(tx.txFilter)
       return {
         title: 'Transactions',
         action: (
           <button
             onClick={() => tx.setFilterOpen(true)}
-            className={`relative grid size-11 place-items-center rounded-full ${tx.txFilter.categoryIds.length ? 'text-cobalt' : 'text-muted'}`}
-            aria-label="Filter by category"
+            className={`relative grid size-11 place-items-center rounded-full ${active ? 'text-cobalt' : 'text-muted'}`}
+            aria-label="Filters"
           >
-            <Icon name="filter" size={22} />
-            {tx.txFilter.categoryIds.length > 0 && (
+            <Icon name="sliders" size={22} />
+            {active > 0 && (
               <span className="absolute top-1.5 right-1.5 grid size-4 place-items-center rounded-full bg-cobalt text-[10px] font-bold text-white">
-                {tx.txFilter.categoryIds.length}
+                {active}
               </span>
             )}
           </button>
@@ -97,6 +99,7 @@ function screenFor(route, session, dataVersion, tx) {
           />
         ),
       }
+    }
     case '/analytics':
       return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
     case '/savings':
