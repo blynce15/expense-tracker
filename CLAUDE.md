@@ -90,11 +90,11 @@ Done:
 - Budget = money you can spend = balance of debit + cash accounts (savings and credit cards left out entirely). Period budget = that balance + expenses from those accounts since the period started. No new table: logic in src/lib/budget.js. The period start day (owner's payday) is set in Settings → Budget and kept on the device (localStorage key budgetStartDay, default 1st).
 
 - Onboarding (design "C", app logo in public/logo.png and the app's blues): Welcome, 1 Accounts (live card preview), 2 Budget day (period preview), 3 Categories (Expenses/Income switch, ideas, create own with emoji + color and a live preview), 4 Regular payments (popular tiles, live "Coming up" preview), 5 About you (5 questions), Finish summary. Only for new users.
-- New table user_settings (migration 005, owner must run it in Supabase; named so because an older unused "profiles" table with id/full_name/currency already exists in the project and is left untouched). The budget start day now lives there; until the profile has one, the old on-device value (localStorage budgetStartDay) is used. Settings saves it to the profile.
+- New table user_settings (migration 005, run by owner and published 2026-10-07; named so because an older unused "profiles" table with id/full_name/currency already exists in the project and is left untouched). The budget start day now lives there; until the profile has one, the old on-device value (localStorage budgetStartDay) is used. Settings saves it to the profile.
 - Amounts like "2.100" are now read as 2100 (dots in groups of three = thousands) everywhere.
 
 Next:
-- Owner: run supabase/migrations/005_user_settings.sql, then publish.
+- Polish Transactions, Analytics, Savings, Settings in the new style: mockups shared, waiting for owner feedback.
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).
 - Later: CSV export.
