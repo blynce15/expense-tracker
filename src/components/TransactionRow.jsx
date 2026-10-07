@@ -22,7 +22,7 @@ export default function TransactionRow({ t, category, accountName }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-base font-medium">{t.note || title}</span>
-        <span className="block truncate text-sm text-muted">{t.note ? `${title}, ${subtitle}` : subtitle}</span>
+        <span className="block truncate text-sm text-muted">{t.note ? `${title} · ${subtitle}` : subtitle}</span>
       </span>
       <span className={`tabular shrink-0 font-display text-base font-semibold ${amountColor}`}>{amountText}</span>
     </>

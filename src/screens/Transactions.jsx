@@ -71,7 +71,9 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
               key={t.value}
               onClick={() => changeType(t.value)}
               aria-pressed={filter.type === t.value}
-              className={`rounded-xl py-2.5 text-[15px] font-semibold ${filter.type === t.value ? 'bg-cobalt text-white' : 'text-ink'}`}
+              className={`rounded-xl py-2.5 text-sm font-semibold transition ${
+                filter.type === t.value ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'
+              }`}
             >
               {t.label}
             </button>
@@ -146,11 +148,13 @@ function ActiveFilters({ filter, lookups, onChange }) {
         <button
           key={c.key}
           onClick={c.remove}
-          className="flex h-8 shrink-0 items-center gap-1 rounded-full border-[1.5px] border-cobalt bg-cobalt/10 pr-2 pl-3 text-[13px] font-semibold whitespace-nowrap text-cobalt"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-cobalt/10 pr-1.5 pl-3 text-[13px] font-semibold whitespace-nowrap text-cobalt"
           aria-label={`Remove filter ${c.label}`}
         >
           {c.label}
-          <Icon name="close" size={14} strokeWidth={2.4} />
+          <span className="grid size-[18px] place-items-center rounded-full bg-cobalt text-white">
+            <Icon name="close" size={11} strokeWidth={3} />
+          </span>
         </button>
       ))}
     </div>
@@ -160,7 +164,7 @@ function ActiveFilters({ filter, lookups, onChange }) {
 function TransactionList({ rows, lookups, filtered, onSelect }) {
   if (rows.length === 0) {
     return (
-      <div className="mt-1 rounded-2xl bg-card px-5 py-8 text-center">
+      <div className="mt-1 rounded-[20px] bg-card px-5 py-8 text-center">
         <p className="font-display text-lg font-bold">{filtered ? 'Nothing matches' : 'No transactions yet'}</p>
         <p className="mt-1 text-muted">
           {filtered ? 'Try another tab or change the filters.' : 'Tap the + button to record your first expense or income.'}
@@ -185,15 +189,14 @@ function TransactionList({ rows, lookups, filtered, onSelect }) {
     const earned = day.items.filter((t) => t.type === 'income').reduce((sum, t) => sum + t.amount_cents, 0)
     return (
       <section key={day.date} className="mt-4 first:mt-1">
-        <div className="flex items-baseline justify-between px-1 pb-1.5">
-          <h2 className="text-sm font-semibold text-muted">{formatDay(day.date)}</h2>
-          <span className="tabular text-sm text-muted">
-            {earned > 0 && <span className="text-gain">+{formatCents(earned)}</span>}
-            {earned > 0 && spent > 0 && '  '}
-            {spent > 0 && formatCents(-spent)}
+        <div className="flex items-center justify-between px-1 pb-1.5">
+          <h2 className="text-xs font-semibold tracking-wider text-muted uppercase">{formatDay(day.date)}</h2>
+          <span className="flex gap-1.5">
+            {earned > 0 && <span className="tabular rounded-full bg-gain/10 px-2 py-0.5 text-xs font-semibold text-gain">+{formatCents(earned)}</span>}
+            {spent > 0 && <span className="tabular rounded-full bg-card px-2 py-0.5 text-xs font-semibold text-ink/70">{formatCents(-spent)}</span>}
           </span>
         </div>
-        <ul className="overflow-hidden rounded-2xl bg-card">
+        <ul className="overflow-hidden rounded-[20px] bg-card">
           {day.items.map((t) => (
             <li key={t.id} className="border-b border-line last:border-0">
               <button onClick={() => onSelect(t)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
