@@ -78,7 +78,7 @@ Done:
 
 ### 2026-10-07
 Done:
-- Add-transaction redesign (design C): full-screen amount step, then a sheet with Name + categories where tapping a category saves (3 taps). The Name is stored in transactions.note (no data-model change). Category is suggested from past transactions with the same name. Transfers pick the destination account in step 2.
+- Add-transaction redesign (design C): full-screen amount step, then a sheet with Name + categories and a Save button (owner wants an explicit Save, not save-on-tap). The Name is stored in transactions.note (no data-model change). Category is suggested from past transactions with the same name. Transfers pick the destination account in step 2.
 
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).

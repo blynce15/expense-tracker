@@ -67,7 +67,7 @@ function suggestCategory(history, type, name) {
 }
 
 // transaction: null to add a new one, or an existing row to edit it
-// Step 1: amount (number pad). Step 2: a sheet with the name and categories; tapping a category saves.
+// Step 1: amount (number pad). Step 2: a sheet with the name and categories, then Save.
 export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const isNew = !transaction
   const [lookups, setLookups] = useState(lookupCache.lookups)
@@ -139,17 +139,17 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
     setStep(2)
   }
 
-  // Saves with the category (or, for transfers, the destination account) that was just tapped
-  async function save(pick) {
+  async function save() {
     if (busy) return
     const cents = parseToCents(amount)
+    // A suggested category counts as chosen until another one is tapped
+    const pick = type === 'transfer' ? toAccountId : (categoryId ?? suggested)
+    if (!pick) return setError(type === 'transfer' ? 'Choose the account the money goes to.' : 'Choose a category.')
     const toId = type === 'transfer' ? pick : null
     if (type === 'transfer' && toId === accountId) return setError('Choose a different account than the one the money comes from.')
 
     setBusy(true)
     setError(null)
-    if (type === 'transfer') setToAccountId(pick)
-    else setCategoryId(pick)
     const row = {
       type,
       amount_cents: cents,
@@ -205,7 +205,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
 
   const dayLabel = date === todayISO() ? 'Today' : formatDay(date)
   const sign = type === 'expense' ? '−' : type === 'income' ? '+' : ''
-  // The highlighted choice in step 2: what's saved already, else the suggestion
+  // The selected choice in step 2: what was tapped, else the suggestion
   const highlighted = type === 'transfer' ? toAccountId : (categoryId ?? suggested)
 
   return (
@@ -289,7 +289,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
           <Icon name="chevronRight" size={18} strokeWidth={2.4} />
         </button>
 
-        {/* Step 2: name + category; tapping a category saves */}
+        {/* Step 2: name + category, then Save */}
         {step === 2 && (
           <>
             <div className="absolute inset-0 bg-ink/40" onClick={() => setStep(1)} />
@@ -328,7 +328,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                 <div className="flex items-baseline justify-between px-1">
                   <h3 className="font-display text-base font-bold">{type === 'transfer' ? 'To account' : 'Category'}</h3>
                   <span className="text-xs text-muted">
-                    {type !== 'transfer' && suggested && !categoryId ? 'Suggested from the name' : 'Tap to save'}
+                    {type !== 'transfer' && suggested && !categoryId ? 'Suggested from the name' : ''}
                   </span>
                 </div>
 
@@ -343,8 +343,11 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                       .map((a) => (
                         <button
                           key={a.id}
-                          onClick={() => save(a.id)}
-                          disabled={busy}
+                          onClick={() => {
+                            setToAccountId(a.id)
+                            setError(null)
+                          }}
+                          aria-pressed={highlighted === a.id}
                           className={`flex items-center gap-2.5 rounded-2xl border-[1.5px] px-3 py-3.5 text-left ${
                             highlighted === a.id ? 'border-cobalt bg-cobalt/10' : 'border-transparent bg-card'
                           }`}
@@ -359,8 +362,11 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                     {categories.map((c) => (
                       <button
                         key={c.id}
-                        onClick={() => save(c.id)}
-                        disabled={busy}
+                        onClick={() => {
+                          setCategoryId(c.id)
+                          setError(null)
+                        }}
+                        aria-pressed={highlighted === c.id}
                         className={`flex flex-col items-center gap-1.5 rounded-2xl border-[1.5px] px-1 pt-2.5 pb-2 ${
                           highlighted === c.id ? 'border-cobalt bg-cobalt/10' : 'border-transparent bg-card'
                         }`}
@@ -374,13 +380,22 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                   </div>
                 )}
 
-                {error && <p className="text-center text-sm text-loss">{error}</p>}
-
                 {!isNew && (
                   <button onClick={remove} disabled={busy} className="w-full py-2 text-base font-medium text-loss">
                     Delete transaction
                   </button>
                 )}
+              </div>
+
+              <div className="shrink-0 px-4 pt-1 pb-3">
+                {error && <p className="pb-2 text-center text-sm text-loss">{error}</p>}
+                <button
+                  onClick={save}
+                  disabled={busy || !highlighted}
+                  className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-40"
+                >
+                  {isNew ? `Save ${type}` : 'Save changes'}
+                </button>
               </div>
             </div>
           </>
