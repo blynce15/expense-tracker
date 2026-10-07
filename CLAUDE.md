@@ -84,6 +84,9 @@ Done:
 - Transaction details: tapping a transaction (Transactions page or Home) opens a details sheet (src/screens/TransactionDetails.jsx) with ⋯ → Edit (opens the add/edit flow) or Delete (confirmation shows each affected account's balance before → after). Balances stay calculated, so edits/deletes update them immediately.
 - Testing without the owner's login: a temporary harness (vite config that swaps src/lib/supabase.js for an in-memory mock) runs the real app with sample data; it is deleted after each test and never committed.
 
+- Home redesign (option "N + V", chosen after several rounds of mockups): balance with a tilted card on the right that opens a list of all accounts (pick one to show its balance); blue budget card with a line chart of spending through the budget period vs even spending (touch/drag to read a day); "Coming up" = next 2 recurring payments with calendar-style date and Paid; last 3 transactions. Designed to fit on one iPhone screen without scrolling.
+- Budget = money you can spend = balance of debit + cash accounts (savings and credit cards left out entirely). Period budget = that balance + expenses from those accounts since the period started. No new table: logic in src/lib/budget.js. The period start day (owner's payday) is set in Settings → Budget and kept on the device (localStorage key budgetStartDay, default 1st).
+
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).

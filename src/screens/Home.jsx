@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon'
 import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
+import { budgetPeriod, computeBudget, readStartDay } from '../lib/budget'
 import { monthRange, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
@@ -11,8 +12,10 @@ import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
 import TransactionDetails from './TransactionDetails'
 
-const RECENT_COUNT = 8
+const RECENT_COUNT = 3
+const UPCOMING_COUNT = 2
 const HIDE_KEY = 'hideBalances'
+const HIDDEN = '€ ••••'
 
 function readHidden() {
   try {
@@ -20,6 +23,12 @@ function readHidden() {
   } catch {
     return false
   }
+}
+
+// "25 Sep" (en-GB writes September as "Sept"; keep every month at three letters)
+function shortDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
 }
 
 export default function Home() {
@@ -31,11 +40,19 @@ export default function Home() {
 
   const load = useCallback(async () => {
     try {
-      const [monthStart] = monthRange(todayISO())
-      const [accounts, lookups, sinceMonthStart, recent, recurring] = await Promise.all([
+      const today = todayISO()
+      const [monthStart] = monthRange(today)
+      const period = budgetPeriod(today, readStartDay())
+      const [accounts, lookups, sinceMonthStart, periodExpenses, recent, recurring] = await Promise.all([
         fetchAccountsWithBalances(),
         fetchLookups(),
         supabase.from('transactions').select('type, amount_cents, account_id, to_account_id').gte('date', monthStart),
+        supabase
+          .from('transactions')
+          .select('amount_cents, date, account_id')
+          .eq('type', 'expense')
+          .gte('date', period.start)
+          .lte('date', today),
         supabase
           .from('transactions')
           .select('*')
@@ -44,8 +61,7 @@ export default function Home() {
           .limit(RECENT_COUNT),
         fetchRecurring(),
       ])
-      if (sinceMonthStart.error) throw sinceMonthStart.error
-      if (recent.error) throw recent.error
+      for (const res of [sinceMonthStart, periodExpenses, recent]) if (res.error) throw res.error
 
       // How much each account changed since the 1st of this month
       const change = new Map()
@@ -63,9 +79,10 @@ export default function Home() {
         accounts: accounts
           .filter((a) => !a.archived)
           .map((a) => ({ ...a, change_cents: change.get(a.id) ?? 0 })),
+        budget: { ...computeBudget(accounts, periodExpenses.data, period), period },
         lookups,
         recent: recent.data,
-        upcoming: recurring.filter((p) => p.active),
+        upcoming: recurring.filter((p) => p.active).slice(0, UPCOMING_COUNT),
       })
     } catch (e) {
       setError(e.message)
@@ -91,9 +108,10 @@ export default function Home() {
   if (!data) return null
 
   return (
-    <div className="space-y-6 pt-1 pb-6">
-      <BalanceCard accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} />
-      <Upcoming payments={data.upcoming} onPay={setPaying} />
+    <div className="space-y-3 pb-1">
+      <Balance accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} />
+      <BudgetCard budget={data.budget} hidden={hidden} />
+      <ComingUp payments={data.upcoming} onPay={setPaying} />
       <Recent data={data} onSelect={setEditing} />
 
       {paying && (
@@ -114,154 +132,325 @@ export default function Home() {
   )
 }
 
-// "↓ 15% this month" (or an amount when a % makes no sense)
+// "↑ 15% this month" (or an amount when a % makes no sense)
 function Change({ now, change, hidden }) {
-  if (change === 0) return <span className="text-sm text-white/60">No change this month</span>
+  if (change === 0) return <p className="text-sm text-muted">No change this month</p>
   const before = now - change
   const up = change > 0
   const amount = before > 0 ? `${Math.round((Math.abs(change) / before) * 100)}%` : hidden ? '••••' : formatCents(Math.abs(change))
   return (
-    <span className="flex items-center gap-1 text-sm text-white/70">
-      <span className={`flex items-center gap-0.5 font-semibold ${up ? 'text-[#5ee0a5]' : 'text-[#ff9b8a]'}`}>
-        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={16} strokeWidth={2.4} />
+    <p className="flex items-center gap-1 text-sm text-muted">
+      <span className={`flex items-center gap-0.5 font-semibold ${up ? 'text-gain' : 'text-loss'}`}>
+        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={15} strokeWidth={2.4} />
         <span className="tabular">{amount}</span>
       </span>
       this month
-    </span>
+    </p>
   )
 }
 
 // "€7.854" big, ",43" small and faded
 function BigAmount({ cents, hidden }) {
-  if (hidden) return <p className="font-display text-[44px] leading-none font-bold tracking-tight">€ ••••</p>
+  if (hidden) return <p className="font-display text-[38px] leading-tight font-bold tracking-tight">{HIDDEN}</p>
   const [whole, decimals] = formatCents(cents).split(',')
   return (
-    <p className="tabular truncate font-display leading-none font-bold tracking-tight">
-      <span className="text-[44px]">{whole}</span>
-      <span className="text-2xl text-white/45">,{decimals}</span>
+    <p className="tabular truncate font-display leading-tight font-bold tracking-tight">
+      <span className="text-[38px]">{whole}</span>
+      <span className="text-xl text-muted/60">,{decimals}</span>
     </p>
   )
 }
 
-function BalanceCard({ accounts, hidden, onToggleHidden }) {
+// A small card in an account's color
+function MiniCard({ color, className = '', style }) {
+  return (
+    <span
+      className={`rounded-xl shadow-md ring-1 ring-white/40 ${className}`}
+      style={{ background: `linear-gradient(135deg, ${color}, ${color}bb)`, ...style }}
+    />
+  )
+}
+
+// Total balance (or one account's), with a tilted card that opens a list of all accounts
+function Balance({ accounts, hidden, onToggleHidden }) {
   const [selectedId, setSelectedId] = useState(null)
+  const [open, setOpen] = useState(false)
   const selected = accounts.find((a) => a.id === selectedId)
   const total = accounts.reduce((s, a) => s + a.balance_cents, 0)
   const totalChange = accounts.reduce((s, a) => s + a.change_cents, 0)
-
   const shown = selected
     ? { label: selected.name, cents: selected.balance_cents, change: selected.change_cents }
     : { label: 'Total balance', cents: total, change: totalChange }
 
-  // Card edges peeking from the right; they get narrower when there are many accounts
-  const step = accounts.length ? Math.min(30, Math.floor(120 / accounts.length)) : 0
-  const stackWidth = accounts.length ? accounts.length * step + 14 : 0
+  function pick(id) {
+    setSelectedId(id)
+    setOpen(false)
+  }
 
-  return (
-    <section className="px-4">
-      <div
-        className="relative h-48 overflow-hidden rounded-3xl text-white shadow-[0_14px_30px_-16px_rgba(11,27,69,0.8)]"
-        style={{ background: 'radial-gradient(120% 140% at 85% 10%, #22386f 0%, #0f1f4a 45%, #0a1533 100%)' }}
-      >
-        <div className="flex h-full flex-col justify-center gap-3 py-5 pl-5" style={{ paddingRight: stackWidth + 12 }}>
-          <div className="flex items-center gap-2">
-            <span className="truncate text-base font-medium text-white/70">{shown.label}</span>
-            <button
-              onClick={onToggleHidden}
-              className="-m-2 grid size-10 shrink-0 place-items-center rounded-full text-white/70"
-              aria-label={hidden ? 'Show balances' : 'Hide balances'}
-            >
-              <Icon name={hidden ? 'eyeOff' : 'eye'} size={19} />
-            </button>
-          </div>
-          <BigAmount cents={shown.cents} hidden={hidden} />
-          <div className="flex items-center gap-3">
-            <Change now={shown.cents} change={shown.change} hidden={hidden} />
-          </div>
-          {selected && (
-            <button onClick={() => setSelectedId(null)} className="-my-1 self-start py-1 text-sm font-semibold text-white/85 underline-offset-4 hover:underline">
-              Back to total
-            </button>
-          )}
-        </div>
-
-        {/* One card edge per account; tap to show that account */}
-        <div className="absolute top-5 right-0 bottom-5" style={{ width: stackWidth }}>
-          {accounts.map((a, i) => {
-            const isSelected = a.id === selectedId
-            return (
-              <button
-                key={a.id}
-                onClick={() => setSelectedId(isSelected ? null : a.id)}
-                aria-pressed={isSelected}
-                aria-label={`Show ${a.name}`}
-                className="absolute top-0 bottom-0 w-32 rounded-2xl shadow-[-6px_0_14px_-6px_rgba(0,0,0,0.55)] ring-1 ring-white/35 transition-transform duration-200 ease-out"
-                style={{
-                  left: i * step,
-                  zIndex: i + 1,
-                  backgroundColor: a.color,
-                  transform: isSelected ? 'translateX(-10px) scale(1.03)' : 'none',
-                }}
-              />
-            )
-          })}
-        </div>
-      </div>
-
-      {accounts.length === 0 && (
-        <button onClick={() => navigate('/settings/accounts')} className="mt-3 w-full rounded-2xl bg-card py-4 text-cobalt">
+  if (accounts.length === 0) {
+    return (
+      <section className="px-4">
+        <button onClick={() => navigate('/settings/accounts')} className="w-full rounded-2xl bg-card py-4 text-cobalt">
           Add your first account
         </button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="relative flex items-center gap-3 px-5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1">
+          <span className="truncate text-sm text-muted">{shown.label}</span>
+          <button
+            onClick={onToggleHidden}
+            className="-my-2 grid size-9 shrink-0 place-items-center rounded-full text-muted"
+            aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
+          >
+            <Icon name={hidden ? 'eyeOff' : 'eye'} size={17} />
+          </button>
+        </div>
+        <BigAmount cents={shown.cents} hidden={hidden} />
+        <Change now={shown.cents} change={shown.change} hidden={hidden} />
+      </div>
+
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        aria-label="Choose an account"
+        className="flex shrink-0 flex-col items-center gap-2 py-1"
+      >
+        <span className="relative block h-[52px] w-20">
+          {selected ? (
+            <MiniCard color={selected.color} className="absolute inset-0" style={{ transform: 'rotate(-8deg)' }} />
+          ) : (
+            accounts.slice(0, 3).map((a, i) => (
+              <MiniCard
+                key={a.id}
+                color={a.color}
+                className="absolute inset-0"
+                style={{ transform: `rotate(${-14 + i * 7}deg) translateX(${i * 3}px)` }}
+              />
+            ))
+          )}
+        </span>
+        <span className="flex max-w-24 items-center gap-0.5 text-xs font-semibold text-muted">
+          <span className="truncate">{selected ? selected.name : 'All cards'}</span>
+          <Icon name="chevronDown" size={14} strokeWidth={2.4} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <ul className="absolute top-full right-4 z-40 mt-1 w-[min(300px,calc(100vw-2rem))] overflow-hidden rounded-2xl bg-card py-1 shadow-[0_20px_50px_-12px_rgba(11,27,69,0.45)] ring-1 ring-line">
+            <AccountOption
+              label="All accounts"
+              sub={`${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
+              cents={total}
+              hidden={hidden}
+              selected={!selected}
+              onClick={() => pick(null)}
+              swatch={
+                <span className="relative h-7 w-10 shrink-0">
+                  {accounts.slice(0, 3).map((a, i) => (
+                    <span
+                      key={a.id}
+                      className="absolute h-6 w-8 rounded-md ring-1 ring-white"
+                      style={{ left: i * 4, top: i * 1.5, backgroundColor: a.color }}
+                    />
+                  ))}
+                </span>
+              }
+            />
+            <li className="mx-3 border-t border-line" />
+            {accounts.map((a) => (
+              <AccountOption
+                key={a.id}
+                label={a.name}
+                sub={a.type[0].toUpperCase() + a.type.slice(1)}
+                cents={a.balance_cents}
+                hidden={hidden}
+                selected={a.id === selectedId}
+                onClick={() => pick(a.id)}
+                swatch={<MiniCard color={a.color} className="h-7 w-10 shrink-0 rounded-md shadow-sm" />}
+              />
+            ))}
+          </ul>
+        </>
       )}
     </section>
   )
 }
 
-// Recurring payments, soonest first; the first card is highlighted
-function Upcoming({ payments, onPay }) {
+function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch }) {
+  return (
+    <li>
+      <button onClick={onClick} className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${selected ? 'bg-cobalt/5' : ''}`}>
+        {swatch}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium">{label}</span>
+          <span className="block text-xs text-muted">{sub}</span>
+        </span>
+        <span className={`tabular font-display font-semibold ${cents < 0 ? 'text-loss' : ''}`}>{hidden ? HIDDEN : formatCents(cents)}</span>
+        <span className="w-4 text-cobalt">{selected && <Icon name="check" size={16} strokeWidth={2.6} />}</span>
+      </button>
+    </li>
+  )
+}
+
+// Spending through the budget period (yellow) against even spending (dashed).
+// Touch or drag along the chart to read any day so far.
+const W = 300
+const H = 34
+function BudgetCard({ budget, hidden }) {
+  const { period, cumulative, budgetCents, leftCents, spentCents } = budget
+  const [day, setDay] = useState(null) // day number being read, or null for today
+  const chartRef = useRef(null)
+
+  if (!budget.hasAccounts) {
+    return (
+      <section className="px-4">
+        <button onClick={() => navigate('/settings/accounts')} className="w-full rounded-[28px] bg-cobalt p-4 text-left text-white">
+          <span className="block font-semibold">Budget</span>
+          <span className="block text-sm text-white/80">Add a debit or cash account to see what you have left to spend.</span>
+        </button>
+      </section>
+    )
+  }
+
+  const today = period.dayNumber
+  const shownDay = day ?? today
+  const spentBy = cumulative[shownDay - 1] ?? 0
+  const scale = Math.max(budgetCents, spentCents, 1)
+  const x = (d) => (period.days > 1 ? ((d - 1) / (period.days - 1)) * W : 0)
+  const y = (cents) => H - (Math.max(cents, 0) / scale) * H
+  const points = cumulative.map((c, i) => `${x(i + 1).toFixed(1)},${y(c).toFixed(1)}`).join(' ')
+  const evenBy = budgetCents > 0 ? Math.round((budgetCents * shownDay) / period.days) : 0
+  const diff = spentBy - evenBy
+  const money = (c) => (hidden ? '••••' : formatCents(c).replace(/,\d\d$/, ''))
+
+  function read(e) {
+    const r = chartRef.current.getBoundingClientRect()
+    if (!r.width) return
+    const d = Math.round(((e.clientX - r.left) / r.width) * (period.days - 1)) + 1
+    const clamped = Math.max(1, Math.min(today, d))
+    setDay(clamped === today ? null : clamped)
+  }
+
+  return (
+    <section className="px-4">
+      <div className="rounded-[28px] bg-cobalt px-4 py-3 text-white">
+        <div className="flex items-end justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-sm text-white/75">{day ? `By ${shortDate(dateOf(period.start, day))} you had spent` : 'Left to spend'}</p>
+            <p className="tabular truncate font-display text-[24px] leading-tight font-bold">
+              {day ? (
+                hidden ? '€ ••••' : formatCents(spentBy)
+              ) : (
+                <>
+                  {hidden ? '€ ••••' : formatCents(leftCents).replace(/,\d\d$/, '')}
+                  <span className="text-base font-semibold text-white/65"> of {money(budgetCents)}</span>
+                </>
+              )}
+            </p>
+          </div>
+          {budgetCents > 0 && (
+            <span
+              className={`mb-1 shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold ${diff > 0 ? 'text-[#ffd2c7]' : 'text-[#b8f5d6]'}`}
+            >
+              {diff > 0 ? `▲ ${money(diff)} over pace` : `▼ ${money(-diff)} under pace`}
+            </span>
+          )}
+        </div>
+
+        <svg
+          ref={chartRef}
+          viewBox={`-4 -6 ${W + 8} ${H + 10}`}
+          className="mt-1.5 w-full cursor-crosshair touch-none select-none"
+          onPointerDown={read}
+          onPointerMove={(e) => (e.buttons || e.pointerType === 'mouse') && read(e)}
+          onPointerLeave={() => setDay(null)}
+          onPointerUp={(e) => e.pointerType !== 'mouse' && setDay(null)}
+          role="img"
+          aria-label={`Spent ${formatCents(spentCents)} of ${formatCents(budgetCents)} so far this period`}
+        >
+          <line x1="0" y1={H} x2={W} y2={y(budgetCents)} stroke="rgba(255,255,255,.45)" strokeWidth="1.2" strokeDasharray="4 3" />
+          <polyline points={`0,${H} ${points}`} fill="none" stroke="#f7d84a" strokeWidth="2.6" strokeLinejoin="round" strokeLinecap="round" />
+          <line x1={x(shownDay)} y1="-4" x2={x(shownDay)} y2={H} stroke="rgba(255,255,255,.3)" />
+          <circle cx={x(shownDay)} cy={y(spentBy)} r="4" fill="#f7d84a" stroke="#1f4fe0" strokeWidth="2" />
+        </svg>
+        <div className="flex justify-between text-[10px] leading-none text-white/60">
+          <span>{shortDate(period.start)}</span>
+          <span>- - - even spending · touch the line</span>
+          <span>{shortDate(period.end)}</span>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+const dateOf = (startISO, dayNumber) => {
+  const [y, m, d] = startISO.split('-').map(Number)
+  const date = new Date(y, m - 1, d + dayNumber - 1)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function SectionHead({ title, onSeeAll }) {
+  return (
+    <div className="flex items-baseline justify-between px-5 pb-1.5">
+      <h2 className="font-display text-lg font-bold">{title}</h2>
+      {onSeeAll && (
+        <button onClick={onSeeAll} className="text-sm font-semibold text-cobalt">
+          See all
+        </button>
+      )}
+    </div>
+  )
+}
+
+// The next recurring payments, with the date shown like a calendar page
+function ComingUp({ payments, onPay }) {
   return (
     <section>
-      <div className="flex items-baseline justify-between px-5 pb-2">
-        <h2 className="font-display text-lg font-bold">Upcoming payments</h2>
-        <button onClick={() => navigate('/recurring')} className="text-sm font-semibold text-cobalt">
-          {payments.length ? 'See all' : 'Add'}
-        </button>
-      </div>
+      <SectionHead title="Coming up" onSeeAll={() => navigate('/recurring')} />
       {payments.length === 0 ? (
         <button onClick={() => navigate('/recurring')} className="mx-4 w-[calc(100%-2rem)] rounded-2xl bg-card px-4 py-4 text-left text-muted">
           Add rent, subscriptions and bills to see what's due next.
         </button>
       ) : (
-        <ul className="flex snap-x gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {payments.map((p, i) => {
-            const first = i === 0
+        <ul className="mx-4 overflow-hidden rounded-2xl bg-card">
+          {payments.map((p) => {
             const days = daysUntil(p.next_due)
-            const per = FREQUENCIES.find((f) => f.value === p.frequency)?.per
+            const due = days <= 0
+            const [, m, d] = p.next_due.split('-').map(Number)
+            const month = new Date(2000, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' }).replace('Sept', 'Sep')
+            const every = FREQUENCIES.find((f) => f.value === p.frequency)?.per
             return (
-              <li key={p.id} className="w-44 shrink-0 snap-start">
-                <div className={`flex h-full flex-col rounded-3xl p-4 ${first ? 'bg-cobalt text-white' : 'bg-card'}`}>
-                  <span className={`grid size-11 place-items-center rounded-full text-xl ${first ? 'bg-white' : 'bg-paper'}`}>{p.icon}</span>
-                  <p className="mt-3 line-clamp-2 font-display text-lg leading-tight font-bold break-words">{p.name}</p>
-                  <p className="tabular mt-1 text-base font-semibold">
-                    {formatCents(p.amount_cents)}
-                    <span className={`text-sm font-normal ${first ? 'text-white/70' : 'text-muted'}`}>/{per}</span>
-                  </p>
-                  <p className={`mt-1 text-sm ${days < 0 ? (first ? 'font-semibold text-white' : 'font-semibold text-loss') : first ? 'text-white/80' : 'text-muted'}`}>
-                    {dueLabel(p.next_due)}
-                  </p>
-                  {days <= 0 && (
-                    <button
-                      onClick={() => onPay(p)}
-                      className={`mt-3 rounded-full py-2 text-sm font-semibold ${first ? 'bg-white text-cobalt' : 'bg-cobalt text-white'}`}
-                    >
-                      Paid
-                    </button>
-                  )}
-                </div>
+              <li key={p.id} className="flex items-center gap-3 border-b border-line px-4 py-2 last:border-0">
+                <span
+                  className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${due ? 'bg-[#0d0f14] text-white' : 'bg-paper'}`}
+                >
+                  <span className="text-[9px] font-bold tracking-wider uppercase opacity-70">{days === 0 ? 'Today' : days < 0 ? 'Late' : month}</span>
+                  <span className="font-display text-base leading-none font-bold">{d}</span>
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-base font-medium">
+                    {p.icon} {p.name}
+                  </span>
+                  <span className={`block text-sm ${days < 0 ? 'font-semibold text-loss' : 'text-muted'}`}>
+                    {days < 0 ? dueLabel(p.next_due) : `Every ${every}`}
+                  </span>
+                </span>
+                <span className="tabular shrink-0 font-display text-base font-semibold">{formatCents(p.amount_cents)}</span>
+                {due && (
+                  <button onClick={() => onPay(p)} className="shrink-0 rounded-full bg-cobalt px-3.5 py-1.5 text-sm font-semibold text-white">
+                    Paid
+                  </button>
+                )}
               </li>
             )
           })}
-          <li aria-hidden="true" className="w-1 shrink-0" />
         </ul>
       )}
     </section>
@@ -273,22 +462,15 @@ function Recent({ data, onSelect }) {
   const category = (id) => data.lookups.categories.find((c) => c.id === id)
 
   return (
-    <section className="px-4">
-      <div className="flex items-baseline justify-between px-1 pb-2">
-        <h2 className="font-display text-lg font-bold">Recent transactions</h2>
-        {data.recent.length > 0 && (
-          <button onClick={() => navigate('/transactions')} className="text-sm font-semibold text-cobalt">
-            See all
-          </button>
-        )}
-      </div>
+    <section>
+      <SectionHead title="Recent transactions" onSeeAll={data.recent.length ? () => navigate('/transactions') : null} />
       {data.recent.length === 0 ? (
-        <p className="rounded-2xl bg-card px-4 py-5 text-center text-muted">Tap + to record your first transaction.</p>
+        <p className="mx-4 rounded-2xl bg-card px-4 py-5 text-center text-muted">Tap + to record your first transaction.</p>
       ) : (
-        <ul className="overflow-hidden rounded-2xl bg-card">
+        <ul className="mx-4 overflow-hidden rounded-2xl bg-card">
           {data.recent.map((t) => (
             <li key={t.id} className="border-b border-line last:border-0">
-              <button onClick={() => onSelect(t)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+              <button onClick={() => onSelect(t)} className="flex w-full items-center gap-3 px-4 py-2 text-left">
                 <TransactionRow t={t} category={category(t.category_id)} accountName={accountName} />
               </button>
             </li>
