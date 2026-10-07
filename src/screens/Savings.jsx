@@ -121,27 +121,29 @@ export default function Savings() {
   const active = goals.filter((g) => g.saved_cents < g.target_cents)
 
   return (
-    <div className="space-y-3 px-4 pt-1 pb-6">
-      {goals.length > 0 && <TotalRing saved={saved} target={target} />}
+    <div className="space-y-4 px-4 pt-1 pb-6">
+      {goals.length > 0 && <TotalRing saved={saved} target={target} count={goals.length} />}
 
       {flow !== undefined && <SavingsChart flow={flow} />}
 
-      <div className="flex items-center justify-between px-1 pt-3">
-        <h2 className="text-xs font-semibold tracking-[0.08em] text-muted uppercase">Goals · {active.length}</h2>
-        <button onClick={() => setEditing('new')} className="-my-2 flex items-center gap-1 py-2 pl-3 text-[15px] font-semibold text-cobalt">
-          <Icon name="plus" size={17} strokeWidth={2.6} />
-          New
+      <div className="flex items-center justify-between px-1 pt-2">
+        <h2 className="font-display text-lg font-bold">
+          Goals {active.length > 0 && <span className="tabular text-base font-semibold text-muted">· {active.length}</span>}
+        </h2>
+        <button onClick={() => setEditing('new')} className="flex items-center gap-1 rounded-full bg-cobalt py-1.5 pr-3.5 pl-2.5 text-sm font-semibold text-white active:bg-cobalt-deep">
+          <Icon name="plus" size={16} strokeWidth={2.6} />
+          New goal
         </button>
       </div>
 
       {goals.length === 0 ? (
-        <div className="rounded-3xl bg-card px-5 py-8 text-center">
+        <div className="rounded-[22px] bg-card px-5 py-8 text-center">
           <p className="text-4xl">🐷</p>
           <p className="mt-2 font-display text-lg font-bold">Start your first savings goal</p>
           <p className="mt-1 text-muted">A trip, an emergency fund, a new laptop. Set a target and track your progress.</p>
         </div>
       ) : active.length === 0 ? (
-        <p className="rounded-3xl bg-card px-5 py-6 text-center text-muted">🎉 Every goal is reached. Tap New to start another.</p>
+        <p className="rounded-[22px] bg-card px-5 py-6 text-center text-muted">🎉 Every goal is reached. Tap New goal to start another.</p>
       ) : (
         <ul className="space-y-2.5">
           {active.map((g) => (
@@ -176,35 +178,35 @@ export default function Savings() {
   )
 }
 
-function TotalRing({ saved, target }) {
+// Total saved across goals, in the navy of the Home balance card
+function TotalRing({ saved, target, count }) {
   const ratio = Math.min(1, saved / target)
-  const r = 37
+  const r = 32
   const c = 2 * Math.PI * r
+  const [whole, decimals] = formatCents(saved).split(',')
   return (
-    <section className="flex items-center gap-4 px-1 pt-1 pb-2">
-      <div className="relative grid size-[84px] shrink-0 place-items-center">
-        <svg width="84" height="84" viewBox="0 0 84 84" className="absolute inset-0 -rotate-90" aria-hidden="true">
-          <circle cx="42" cy="42" r={r} fill="none" strokeWidth="9" className="stroke-line" />
+    <section
+      className="flex items-center gap-4 rounded-[24px] p-5 text-white shadow-[0_14px_30px_-16px_rgba(11,27,69,0.8)]"
+      style={{ background: 'radial-gradient(120% 140% at 85% 10%, #22386f 0%, #0f1f4a 45%, #0a1533 100%)' }}
+    >
+      <div className="relative grid size-[78px] shrink-0 place-items-center">
+        <svg width="78" height="78" viewBox="0 0 78 78" className="absolute inset-0 -rotate-90" aria-hidden="true">
+          <circle cx="39" cy="39" r={r} fill="none" strokeWidth="8" stroke="rgba(255,255,255,0.15)" />
           {saved > 0 && (
-            <circle
-              cx="42"
-              cy="42"
-              r={r}
-              fill="none"
-              strokeWidth="9"
-              strokeLinecap="round"
-              strokeDasharray={c}
-              strokeDashoffset={c * (1 - ratio)}
-              className="stroke-cobalt"
-            />
+            <circle cx="39" cy="39" r={r} fill="none" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - ratio)} stroke="#f7d84a" />
           )}
         </svg>
         <span className="tabular relative font-display text-lg font-extrabold">{Math.floor(ratio * 100)}%</span>
       </div>
       <div className="min-w-0">
-        <p className="text-sm font-medium text-muted">Total saved</p>
-        <p className="tabular font-display text-[34px] leading-tight font-extrabold tracking-tight">{formatCents(saved)}</p>
-        <p className="tabular text-sm text-muted">of {formatCents(target)}</p>
+        <p className="text-sm text-white/70">Total saved</p>
+        <p className="tabular truncate font-display leading-tight font-extrabold tracking-tight">
+          <span className="text-[32px]">{whole}</span>
+          <span className="text-lg text-white/50">,{decimals}</span>
+        </p>
+        <p className="tabular text-sm text-white/70">
+          of {formatCents(target).replace(/,\d\d$/, '')} · {count} {count === 1 ? 'goal' : 'goals'}
+        </p>
       </div>
     </section>
   )
@@ -216,7 +218,7 @@ function SavingsChart({ flow }) {
 
   if (!flow) {
     return (
-      <section className="rounded-3xl bg-card p-5 text-sm text-muted">
+      <section className="rounded-[22px] bg-card p-5 text-sm text-muted">
         Mark an account as <span className="font-semibold text-ink">Savings</span> in Settings → Accounts & cards to see how much goes into it
         each month.
       </section>
@@ -240,10 +242,10 @@ function SavingsChart({ flow }) {
   const p = picked === null ? null : flow[picked]
 
   return (
-    <section className="rounded-3xl bg-card px-4 pt-4 pb-3">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold">Savings account</h2>
-        <span className={`tabular text-sm font-bold ${net < 0 ? 'text-loss' : 'text-gain'}`}>{signed(net)}</span>
+    <section className="rounded-[22px] bg-card px-4 pt-4 pb-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-bold">Savings account</h2>
+        <span className={`tabular rounded-full px-2 py-0.5 text-xs font-bold ${net < 0 ? 'bg-loss/10 text-loss' : 'bg-gain/10 text-gain'}`}>{signed(net)}</span>
       </div>
       <p className="text-xs text-muted">Money in minus money out, last 6 months</p>
       <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 block h-auto w-full overflow-visible" role="img" aria-label="Monthly change of your savings account">
@@ -260,7 +262,7 @@ function SavingsChart({ flow }) {
                 y={pos ? zero - h : zero}
                 width={barW}
                 height={h}
-                rx="5"
+                rx="7"
                 className={pos ? 'fill-cobalt' : 'fill-loss'}
                 opacity={d.partial ? 0.45 : 1}
               />
@@ -310,29 +312,36 @@ function ProgressBar({ goal, thick = false }) {
   const pct = Math.min(100, (goal.saved_cents / goal.target_cents) * 100)
   const done = goal.saved_cents >= goal.target_cents
   return (
-    <div className={`${thick ? 'h-3.5' : 'h-1.5'} overflow-hidden rounded-full bg-paper`}>
-      <div className={`h-full rounded-full ${done ? 'bg-gain' : 'bg-cobalt'}`} style={{ width: `${Math.max(pct, goal.saved_cents > 0 ? 2 : 0)}%` }} />
+    <div className={`${thick ? 'h-3.5' : 'h-2.5'} overflow-hidden rounded-full bg-paper`}>
+      <div
+        className={`h-full rounded-full ${done ? 'bg-gain' : 'bg-gradient-to-r from-[#2b8ef7] to-cobalt'}`}
+        style={{ width: `${Math.max(pct, goal.saved_cents > 0 ? 2 : 0)}%` }}
+      />
     </div>
   )
 }
 
 function GoalCard({ goal, onOpen }) {
   const pct = Math.floor((goal.saved_cents / goal.target_cents) * 100)
+  const p = pace(goal)
 
   return (
-    <button onClick={onOpen} className="flex w-full items-center gap-3 rounded-3xl bg-card px-3.5 py-3 text-left">
-      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cobalt/10 text-2xl">{goal.icon || DEFAULT_ICON}</span>
-      <div className="min-w-0 flex-1 space-y-1.5">
-        <div className="flex items-baseline gap-2">
-          <span className="flex-1 truncate font-display text-base font-bold">{goal.name}</span>
-          <span className="tabular text-sm font-bold text-cobalt">{pct}%</span>
-        </div>
+    <button onClick={onOpen} className="block w-full rounded-[22px] bg-card p-4 text-left">
+      <span className="flex items-center gap-3">
+        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cobalt/10 text-2xl">{goal.icon || DEFAULT_ICON}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-display text-base font-bold">{goal.name}</span>
+          <span className="tabular block truncate text-xs text-muted">
+            <span className="font-semibold text-ink">{formatCents(goal.saved_cents)}</span> of {formatCents(goal.target_cents)}
+            {goal.deadline && ` · by ${formatMonthYear(goal.deadline)}`}
+          </span>
+        </span>
+        <span className="tabular font-display text-lg font-bold text-cobalt">{pct}%</span>
+      </span>
+      <span className="mt-3 block">
         <ProgressBar goal={goal} />
-        <p className="tabular truncate text-[13px] text-muted">
-          <span className="font-semibold text-ink">{formatCents(goal.saved_cents)}</span> of {formatCents(goal.target_cents)}
-          {goal.deadline && ` · by ${formatMonthYear(goal.deadline)}`}
-        </p>
-      </div>
+      </span>
+      {p && <span className={`mt-2 block text-xs ${p.overdue ? 'text-loss' : 'text-muted'}`}>{p.overdue ? p.text : `Put aside ${p.text}`}</span>}
     </button>
   )
 }
