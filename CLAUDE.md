@@ -29,13 +29,13 @@ Every table has `user_id uuid default auth.uid()` and `created_at`.
 - transactions: type (expense | income | transfer), amount_cents (always positive), date, account_id, to_account_id (transfers only), category_id (null for transfers), note
 - savings_goals: name, target_cents, saved_cents, deadline (optional)
 - recurring_payments: name, icon, amount_cents, frequency (weekly | monthly | yearly), start_date (sets day of month), next_due, account_id, category_id, active. "Paid" creates an expense and moves next_due forward; nothing is created automatically.
-- profiles (one row per user, primary key user_id): budget_start_day (1–31), answers (jsonb, the onboarding "About you" answers, for future AI tips), onboarded_at.
+- user_settings (one row per user, primary key user_id): budget_start_day (1–31), answers (jsonb, the onboarding "About you" answers, for future AI tips), onboarded_at.
 
 ## Rules
 - Store money as integer cents. Never floats. Format as € only for display.
 - Account balance = starting balance + income − expenses − transfers out + transfers in. Always calculated, never stored.
 - Transfers (e.g. paying a credit card, moving money to savings) are NOT spending or income. Exclude them from analytics totals.
-- New users (no accounts and no profiles.onboarded_at) go through onboarding (src/screens/Onboarding.jsx): accounts, budget day, categories (defaults below, pick/add own), recurring payments, About-you questions. Everything is saved at the end (src/lib/onboarding.js). Existing users never see it.
+- New users (no accounts and no user_settings.onboarded_at) go through onboarding (src/screens/Onboarding.jsx): accounts, budget day, categories (defaults below, pick/add own), recurring payments, About-you questions. Everything is saved at the end (src/lib/onboarding.js). Existing users never see it.
 - Default categories: Groceries, Eating out, Transport, Housing, Bills, Shopping, Health, Entertainment, Travel, Other (expense); Salary, Other income (income). Onboarding offers these; ensureDefaultCategories still runs for non-new users with no categories.
 
 ## Security (non-negotiable)
@@ -90,11 +90,11 @@ Done:
 - Budget = money you can spend = balance of debit + cash accounts (savings and credit cards left out entirely). Period budget = that balance + expenses from those accounts since the period started. No new table: logic in src/lib/budget.js. The period start day (owner's payday) is set in Settings → Budget and kept on the device (localStorage key budgetStartDay, default 1st).
 
 - Onboarding (design "C", app logo in public/logo.png and the app's blues): Welcome, 1 Accounts (live card preview), 2 Budget day (period preview), 3 Categories (Expenses/Income switch, ideas, create own with emoji + color and a live preview), 4 Regular payments (popular tiles, live "Coming up" preview), 5 About you (5 questions), Finish summary. Only for new users.
-- New table profiles (migration 005, owner must run it in Supabase). The budget start day now lives there; until the profile has one, the old on-device value (localStorage budgetStartDay) is used. Settings saves it to the profile.
+- New table user_settings (migration 005, owner must run it in Supabase; named so because an older unused "profiles" table with id/full_name/currency already exists in the project and is left untouched). The budget start day now lives there; until the profile has one, the old on-device value (localStorage budgetStartDay) is used. Settings saves it to the profile.
 - Amounts like "2.100" are now read as 2100 (dots in groups of three = thousands) everywhere.
 
 Next:
-- Owner: run supabase/migrations/005_profiles.sql, then publish.
+- Owner: run supabase/migrations/005_user_settings.sql, then publish.
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).
 - Later: CSV export.

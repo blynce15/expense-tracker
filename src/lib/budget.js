@@ -6,7 +6,7 @@ import { shiftDays } from './dates'
 
 export const BUDGET_ACCOUNT_TYPES = ['debit', 'cash']
 
-// Before profiles existed the start day was kept on the device; still used until the profile has one
+// Before user_settings existed the start day was kept on the device; still used until settings have one
 const LEGACY_START_DAY_KEY = 'budgetStartDay'
 function legacyStartDay() {
   try {
