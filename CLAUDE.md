@@ -93,8 +93,9 @@ Done:
 - New table user_settings (migration 005, run by owner and published 2026-10-07; named so because an older unused "profiles" table with id/full_name/currency already exists in the project and is left untouched). The budget start day now lives there; until the profile has one, the old on-device value (localStorage budgetStartDay) is used. Settings saves it to the profile.
 - Amounts like "2.100" are now read as 2100 (dots in groups of three = thousands) everywhere.
 
+- Polished Transactions (soft tabs, filter chips, uppercase day headers with total pills), Analytics (blue summary card with Income/Left over, category colors + split bar, rounded month bars), Savings (navy total card with yellow ring, net tag, goal cards with gradient bar and monthly pace), Settings (grouped rows with live summaries, budget day, email + Sign out, logo). Account page still exists behind the top-bar person icon.
+
 Next:
-- Polish Transactions, Analytics, Savings, Settings in the new style: mockups shared, waiting for owner feedback.
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).
 - Later: CSV export.

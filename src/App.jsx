@@ -133,7 +133,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/savings':
       return { title: 'Savings', body: <Savings key={dataVersion} /> }
     case '/settings':
-      return { title: 'Settings', back: '/home', body: <Settings /> }
+      return { title: 'Settings', back: '/home', body: <Settings session={session} /> }
     case '/settings/accounts':
       return { title: 'Accounts & cards', back: '/settings', body: <Accounts key={dataVersion} /> }
     case '/settings/categories':
