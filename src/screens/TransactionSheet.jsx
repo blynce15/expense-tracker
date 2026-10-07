@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { formatDay, todayISO } from '../lib/dates'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
-import { formatTyping, parseToCents } from '../lib/money'
+import { formatCents, formatTyping, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
 const TYPES = [
@@ -34,10 +34,45 @@ function centsToPad(cents) {
   return `${euros}.${String(rest).padStart(2, '0').replace(/0$/, '')}`
 }
 
+// Past names → the category last used with them, to suggest a category while typing a name.
+// The name is stored in the transaction's note.
+async function fetchNameHistory() {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('note, type, category_id')
+    .not('note', 'is', null)
+    .not('category_id', 'is', null)
+    .order('date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(1000)
+  if (error) throw error
+  const history = new Map()
+  for (const t of data) {
+    const key = `${t.type}|${t.note.trim().toLowerCase()}`
+    if (!history.has(key)) history.set(key, t.category_id) // most recent wins
+  }
+  return history
+}
+
+function suggestCategory(history, type, name) {
+  const typed = name.trim().toLowerCase()
+  if (!history || typed.length < 2) return null
+  const exact = history.get(`${type}|${typed}`)
+  if (exact) return exact
+  if (typed.length < 3) return null
+  for (const [key, categoryId] of history) {
+    if (key.startsWith(`${type}|${typed}`)) return categoryId
+  }
+  return null
+}
+
 // transaction: null to add a new one, or an existing row to edit it
+// Step 1: amount (number pad). Step 2: a sheet with the name and categories; tapping a category saves.
 export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const isNew = !transaction
   const [lookups, setLookups] = useState(lookupCache.lookups)
+  const [history, setHistory] = useState(null)
+  const [step, setStep] = useState(1)
   const [type, setType] = useState(transaction?.type ?? 'expense')
   const [amount, setAmount] = useState(transaction ? centsToPad(transaction.amount_cents) : '')
   const [categoryId, setCategoryId] = useState(transaction?.category_id ?? null)
@@ -46,9 +81,8 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   )
   const [toAccountId, setToAccountId] = useState(transaction?.to_account_id ?? null)
   const [date, setDate] = useState(transaction?.date ?? todayISO())
-  const [note, setNote] = useState(transaction?.note ?? '')
-  const [showNote, setShowNote] = useState(Boolean(transaction?.note))
-  const [picking, setPicking] = useState(null) // null | 'account' | 'toAccount' | 'date'
+  const [name, setName] = useState(transaction?.note ?? '')
+  const [picking, setPicking] = useState(null) // null | 'account' | 'date'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
@@ -60,48 +94,70 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         if (isNew) setAccountId((current) => current ?? defaultAccountId(data, lastUsed))
       })
       .catch((e) => setError(e.message))
+    // Suggestions are a nice extra; the screen works without them
+    fetchNameHistory()
+      .then(setHistory)
+      .catch(() => {})
   }, [isNew])
 
-  // Keyboard typing works too (handy on a computer)
+  // Full-screen: stop the page behind from scrolling; Escape goes back or closes
   useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  // Keyboard typing works too on the amount step (handy on a computer)
+  useEffect(() => {
+    if (step !== 1 || picking) return
     function onKey(e) {
       if (e.target.tagName === 'INPUT') return
       if (/^[0-9]$/.test(e.key)) setAmount((a) => pressKey(a, e.key))
       else if (e.key === '.' || e.key === ',') setAmount((a) => pressKey(a, '.'))
       else if (e.key === 'Backspace') setAmount((a) => pressKey(a, 'back'))
+      else if (e.key === 'Enter') next()
+      else if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  })
 
-  function changeType(next) {
-    setType(next)
+  const suggested = useMemo(() => (type === 'transfer' ? null : suggestCategory(history, type, name)), [history, type, name])
+
+  function changeType(nextType) {
+    setType(nextType)
     setError(null)
     // A category belongs to either expenses or income, so clear it when switching
-    if (next !== type) setCategoryId(null)
+    if (nextType !== type) setCategoryId(null)
   }
 
-  async function save() {
-    const cents = parseToCents(amount)
-    if (!cents) return setError('Enter an amount.')
+  function next() {
+    if (!parseToCents(amount)) return setError('Enter an amount.')
     if (!accountId) return setError('Choose an account.')
-    if (type === 'transfer') {
-      if (!toAccountId) return setError('Choose the account the money goes to.')
-      if (toAccountId === accountId) return setError('Choose two different accounts.')
-    } else if (!categoryId) {
-      return setError('Choose a category.')
-    }
+    setError(null)
+    setStep(2)
+  }
+
+  // Saves with the category (or, for transfers, the destination account) that was just tapped
+  async function save(pick) {
+    if (busy) return
+    const cents = parseToCents(amount)
+    const toId = type === 'transfer' ? pick : null
+    if (type === 'transfer' && toId === accountId) return setError('Choose a different account than the one the money comes from.')
 
     setBusy(true)
     setError(null)
+    if (type === 'transfer') setToAccountId(pick)
+    else setCategoryId(pick)
     const row = {
       type,
       amount_cents: cents,
       date,
       account_id: accountId,
-      to_account_id: type === 'transfer' ? toAccountId : null,
-      category_id: type === 'transfer' ? null : categoryId,
-      note: note.trim() || null,
+      to_account_id: toId,
+      category_id: type === 'transfer' ? null : pick,
+      note: name.trim() || null,
     }
     const { error } = isNew
       ? await supabase.from('transactions').insert(row)
@@ -135,6 +191,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const accounts = lookups.accounts.filter((a) => !a.archived || a.id === accountId || a.id === toAccountId)
   const categories = lookups.categories.filter((c) => c.kind === type && (!c.archived || c.id === categoryId))
   const accountById = (id) => lookups.accounts.find((a) => a.id === id)
+  const account = accountById(accountId)
 
   if (accounts.length === 0) {
     return (
@@ -146,173 +203,223 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
     )
   }
 
-  if (picking === 'date') {
-    return (
-      <Sheet title="Date" onClose={() => setPicking(null)} tall>
-        <DatePicker
-          value={date}
-          onChange={(iso) => {
-            setDate(iso)
-            setPicking(null)
-          }}
-        />
-      </Sheet>
-    )
-  }
-
-  if (picking) {
-    const current = picking === 'account' ? accountId : toAccountId
-    return (
-      <Sheet title={picking === 'toAccount' ? 'To account' : type === 'transfer' ? 'From account' : 'Account'} onClose={() => setPicking(null)} tall>
-        <ul className="overflow-hidden rounded-2xl bg-card">
-          {accounts.map((a) => (
-            <li key={a.id} className="border-b border-line last:border-0">
-              <button
-                onClick={() => {
-                  if (picking === 'account') setAccountId(a.id)
-                  else setToAccountId(a.id)
-                  setPicking(null)
-                }}
-                className="flex w-full items-center gap-3 px-4 py-4 text-left"
-              >
-                <span className="h-6 w-9 shrink-0 rounded" style={{ backgroundColor: a.color }} />
-                <span className="flex-1 text-base font-medium">{a.name}</span>
-                {a.id === current && <span className="text-sm font-semibold text-cobalt">Selected</span>}
-              </button>
-            </li>
-          ))}
-        </ul>
-      </Sheet>
-    )
-  }
-
-  const chip = 'flex h-10 items-center gap-1.5 rounded-full bg-card px-3.5 text-sm font-medium'
+  const dayLabel = date === todayISO() ? 'Today' : formatDay(date)
+  const sign = type === 'expense' ? '−' : type === 'income' ? '+' : ''
+  // The highlighted choice in step 2: what's saved already, else the suggestion
+  const highlighted = type === 'transfer' ? toAccountId : (categoryId ?? suggested)
 
   return (
-    <Sheet title={title} onClose={onClose} tall>
-      <div className="space-y-4">
-        {/* Type */}
-        <div className="grid grid-cols-3 rounded-xl bg-line/60 p-1">
-          {TYPES.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => changeType(t.value)}
-              aria-pressed={type === t.value}
-              className={`rounded-lg py-2 text-sm font-semibold ${type === t.value ? 'bg-card text-ink shadow-sm' : 'text-muted'}`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Amount */}
-        <p
-          className={`tabular text-center font-display text-5xl font-bold tracking-tight ${amount ? 'text-ink' : 'text-muted/50'}`}
-          aria-live="polite"
-        >
-          <span className="mr-1 text-3xl align-[0.35em] text-muted">€</span>
-          {formatTyping(amount)}
-        </p>
-
-        {/* Account, date, note */}
-        <div className="flex flex-wrap justify-center gap-2">
-          <button onClick={() => setPicking('account')} className={chip}>
-            <span className="size-3 rounded-sm" style={{ backgroundColor: accountById(accountId)?.color }} />
-            {type === 'transfer' ? 'From ' : ''}
-            {accountById(accountId)?.name ?? 'Account'}
+    <div
+      className="fixed inset-0 z-50 flex justify-center bg-paper motion-safe:animate-[sheet-up_220ms_ease-out]"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <div className="relative flex h-full w-full max-w-lg flex-col px-4 pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+12px)]">
+        {/* Step 1: amount */}
+        <div className="flex h-14 shrink-0 items-center">
+          <button onClick={onClose} className="grid size-11 place-items-center rounded-full text-muted" aria-label="Close">
+            <Icon name="close" />
           </button>
-          {type === 'transfer' && (
-            <button onClick={() => setPicking('toAccount')} className={`${chip} ${toAccountId ? '' : 'text-cobalt'}`}>
-              {toAccountId && <span className="size-3 rounded-sm" style={{ backgroundColor: accountById(toAccountId)?.color }} />}
-              To {accountById(toAccountId)?.name ?? 'account…'}
-            </button>
-          )}
-          <button onClick={() => setPicking('date')} className={chip} aria-label={`Date: ${formatDay(date)}`}>
-            <span className="text-base leading-none">🗓️</span>
-            {date !== todayISO() && formatDay(date)}
-          </button>
-          {!showNote && (
-            <button onClick={() => setShowNote(true)} className={`${chip} text-muted`}>
-              Add note
-            </button>
-          )}
-        </div>
-        {showNote && (
-          <div className="relative">
-            <input
-              // Focus straight away so typing goes into the note, not the amount
-              autoFocus={isNew || !transaction.note}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              // Leaving it empty closes the note again
-              onBlur={() => !note.trim() && setShowNote(false)}
-              placeholder="Note"
-              className="w-full rounded-xl border border-line bg-card py-2.5 pr-12 pl-4 text-base outline-none focus:border-cobalt"
-            />
-            <button
-              // Prevent the blur from firing first, which would swallow this tap
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                setNote('')
-                setShowNote(false)
-              }}
-              className="absolute top-0 right-0 grid h-full w-12 place-items-center text-muted"
-              aria-label="Remove note"
-            >
-              <Icon name="close" size={20} />
-            </button>
+          <div className="flex flex-1 justify-center gap-1.5" aria-hidden="true">
+            <span className="h-1 w-6 rounded-full bg-cobalt" />
+            <span className={`h-1 w-6 rounded-full ${step === 2 ? 'bg-cobalt' : 'bg-line'}`} />
           </div>
-        )}
+          <span className="w-11" />
+        </div>
 
-        {/* Categories */}
-        {type !== 'transfer' && (
-          <div className="grid grid-cols-4 gap-2">
-            {categories.map((c) => (
+        <div className="flex justify-center">
+          <div className="flex rounded-full bg-line/70 p-1">
+            {TYPES.map((t) => (
               <button
-                key={c.id}
-                onClick={() => setCategoryId(c.id)}
-                aria-pressed={categoryId === c.id}
-                className={`flex flex-col items-center gap-1 rounded-xl px-1 py-2 ${
-                  categoryId === c.id ? 'bg-cobalt text-white' : 'bg-card'
-                }`}
+                key={t.value}
+                onClick={() => changeType(t.value)}
+                aria-pressed={type === t.value}
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${type === t.value ? 'bg-ink text-white' : 'text-muted'}`}
               >
-                <span className="text-xl leading-none">{c.icon}</span>
-                <span className="w-full truncate text-center text-[11px] font-medium">{c.name}</span>
+                {t.label}
               </button>
             ))}
           </div>
-        )}
+        </div>
 
-        {/* Number pad */}
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5">
+          <p
+            className={`tabular text-center font-display text-[64px] leading-none font-extrabold tracking-tight ${amount ? 'text-ink' : 'text-muted/40'}`}
+            aria-live="polite"
+          >
+            <span className="mr-1 align-[0.55em] text-[28px] font-bold text-muted">€</span>
+            {formatTyping(amount)}
+          </p>
+          <div className="flex items-center rounded-full bg-card text-sm text-muted">
+            <button onClick={() => setPicking('account')} className="flex h-10 items-center gap-1.5 pr-1.5 pl-4">
+              <span className="size-2.5 rounded-sm" style={{ backgroundColor: account?.color }} />
+              From <span className="font-semibold text-ink">{account?.name ?? 'Account'}</span>
+            </button>
+            <span aria-hidden="true">·</span>
+            <button onClick={() => setPicking('date')} className="flex h-10 items-center gap-1 pr-3.5 pl-1.5">
+              <span className="font-semibold text-ink">{dayLabel}</span>
+              <Icon name="chevronDown" size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid shrink-0 grid-cols-3 gap-1.5">
           {KEYS.map((k) => (
             <button
               key={k}
               onClick={() => setAmount((a) => pressKey(a, k))}
-              className="grid h-13 place-items-center rounded-xl bg-card font-display text-2xl font-semibold active:bg-line"
+              className={`grid h-14 place-items-center rounded-2xl font-display text-[26px] font-semibold active:bg-line ${
+                k === '.' || k === 'back' ? '' : 'bg-card'
+              }`}
               aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
             >
-              {k === 'back' ? <Icon name="chevronLeft" /> : k === '.' ? ',' : k}
+              {k === 'back' ? <Icon name="backspace" size={26} /> : k === '.' ? ',' : k}
             </button>
           ))}
         </div>
 
-        {error && <p className="text-center text-sm text-loss">{error}</p>}
+        {step === 1 && error && <p className="pt-2 text-center text-sm text-loss">{error}</p>}
 
         <button
-          onClick={save}
-          disabled={busy}
-          className="w-full rounded-2xl bg-cobalt py-4 text-lg font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
+          onClick={next}
+          className="mt-3 flex w-full shrink-0 items-center justify-center gap-1 rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep"
         >
-          {isNew ? 'Save' : 'Save changes'}
+          {type === 'transfer' ? 'Next: to which account' : 'Next: name and category'}
+          <Icon name="chevronRight" size={18} strokeWidth={2.4} />
         </button>
 
-        {!isNew && (
-          <button onClick={remove} disabled={busy} className="w-full py-2 text-base font-medium text-loss">
-            Delete transaction
-          </button>
+        {/* Step 2: name + category; tapping a category saves */}
+        {step === 2 && (
+          <>
+            <div className="absolute inset-0 bg-ink/40" onClick={() => setStep(1)} />
+            <div className="absolute inset-x-0 bottom-0 flex max-h-[88%] flex-col rounded-t-3xl bg-paper pb-[env(safe-area-inset-bottom)] motion-safe:animate-[sheet-up_200ms_ease-out]">
+              <div className="flex items-center px-3 pt-3">
+                <button onClick={() => setStep(1)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back to amount">
+                  <Icon name="chevronLeft" />
+                </button>
+                <div className="flex-1 text-center">
+                  <p className="text-xs font-semibold tracking-[0.1em] text-muted uppercase">{type}</p>
+                  <p className="tabular font-display text-3xl font-extrabold tracking-tight">
+                    {sign}
+                    {formatCents(parseToCents(amount))}
+                  </p>
+                  <p className="text-sm text-muted">
+                    {account?.name} · {dayLabel}
+                  </p>
+                </div>
+                <span className="w-11" />
+              </div>
+
+              <div className="space-y-4 overflow-y-auto px-4 pt-4 pb-5">
+                <label className="block rounded-2xl border-[1.5px] border-line bg-card px-4 py-2 focus-within:border-cobalt">
+                  <span className="block text-xs font-medium text-muted">Name (optional)</span>
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={type === 'income' ? 'Salary' : type === 'transfer' ? 'To savings' : 'Pingo Doce'}
+                    autoComplete="off"
+                    enterKeyHint="done"
+                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                    className="w-full bg-transparent font-display text-xl font-bold outline-none placeholder:font-semibold placeholder:text-muted/40"
+                  />
+                </label>
+
+                <div className="flex items-baseline justify-between px-1">
+                  <h3 className="font-display text-base font-bold">{type === 'transfer' ? 'To account' : 'Category'}</h3>
+                  <span className="text-xs text-muted">
+                    {type !== 'transfer' && suggested && !categoryId ? 'Suggested from the name' : 'Tap to save'}
+                  </span>
+                </div>
+
+                {type === 'transfer' && accounts.filter((a) => a.id !== accountId && !a.archived).length === 0 ? (
+                  <p className="rounded-2xl bg-card px-4 py-5 text-center text-sm text-muted">
+                    Add a second account in Settings → Accounts & cards to move money between them.
+                  </p>
+                ) : type === 'transfer' ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    {accounts
+                      .filter((a) => a.id !== accountId && (!a.archived || a.id === toAccountId))
+                      .map((a) => (
+                        <button
+                          key={a.id}
+                          onClick={() => save(a.id)}
+                          disabled={busy}
+                          className={`flex items-center gap-2.5 rounded-2xl border-[1.5px] px-3 py-3.5 text-left ${
+                            highlighted === a.id ? 'border-cobalt bg-cobalt/10' : 'border-transparent bg-card'
+                          }`}
+                        >
+                          <span className="h-5 w-7 shrink-0 rounded" style={{ backgroundColor: a.color }} />
+                          <span className="truncate text-sm font-semibold">{a.name}</span>
+                        </button>
+                      ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-4 gap-2">
+                    {categories.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => save(c.id)}
+                        disabled={busy}
+                        className={`flex flex-col items-center gap-1.5 rounded-2xl border-[1.5px] px-1 pt-2.5 pb-2 ${
+                          highlighted === c.id ? 'border-cobalt bg-cobalt/10' : 'border-transparent bg-card'
+                        }`}
+                      >
+                        <span className="grid size-10 place-items-center rounded-full text-xl" style={{ backgroundColor: `${c.color}26` }}>
+                          {c.icon}
+                        </span>
+                        <span className="w-full truncate text-center text-[11px] font-semibold">{c.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {error && <p className="text-center text-sm text-loss">{error}</p>}
+
+                {!isNew && (
+                  <button onClick={remove} disabled={busy} className="w-full py-2 text-base font-medium text-loss">
+                    Delete transaction
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
         )}
       </div>
-    </Sheet>
+
+      {picking === 'date' && (
+        <Sheet title="Date" onClose={() => setPicking(null)} tall>
+          <DatePicker
+            value={date}
+            onChange={(iso) => {
+              setDate(iso)
+              setPicking(null)
+            }}
+          />
+        </Sheet>
+      )}
+
+      {picking === 'account' && (
+        <Sheet title={type === 'transfer' ? 'From account' : 'Account'} onClose={() => setPicking(null)} tall>
+          <ul className="overflow-hidden rounded-2xl bg-card">
+            {accounts.map((a) => (
+              <li key={a.id} className="border-b border-line last:border-0">
+                <button
+                  onClick={() => {
+                    setAccountId(a.id)
+                    setPicking(null)
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-4 text-left"
+                >
+                  <span className="h-6 w-9 shrink-0 rounded" style={{ backgroundColor: a.color }} />
+                  <span className="flex-1 text-base font-medium">{a.name}</span>
+                  {a.id === accountId && <span className="text-sm font-semibold text-cobalt">Selected</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Sheet>
+      )}
+    </div>
   )
 }
