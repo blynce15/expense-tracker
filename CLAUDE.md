@@ -76,6 +76,10 @@ Done:
 - Savings goals have an emoji icon (column savings_goals.icon, migration 004, run by owner).
 - Savings page redesign: total saved with progress ring; bar chart of net money in/out of savings-type accounts over the last 6 months (from transactions, no new table); goal cards without status tags; reached goals hidden from the list (still counted in the total); "+ New" next to the Goals heading.
 
+### 2026-10-07
+Done:
+- Add-transaction redesign (design C): full-screen amount step, then a sheet with Name + categories where tapping a category saves (3 taps). The Name is stored in transactions.note (no data-model change). Category is suggested from past transactions with the same name. Transfers pick the destination account in step 2.
+
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).
