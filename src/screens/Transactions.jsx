@@ -8,7 +8,7 @@ import { activeFilterCount, applyFilter, DATE_PRESETS, describeDate, describeRan
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
-import TransactionSheet from './TransactionSheet'
+import TransactionDetails from './TransactionDetails'
 
 const PAGE_SIZE = 100
 
@@ -109,14 +109,7 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
       )}
 
       {editing && (
-        <TransactionSheet
-          transaction={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null)
-            load(Math.max(rows.length, PAGE_SIZE))
-          }}
-        />
+        <TransactionDetails transaction={editing} onClose={() => setEditing(null)} onChanged={() => load(Math.max(rows.length, PAGE_SIZE))} />
       )}
     </div>
   )

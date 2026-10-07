@@ -9,7 +9,7 @@ import { formatCents } from '../lib/money'
 import { daysUntil, dueLabel, fetchRecurring, FREQUENCIES } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
-import TransactionSheet from './TransactionSheet'
+import TransactionDetails from './TransactionDetails'
 
 const RECENT_COUNT = 8
 const HIDE_KEY = 'hideBalances'
@@ -108,14 +108,7 @@ export default function Home() {
       )}
 
       {editing && (
-        <TransactionSheet
-          transaction={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null)
-            load()
-          }}
-        />
+        <TransactionDetails transaction={editing} onClose={() => setEditing(null)} onChanged={() => load()} />
       )}
     </div>
   )
