@@ -380,22 +380,21 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                   </div>
                 )}
 
+                {error && <p className="text-center text-sm text-loss">{error}</p>}
+
+                <button
+                  onClick={save}
+                  disabled={busy}
+                  className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep"
+                >
+                  Save
+                </button>
+
                 {!isNew && (
                   <button onClick={remove} disabled={busy} className="w-full py-2 text-base font-medium text-loss">
                     Delete transaction
                   </button>
                 )}
-              </div>
-
-              <div className="shrink-0 px-4 pt-1 pb-3">
-                {error && <p className="pb-2 text-center text-sm text-loss">{error}</p>}
-                <button
-                  onClick={save}
-                  disabled={busy || !highlighted}
-                  className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-40"
-                >
-                  {isNew ? `Save ${type}` : 'Save changes'}
-                </button>
               </div>
             </div>
           </>
@@ -406,6 +405,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         <Sheet title="Date" onClose={() => setPicking(null)} tall>
           <DatePicker
             value={date}
+            quickPicks={false}
             onChange={(iso) => {
               setDate(iso)
               setPicking(null)
