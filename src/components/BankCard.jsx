@@ -13,6 +13,19 @@ export const shade = (hex, f) =>
 
 export const cardBackground = (color) => `linear-gradient(140deg, ${color} 0%, ${shade(color, 0.62)} 100%)`
 
+// A small card in an account's color, with the account type's icon when given
+export function MiniCard({ color, type, className = '', iconSize = 15, style }) {
+  return (
+    <span
+      className={`relative grid shrink-0 place-items-center overflow-hidden text-white shadow-sm ring-1 ring-white/40 ${className}`}
+      style={{ background: cardBackground(color), ...style }}
+    >
+      <span className="pointer-events-none absolute -top-[30%] -right-[18%] aspect-square w-[70%] rounded-full bg-white/[.14]" />
+      {type && <Icon name={TYPE_INFO[type]?.icon ?? 'card'} size={iconSize} strokeWidth={2} className="relative" />}
+    </span>
+  )
+}
+
 // An account drawn as a bank card, in the onboarding style: color gradient, soft circles,
 // type label at the top. `children` fills the card body; `corner` replaces the two dots.
 export default function BankCard({ account, className = '', style, corner, children }) {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { MiniCard, TYPE_INFO } from '../components/BankCard'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
@@ -127,7 +128,8 @@ function ActiveFilters({ filter, lookups, onChange }) {
     const a = lookups.accounts.find((x) => x.id === id)
     chips.push({
       key: id,
-      label: `💳 ${a?.name ?? 'Account'}`,
+      label: a?.name ?? 'Account',
+      swatch: a && <MiniCard color={a.color} className="h-[15px] w-[22px] rounded-[4px]" />,
       remove: () => onChange({ ...filter, accountIds: filter.accountIds.filter((x) => x !== id) }),
     })
   }
@@ -151,6 +153,7 @@ function ActiveFilters({ filter, lookups, onChange }) {
           className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-cobalt/10 pr-1.5 pl-3 text-[13px] font-semibold whitespace-nowrap text-cobalt"
           aria-label={`Remove filter ${c.label}`}
         >
+          {c.swatch}
           {c.label}
           <span className="grid size-[18px] place-items-center rounded-full bg-cobalt text-white">
             <Icon name="close" size={11} strokeWidth={3} />
@@ -361,8 +364,11 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
             <li key={a.id} className="border-b border-line last:border-0">
               <button onClick={() => toggle('accountIds', a.id)} aria-pressed={draft.accountIds.includes(a.id)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
                 <Check on={draft.accountIds.includes(a.id)} />
-                <span className="h-5 w-7 shrink-0 rounded" style={{ backgroundColor: a.color }} />
-                <span className={`flex-1 text-base font-medium ${a.archived ? 'text-muted' : ''}`}>{a.name}</span>
+                <MiniCard color={a.color} type={a.type} className="h-[30px] w-11 rounded-lg" />
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate text-base font-medium ${a.archived ? 'text-muted' : ''}`}>{a.name}</span>
+                  <span className="block text-sm text-muted">{TYPE_INFO[a.type]?.label ?? a.type}</span>
+                </span>
               </button>
             </li>
           ))}

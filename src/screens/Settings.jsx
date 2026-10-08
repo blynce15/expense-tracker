@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { cardBackground } from '../components/BankCard'
 import Icon from '../components/Icon'
 import { budgetPeriod, startDayOf } from '../lib/budget'
 import { formatDayMonth, todayISO } from '../lib/dates'
@@ -186,7 +187,7 @@ function CardStack({ accounts }) {
         <span
           key={a.id}
           className="absolute inset-0 rounded-md ring-1 ring-white"
-          style={{ backgroundColor: a.color, transform: `rotate(${-14 + (i + 3 - shown.length) * 8}deg) translateX(${(i + 3 - shown.length) * 2 - 2}px)` }}
+          style={{ background: cardBackground(a.color), transform: `rotate(${-14 + (i + 3 - shown.length) * 8}deg) translateX(${(i + 3 - shown.length) * 2 - 2}px)` }}
         />
       ))}
     </span>

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import BankCard from '../components/BankCard'
+import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { fetchAccountsWithBalances } from '../lib/balances'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
@@ -13,7 +15,20 @@ const ACCOUNT_TYPES = [
 
 const ACCOUNT_COLORS = ['#1f4fe0', '#0b1b45', '#0f8a5f', '#c23b22', '#e8590c', '#6741d9', '#d6336c', '#0c8599']
 
-const typeLabel = (type) => ACCOUNT_TYPES.find((t) => t.value === type)?.label
+// The account as a card: type, name and balance ("Owed today" for credit cards)
+function AccountCard({ account, cents, className = '', corner }) {
+  const [whole, decimals] = formatCents(cents).split(',')
+  return (
+    <BankCard account={account} className={`text-sm ${className}`} corner={corner}>
+      <p className="mt-6 truncate text-base font-semibold">{account.name.trim() || 'New account'}</p>
+      <p className="text-xs text-white/70">{account.type === 'credit' ? 'Owed today' : 'Balance today'}</p>
+      <p className="tabular font-display leading-tight font-bold">
+        <span className="text-[26px]">{whole}</span>
+        <span className="text-base text-white/60">,{decimals}</span>
+      </p>
+    </BankCard>
+  )
+}
 
 export default function Accounts() {
   const [accounts, setAccounts] = useState(null)
@@ -78,18 +93,16 @@ export default function Accounts() {
 
 function AccountList({ accounts, onSelect }) {
   return (
-    <ul className="overflow-hidden rounded-2xl bg-card">
+    <ul className="space-y-3">
       {accounts.map((a) => (
-        <li key={a.id} className="border-b border-line last:border-0">
-          <button onClick={() => onSelect(a)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
-            <span className="h-8 w-12 shrink-0 rounded-md" style={{ backgroundColor: a.color ?? ACCOUNT_COLORS[0] }} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-base font-medium">{a.name}</span>
-              <span className="block text-sm text-muted">{typeLabel(a.type)}</span>
-            </span>
-            <span className={`tabular font-display text-lg font-semibold ${a.balance_cents < 0 ? 'text-loss' : ''}`}>
-              {formatCents(a.balance_cents)}
-            </span>
+        <li key={a.id}>
+          <button onClick={() => onSelect(a)} className="block w-full text-left active:scale-[.98]" aria-label={`Edit ${a.name}`}>
+            <AccountCard
+              account={{ ...a, color: a.color ?? ACCOUNT_COLORS[0] }}
+              cents={a.balance_cents}
+              className={`rounded-[22px] px-5 py-4 shadow-[0_16px_30px_-20px_rgba(11,27,69,0.8)] ${a.archived ? 'opacity-60' : ''}`}
+              corner={<Icon name="pencil" size={17} className="text-white/80" />}
+            />
           </button>
         </li>
       ))}
@@ -159,11 +172,22 @@ function AccountForm({ account, onClose, onSaved }) {
     onSaved()
   }
 
+  // Live preview: today's balance moves by however much the starting balance changes
+  const typed = balance.trim() === '' ? 0 : (parseToCents(balance) ?? 0)
+  const starting = negative ? -typed : typed
+  const previewCents = account ? account.balance_cents - account.starting_balance_cents + starting : starting
+
   const inputClass = 'w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt'
 
   return (
     <Sheet title={isNew ? 'New account' : 'Edit account'} onClose={onClose}>
       <form onSubmit={save} className="space-y-5">
+        <AccountCard
+          account={{ name, type, color }}
+          cents={previewCents}
+          className="h-[178px] rounded-[24px] p-5 transition-colors"
+        />
+
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-muted">Name</span>
           <input

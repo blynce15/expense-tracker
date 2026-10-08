@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import BankCard, { shade, TYPE_INFO } from '../components/BankCard'
+import BankCard, { cardBackground, MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
 import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
@@ -162,18 +162,6 @@ function BigAmount({ cents, hidden }) {
   )
 }
 
-// A small card in an account's color (with the account type's icon when given)
-function MiniCard({ color, type, className = '', style }) {
-  return (
-    <span
-      className={`grid place-items-center rounded-xl text-white shadow-md ring-1 ring-white/40 ${className}`}
-      style={{ background: `linear-gradient(135deg, ${color}, ${shade(color, 0.7)})`, ...style }}
-    >
-      {type && <Icon name={TYPE_INFO[type]?.icon ?? 'card'} size={15} strokeWidth={2} />}
-    </span>
-  )
-}
-
 // Total balance, with a fan of account cards that opens a list of all accounts.
 // Picking an account in the list opens its own page.
 function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
@@ -259,7 +247,7 @@ function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
                       <span
                         key={a.id}
                         className="absolute h-7 w-9 rounded-md ring-1 ring-white"
-                        style={{ left: i * 4, top: i * 1.5, background: `linear-gradient(135deg, ${a.color}, ${shade(a.color, 0.7)})` }}
+                        style={{ left: i * 4, top: i * 1.5, background: cardBackground(a.color) }}
                       />
                     ))}
                   </span>
