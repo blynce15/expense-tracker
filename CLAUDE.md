@@ -100,7 +100,8 @@ Done:
 Done:
 - New bottom bar (chosen from mockups): floating frosted white pill with icons only (Home: house, Transactions: list, Analytics: pie, Savings: target), a light-blue bubble slides behind the active tab; the bright blue round + button floats separately on the right. Published.
 - Home top ("Card fan", chosen from mockups): monthly change pill removed, bigger total balance, fan of onboarding-style cards (src/components/BankCard.jsx). Tapping the fan still opens the accounts list; picking an account opens its page (src/screens/AccountPage.jsx, full-screen overlay styled after the owner's reference picture): dark navy top with the big card + Hide, money in/out this month, latest 30 transactions grouped by day, "See all" opens Transactions filtered to that account. Published.
-- Testing harness kept in the scratchpad only; the mock can't handle `.or(...in.(...))`, so the account filter on Transactions shows empty in tests (fine in the real app).
+- Same card style everywhere: Settings accounts row (gradient mini stack), Accounts & cards page (each account is a full card, tap to edit), Edit account sheet (live card preview at the top), Transactions Cards filter (mini cards with type icon) and the card filter chip. Shared pieces: BankCard, MiniCard, cardBackground in src/components/BankCard.jsx. Published.
+- Test harness note: the in-memory mock has no `.or(...in.(...))` or row counts, so the Transactions card filter shows empty and "Show undefined transactions" in tests (fine in the real app).
 
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
