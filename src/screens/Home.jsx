@@ -299,12 +299,12 @@ function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch, c
   )
 }
 
-// Spending through the budget period (yellow) against even spending (dashed).
-// Touch or drag along the chart to read any day so far.
+// One bar per day of the budget period: blue when within the daily budget, orange when above it.
+// Touch or drag along the bars to read any day so far.
 const W = 300
-const H = 34
+const H = 64
 function BudgetCard({ budget, hidden }) {
-  const { period, cumulative, budgetCents, leftCents, spentCents } = budget
+  const { period, cumulative, budgetCents, leftCents } = budget
   const [day, setDay] = useState(null) // day number being read, or null for today
   const chartRef = useRef(null)
 
@@ -313,85 +313,102 @@ function BudgetCard({ budget, hidden }) {
       <section className="px-4">
         <button
           onClick={() => navigate('/settings/accounts')}
-          className="relative w-full overflow-hidden rounded-[24px] bg-cobalt p-4 text-left text-white shadow-[0_18px_34px_-18px_#1f4fe0]"
+          className="relative w-full overflow-hidden rounded-[24px] bg-gradient-to-br from-[#eef3ff] to-[#dce6ff] p-4 text-left"
         >
-          <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/10" />
-          <span className="relative flex items-center gap-2 font-semibold">
-            <Icon name="calendar" size={18} />
+          <span className="flex items-center gap-2 font-semibold">
+            <Icon name="calendar" size={18} className="text-cobalt" />
             Budget
           </span>
-          <span className="relative mt-1 block text-sm text-white/80">Add a bank or cash account to see what you have left to spend.</span>
+          <span className="mt-1 block text-sm text-muted">Add a bank or cash account to see what you have left to spend.</span>
         </button>
       </section>
     )
   }
 
   const today = period.dayNumber
-  const shownDay = day ?? today
-  const spentBy = cumulative[shownDay - 1] ?? 0
-  const scale = Math.max(budgetCents, spentCents, 1)
-  const x = (d) => (period.days > 1 ? ((d - 1) / (period.days - 1)) * W : 0)
-  const y = (cents) => H - (Math.max(cents, 0) / scale) * H
-  const points = cumulative.map((c, i) => `${x(i + 1).toFixed(1)},${y(c).toFixed(1)}`).join(' ')
-  const evenBy = budgetCents > 0 ? Math.round((budgetCents * shownDay) / period.days) : 0
+  const daily = cumulative.map((c, i) => c - (cumulative[i - 1] ?? 0))
+  const dailyBudget = budgetCents / period.days
+  // One huge day (like rent) shouldn't flatten all the others: taller bars are cut at the top
+  const scale = Math.max(1, Math.min(Math.max(...daily, dailyBudget * 1.5), dailyBudget * 4 || Infinity))
+  const slot = W / period.days
+  const barH = (cents) => Math.max(3, Math.min(cents / scale, 1) * H)
+  const budgetY = H - Math.min(dailyBudget / scale, 1) * H
+
+  const spentBy = cumulative[today - 1] ?? 0
+  const evenBy = budgetCents > 0 ? Math.round((budgetCents * today) / period.days) : 0
   const diff = spentBy - evenBy
   const money = (c) => (hidden ? '••••' : formatCents(c).replace(/,\d\d$/, ''))
 
   function read(e) {
     const r = chartRef.current.getBoundingClientRect()
     if (!r.width) return
-    const d = Math.round(((e.clientX - r.left) / r.width) * (period.days - 1)) + 1
+    const d = Math.floor(((e.clientX - r.left) / r.width) * period.days) + 1
     const clamped = Math.max(1, Math.min(today, d))
     setDay(clamped === today ? null : clamped)
   }
 
   return (
     <section className="px-4">
-      <div className="relative overflow-hidden rounded-[24px] bg-cobalt px-4 py-3 text-white shadow-[0_18px_34px_-18px_#1f4fe0]">
-        <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/10" />
-        <div className="relative">
-          <div className="flex items-center justify-between gap-2">
-            <p className="flex min-w-0 items-center gap-1.5 truncate text-sm text-white/75">
-              <Icon name="calendar" size={15} className="shrink-0" />
-              {day ? `By ${shortDate(dateOf(period.start, day))} you had spent` : 'Left to spend'}
-            </p>
-            {budgetCents > 0 && (
-              <span className={`shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold ${diff > 0 ? 'text-[#ffd2c7]' : 'text-[#b8f5d6]'}`}>
-                {diff > 0 ? `▲ ${money(diff)} over pace` : `▼ ${money(-diff)} under pace`}
-              </span>
-            )}
-          </div>
-          <p className="tabular truncate font-display text-[24px] leading-tight font-bold">
-            {day ? (
-              hidden ? '€ ••••' : formatCents(spentBy)
-            ) : (
-              <>
-                {hidden ? '€ ••••' : formatCents(leftCents).replace(/,\d\d$/, '')}
-                <span className="text-base font-semibold text-white/65"> of {money(budgetCents)}</span>
-              </>
-            )}
+      <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#eef3ff] to-[#dce6ff] px-4 pt-3 pb-2.5 shadow-[0_16px_30px_-22px_rgba(31,79,224,0.7)]">
+        <div className="flex items-center justify-between gap-2">
+          <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-muted">
+            <Icon name="calendar" size={15} className="shrink-0 text-cobalt" />
+            {day ? `On ${shortDate(dateOf(period.start, day))} you spent` : 'Left to spend'}
           </p>
+          {budgetCents > 0 && (
+            <span className={`shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-bold ${diff > 0 ? 'text-loss' : 'text-gain'}`}>
+              {diff > 0 ? `▲ ${money(diff)} over pace` : `▼ ${money(-diff)} under pace`}
+            </span>
+          )}
         </div>
+        <p className="tabular truncate font-display text-[26px] leading-tight font-bold">
+          {day ? (
+            hidden ? '€ ••••' : formatCents(daily[day - 1])
+          ) : (
+            <>
+              {hidden ? '€ ••••' : formatCents(leftCents).replace(/,\d\d$/, '')}
+              <span className="text-base font-semibold text-muted"> of {money(budgetCents)}</span>
+            </>
+          )}
+        </p>
 
         <svg
           ref={chartRef}
-          viewBox={`-4 -6 ${W + 8} ${H + 10}`}
-          className="relative mt-1.5 w-full cursor-crosshair touch-none select-none"
+          viewBox={`0 -4 ${W} ${H + 4}`}
+          className="mt-2 w-full cursor-crosshair touch-none select-none"
           onPointerDown={read}
           onPointerMove={(e) => (e.buttons || e.pointerType === 'mouse') && read(e)}
           onPointerLeave={() => setDay(null)}
           onPointerUp={(e) => e.pointerType !== 'mouse' && setDay(null)}
           role="img"
-          aria-label={`Spent ${formatCents(spentCents)} of ${formatCents(budgetCents)} so far this period`}
+          aria-label={`Spent ${formatCents(spentBy)} of ${formatCents(budgetCents)} so far this period`}
         >
-          <line x1="0" y1={H} x2={W} y2={y(budgetCents)} stroke="rgba(255,255,255,.45)" strokeWidth="1.2" strokeDasharray="4 3" />
-          <polyline points={`0,${H} ${points}`} fill="none" stroke="#f7d84a" strokeWidth="2.6" strokeLinejoin="round" strokeLinecap="round" />
-          <line x1={x(shownDay)} y1="-4" x2={x(shownDay)} y2={H} stroke="rgba(255,255,255,.3)" />
-          <circle cx={x(shownDay)} cy={y(spentBy)} r="4" fill="#f7d84a" stroke="#1f4fe0" strokeWidth="2" />
+          {Array.from({ length: period.days }, (_, i) => {
+            const d = i + 1
+            const future = d > today
+            const cents = daily[i] ?? 0
+            const h = future ? 3 : barH(cents)
+            const fill = future ? '#1f4fe0' : d === (day ?? today) ? '#0b1b45' : cents > dailyBudget ? '#f08c00' : '#1f4fe0'
+            return (
+              <rect
+                key={d}
+                x={i * slot + slot * 0.15}
+                y={H - h}
+                width={slot * 0.7}
+                height={h}
+                rx={Math.min(2.5, slot * 0.3)}
+                fill={fill}
+                opacity={future ? 0.15 : 1}
+              />
+            )
+          })}
+          {budgetCents > 0 && (
+            <line x1="0" x2={W} y1={budgetY} y2={budgetY} stroke="#0b1b45" strokeOpacity=".35" strokeWidth="1" strokeDasharray="3 3" />
+          )}
         </svg>
-        <div className="relative flex justify-between text-[10px] leading-none text-white/60">
+        <div className="mt-1 flex justify-between text-[10px] leading-none text-muted">
           <span>{shortDate(period.start)}</span>
-          <span>- - - even spending · touch the line</span>
+          <span>- - - daily budget {money(Math.round(dailyBudget))} · touch a bar</span>
           <span>{shortDate(period.end)}</span>
         </div>
       </div>
