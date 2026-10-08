@@ -4,7 +4,6 @@ import { navigate } from '../lib/useRoute'
 const TABS = [
   { path: '/home', label: 'Home', icon: 'home' },
   { path: '/transactions', label: 'Transactions', icon: 'list' },
-  null, // center add button
   { path: '/analytics', label: 'Analytics', icon: 'chart' },
   { path: '/savings', label: 'Savings', icon: 'savings' },
 ]
@@ -40,37 +39,43 @@ export function TopBar({ title, back, action, center }) {
   )
 }
 
+// Floating frosted pill with the four tabs (icons only), and the + button on its own at the right.
 export function TabBar({ route, onAdd }) {
+  const current = TABS.findIndex((tab) => route.startsWith(tab.path))
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-card pb-[env(safe-area-inset-bottom)]">
-      <ul className="mx-auto grid h-16 max-w-lg grid-cols-5 items-center">
-        {TABS.map((tab) =>
-          tab ? (
-            <li key={tab.path}>
+    <nav className="pointer-events-none fixed inset-x-0 bottom-[max(env(safe-area-inset-bottom),12px)] z-30 px-4">
+      <div className="mx-auto flex max-w-lg items-center gap-2.5">
+        <ul className="pointer-events-auto relative grid h-[60px] flex-1 grid-cols-4 rounded-[30px] border border-line/90 bg-white/80 px-1.5 shadow-[0_12px_30px_-14px_rgba(11,27,69,0.35)] backdrop-blur-xl">
+          <span
+            aria-hidden="true"
+            className={`pointer-events-none absolute inset-y-1.5 left-1.5 grid w-[calc((100%-12px)/4)] place-items-center transition-[transform,opacity] duration-300 ease-[cubic-bezier(.3,1.3,.5,1)] motion-reduce:transition-none ${
+              current < 0 ? 'opacity-0' : ''
+            }`}
+            style={{ transform: `translateX(${Math.max(current, 0) * 100}%)` }}
+          >
+            <span className="h-[42px] w-[52px] rounded-[21px] bg-[#e3ebff]" />
+          </span>
+          {TABS.map((tab, i) => (
+            <li key={tab.path} className="relative grid">
               <button
                 onClick={() => navigate(tab.path)}
-                className={`flex w-full flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${
-                  route.startsWith(tab.path) ? 'text-cobalt' : 'text-muted'
-                }`}
-                aria-current={route.startsWith(tab.path) ? 'page' : undefined}
+                className={`grid place-items-center transition-colors active:scale-90 ${i === current ? 'text-cobalt' : 'text-muted'}`}
+                aria-label={tab.label}
+                aria-current={i === current ? 'page' : undefined}
               >
-                <Icon name={tab.icon} size={24} strokeWidth={route.startsWith(tab.path) ? 2.2 : 1.8} />
-                {tab.label}
+                <Icon name={tab.icon} size={25} strokeWidth={i === current ? 2.3 : 1.9} />
               </button>
             </li>
-          ) : (
-            <li key="add" className="flex justify-center">
-              <button
-                onClick={onAdd}
-                className="-mt-7 grid size-16 place-items-center rounded-[22px] bg-cobalt text-white shadow-[0_8px_20px_-6px_rgba(31,79,224,0.6)] ring-4 ring-paper active:scale-95 active:bg-cobalt-deep"
-                aria-label="Add transaction"
-              >
-                <Icon name="plus" size={30} strokeWidth={2.4} />
-              </button>
-            </li>
-          ),
-        )}
-      </ul>
+          ))}
+        </ul>
+        <button
+          onClick={onAdd}
+          className="pointer-events-auto grid size-[60px] shrink-0 place-items-center rounded-full bg-cobalt text-white shadow-[0_12px_24px_-10px_rgba(31,79,224,0.75)] active:scale-95 active:bg-cobalt-deep"
+          aria-label="Add transaction"
+        >
+          <Icon name="plus" size={28} strokeWidth={2.6} />
+        </button>
+      </div>
     </nav>
   )
 }

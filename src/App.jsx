@@ -74,7 +74,7 @@ function App() {
   const screen = screenFor(route, session, dataVersion, { txFilter, setTxFilter, filterOpen, setFilterOpen })
 
   return (
-    <div className="min-h-full pb-[calc(5rem+env(safe-area-inset-bottom))]">
+    <div className="min-h-full pb-[calc(6rem+max(env(safe-area-inset-bottom),12px))]">
       <TopBar title={screen.title} back={screen.back} action={screen.action} center={screen.center} />
       {!online && (
         <p role="status" className="mx-4 mb-2 rounded-xl bg-ink px-4 py-2.5 text-sm text-white">
