@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import BankCard, { shade, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
 import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
@@ -11,6 +12,7 @@ import { fetchProfile } from '../lib/profile'
 import { daysUntil, dueLabel, fetchRecurring, FREQUENCIES } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
+import AccountPage from './AccountPage'
 import TransactionDetails from './TransactionDetails'
 
 const RECENT_COUNT = 3
@@ -28,12 +30,13 @@ function readHidden() {
 
 const shortDate = formatDayMonth
 
-export default function Home() {
+export default function Home({ onSeeAccount }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
   const [paying, setPaying] = useState(null)
   const [hidden, setHidden] = useState(readHidden)
+  const [openAccountId, setOpenAccountId] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -60,22 +63,26 @@ export default function Home() {
       ])
       for (const res of [sinceMonthStart, periodExpenses, recent]) if (res.error) throw res.error
 
-      // How much each account changed since the 1st of this month
-      const change = new Map()
-      const add = (id, cents) => change.set(id, (change.get(id) ?? 0) + cents)
+      // Money in and out of each account since the 1st of this month (transfers included)
+      const flow = new Map()
+      const add = (id, key, cents) => {
+        const f = flow.get(id) ?? { in: 0, out: 0 }
+        f[key] += cents
+        flow.set(id, f)
+      }
       for (const t of sinceMonthStart.data) {
-        if (t.type === 'income') add(t.account_id, t.amount_cents)
-        else if (t.type === 'expense') add(t.account_id, -t.amount_cents)
+        if (t.type === 'income') add(t.account_id, 'in', t.amount_cents)
+        else if (t.type === 'expense') add(t.account_id, 'out', t.amount_cents)
         else {
-          add(t.account_id, -t.amount_cents)
-          add(t.to_account_id, t.amount_cents)
+          add(t.account_id, 'out', t.amount_cents)
+          add(t.to_account_id, 'in', t.amount_cents)
         }
       }
 
       setData({
         accounts: accounts
           .filter((a) => !a.archived)
-          .map((a) => ({ ...a, change_cents: change.get(a.id) ?? 0 })),
+          .map((a) => ({ ...a, flow: flow.get(a.id) ?? { in: 0, out: 0 } })),
         budget: { ...computeBudget(accounts, periodExpenses.data, period), period },
         lookups,
         recent: recent.data,
@@ -103,10 +110,11 @@ export default function Home() {
 
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your overview: {error}</p>
   if (!data) return null
+  const openAccount = data.accounts.find((a) => a.id === openAccountId)
 
   return (
     <div className="space-y-3 pb-1">
-      <Balance accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} />
+      <Balance accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} onOpenAccount={setOpenAccountId} />
       <BudgetCard budget={data.budget} hidden={hidden} />
       <ComingUp payments={data.upcoming} onPay={setPaying} />
       <Recent data={data} onSelect={setEditing} />
@@ -122,6 +130,19 @@ export default function Home() {
         />
       )}
 
+      {openAccount && (
+        <AccountPage
+          account={openAccount}
+          monthFlow={openAccount.flow}
+          lookups={data.lookups}
+          hidden={hidden}
+          onToggleHidden={toggleHidden}
+          onClose={() => setOpenAccountId(null)}
+          onSeeAll={() => onSeeAccount(openAccount.id)}
+          onChanged={() => load()}
+        />
+      )}
+
       {editing && (
         <TransactionDetails transaction={editing} onClose={() => setEditing(null)} onChanged={() => load()} />
       )}
@@ -129,45 +150,17 @@ export default function Home() {
   )
 }
 
-// "↑ 15% this month" (or an amount when a % makes no sense)
-function Change({ now, change, hidden }) {
-  if (change === 0) return <p className="mt-0.5 text-sm text-muted">No change this month</p>
-  const before = now - change
-  const up = change > 0
-  const amount = before > 0 ? `${Math.round((Math.abs(change) / before) * 100)}%` : hidden ? '••••' : formatCents(Math.abs(change))
-  return (
-    <p className="mt-0.5 flex items-center gap-1.5 text-sm text-muted">
-      <span className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${up ? 'bg-gain/10 text-gain' : 'bg-loss/10 text-loss'}`}>
-        <Icon name={up ? 'arrowUp' : 'arrowDown'} size={13} strokeWidth={2.6} />
-        <span className="tabular">{amount}</span>
-      </span>
-      this month
-    </p>
-  )
-}
-
 // "€7.854" big, ",43" small and faded
 function BigAmount({ cents, hidden }) {
-  if (hidden) return <p className="font-display text-[38px] leading-tight font-bold tracking-tight">{HIDDEN}</p>
+  if (hidden) return <p className="mt-1 font-display text-[44px] leading-tight font-bold tracking-tight">{HIDDEN}</p>
   const [whole, decimals] = formatCents(cents).split(',')
   return (
-    <p className="tabular truncate font-display leading-tight font-bold tracking-tight">
-      <span className="text-[38px]">{whole}</span>
-      <span className="text-xl text-muted/60">,{decimals}</span>
+    <p className="tabular mt-1 truncate font-display leading-tight font-bold tracking-tight">
+      <span className="text-[44px]">{whole}</span>
+      <span className="text-2xl text-muted/60">,{decimals}</span>
     </p>
   )
 }
-
-const TYPE_INFO = {
-  debit: { label: 'Bank', icon: 'bank' },
-  savings: { label: 'Savings', icon: 'coins' },
-  credit: { label: 'Credit card', icon: 'card' },
-  cash: { label: 'Cash', icon: 'cash' },
-}
-
-// Darker version of a #rrggbb color, for card gradients
-const shade = (hex, f) =>
-  '#' + hex.slice(1).match(/../g).map((h) => Math.round(parseInt(h, 16) * f).toString(16).padStart(2, '0')).join('')
 
 // A small card in an account's color (with the account type's icon when given)
 function MiniCard({ color, type, className = '', style }) {
@@ -181,20 +174,17 @@ function MiniCard({ color, type, className = '', style }) {
   )
 }
 
-// Total balance (or one account's), with a tilted card that opens a list of all accounts
-function Balance({ accounts, hidden, onToggleHidden }) {
-  const [selectedId, setSelectedId] = useState(null)
+// Total balance, with a fan of account cards that opens a list of all accounts.
+// Picking an account in the list opens its own page.
+function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
   const [open, setOpen] = useState(false)
-  const selected = accounts.find((a) => a.id === selectedId)
   const total = accounts.reduce((s, a) => s + a.balance_cents, 0)
-  const totalChange = accounts.reduce((s, a) => s + a.change_cents, 0)
-  const shown = selected
-    ? { label: selected.name, cents: selected.balance_cents, change: selected.change_cents }
-    : { label: 'Total balance', cents: total, change: totalChange }
+  const fan = accounts.slice(0, 3)
+  const offset = 3 - fan.length
 
   function pick(id) {
-    setSelectedId(id)
     setOpen(false)
+    if (id) onOpenAccount(id)
   }
 
   if (accounts.length === 0) {
@@ -206,10 +196,10 @@ function Balance({ accounts, hidden, onToggleHidden }) {
   }
 
   return (
-    <section className="relative flex items-center gap-3 px-5">
+    <section className="relative flex min-h-[124px] items-center gap-3 px-5 py-2">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
-          <span className="truncate text-sm text-muted">{shown.label}</span>
+          <span className="truncate text-sm text-muted">Total balance</span>
           <button
             onClick={onToggleHidden}
             className="-my-2 grid size-9 shrink-0 place-items-center rounded-full text-muted"
@@ -218,32 +208,34 @@ function Balance({ accounts, hidden, onToggleHidden }) {
             <Icon name={hidden ? 'eyeOff' : 'eye'} size={17} />
           </button>
         </div>
-        <BigAmount cents={shown.cents} hidden={hidden} />
-        <Change now={shown.cents} change={shown.change} hidden={hidden} />
+        <BigAmount cents={total} hidden={hidden} />
       </div>
 
       <button
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-label="Choose an account"
-        className="flex shrink-0 flex-col items-center gap-2 py-1"
+        aria-label="Your accounts"
+        className="flex shrink-0 flex-col items-center gap-1.5 active:scale-[.97]"
       >
-        <span className="relative block h-[52px] w-20">
-          {selected ? (
-            <MiniCard color={selected.color} className="absolute inset-0" style={{ transform: 'rotate(-8deg)' }} />
-          ) : (
-            accounts.slice(0, 3).map((a, i) => (
-              <MiniCard
-                key={a.id}
-                color={a.color}
-                className="absolute inset-0"
-                style={{ transform: `rotate(${-14 + i * 7}deg) translateX(${i * 3}px)` }}
-              />
-            ))
-          )}
+        <span className="relative block h-[92px] w-[118px]">
+          {fan.map((a, i) => (
+            <span
+              key={a.id}
+              className="absolute"
+              style={{ left: (offset + i) * 4, top: 10 + (offset + i) * 5, transform: `rotate(${-12 + (offset + i) * 7}deg)` }}
+            >
+              <BankCard
+                account={a}
+                corner={<span />}
+                className="h-[66px] w-[102px] rounded-[14px] px-2.5 py-2 text-[9px] shadow-[0_10px_22px_-12px_rgba(11,27,69,0.65)] ring-1 ring-white/30"
+              >
+                <span className="mt-2.5 block truncate text-left text-[10px] font-semibold">{a.name}</span>
+              </BankCard>
+            </span>
+          ))}
         </span>
-        <span className="flex max-w-24 items-center gap-0.5 text-xs font-semibold text-muted">
-          <span className="truncate">{selected ? selected.name : 'All cards'}</span>
+        <span className="flex items-center gap-0.5 text-xs font-semibold text-muted">
+          {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
           <Icon name="chevronDown" size={14} strokeWidth={2.4} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>
       </button>
@@ -251,7 +243,7 @@ function Balance({ accounts, hidden, onToggleHidden }) {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute top-full right-4 z-40 mt-1 w-[min(310px,calc(100vw-2rem))] overflow-hidden rounded-[22px] bg-card shadow-[0_24px_50px_-14px_rgba(11,27,69,0.5)] ring-1 ring-line">
+          <div className="absolute top-full right-4 z-40 -mt-1 w-[min(310px,calc(100vw-2rem))] overflow-hidden rounded-[22px] bg-card shadow-[0_24px_50px_-14px_rgba(11,27,69,0.5)] ring-1 ring-line">
             <p className="px-4 pt-3 pb-1 text-xs font-semibold tracking-wider text-muted uppercase">Your accounts</p>
             <ul className="px-1.5 pb-1.5">
               <AccountOption
@@ -259,7 +251,7 @@ function Balance({ accounts, hidden, onToggleHidden }) {
                 sub={`${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
                 cents={total}
                 hidden={hidden}
-                selected={!selected}
+                selected
                 onClick={() => pick(null)}
                 swatch={
                   <span className="relative h-8 w-11 shrink-0">
@@ -280,9 +272,9 @@ function Balance({ accounts, hidden, onToggleHidden }) {
                   sub={TYPE_INFO[a.type]?.label ?? a.type}
                   cents={a.balance_cents}
                   hidden={hidden}
-                  selected={a.id === selectedId}
                   onClick={() => pick(a.id)}
                   swatch={<MiniCard color={a.color} type={a.type} className="h-8 w-11 shrink-0 rounded-lg shadow-sm" />}
+                  chevron
                 />
               ))}
             </ul>
@@ -300,7 +292,7 @@ function Balance({ accounts, hidden, onToggleHidden }) {
   )
 }
 
-function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch }) {
+function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch, chevron }) {
   return (
     <li>
       <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left ${selected ? 'bg-cobalt/[.06]' : ''}`}>
@@ -310,8 +302,9 @@ function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch })
           <span className="block text-xs text-muted">{sub}</span>
         </span>
         <span className={`tabular font-display font-semibold ${cents < 0 ? 'text-loss' : ''}`}>{hidden ? HIDDEN : formatCents(cents)}</span>
-        <span className={`grid size-5 shrink-0 place-items-center rounded-full ${selected ? 'bg-cobalt text-white' : ''}`}>
+        <span className={`grid size-5 shrink-0 place-items-center rounded-full ${selected ? 'bg-cobalt text-white' : 'text-muted/60'}`}>
           {selected && <Icon name="check" size={12} strokeWidth={3.2} />}
+          {chevron && <Icon name="chevronRight" size={16} strokeWidth={2.2} />}
         </span>
       </button>
     </li>
