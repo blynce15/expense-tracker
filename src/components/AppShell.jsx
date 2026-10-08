@@ -4,8 +4,8 @@ import { navigate } from '../lib/useRoute'
 const TABS = [
   { path: '/home', label: 'Home', icon: 'home' },
   { path: '/transactions', label: 'Transactions', icon: 'list' },
-  { path: '/analytics', label: 'Analytics', icon: 'chart' },
-  { path: '/savings', label: 'Savings', icon: 'savings' },
+  { path: '/analytics', label: 'Analytics', icon: 'pie' },
+  { path: '/savings', label: 'Savings', icon: 'target' },
 ]
 
 export function TopBar({ title, back, action, center }) {
