@@ -96,6 +96,10 @@ Done:
 - Polished Transactions (soft tabs, filter chips, uppercase day headers with total pills), Analytics (blue summary card with Income/Left over, category colors + split bar, rounded month bars), Savings (navy total card with yellow ring, net tag, goal cards with gradient bar and monthly pace), Settings (grouped rows with live summaries, budget day, email + Sign out, logo). Account page still exists behind the top-bar person icon.
 - Home polish: change shown as a small pill; account list (tap the card) with type icons, check, "Manage accounts"; budget card with glow, circle and calendar icon (pace tag beside the label so big amounts aren't cut); rounder lists; friendly empty states.
 
+### 2026-10-09
+Done:
+- New bottom bar (chosen from mockups): floating frosted white pill with icons only (Home, Transactions, Analytics, Savings), a light-blue bubble slides behind the active tab; the bright blue round + button floats separately on the right. Published.
+
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).
