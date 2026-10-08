@@ -98,7 +98,7 @@ Done:
 
 ### 2026-10-09
 Done:
-- New bottom bar (chosen from mockups): floating frosted white pill with icons only (Home, Transactions, Analytics, Savings), a light-blue bubble slides behind the active tab; the bright blue round + button floats separately on the right. Published.
+- New bottom bar (chosen from mockups): floating frosted white pill with icons only (Home: house, Transactions: list, Analytics: pie, Savings: target), a light-blue bubble slides behind the active tab; the bright blue round + button floats separately on the right. Published.
 
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
