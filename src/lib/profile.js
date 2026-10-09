@@ -17,3 +17,12 @@ export async function saveProfile(patch) {
   const { error } = await supabase.from('user_settings').upsert(patch, { onConflict: 'user_id' })
   if (error) throw error
 }
+
+// The name shown in Profile and the avatar. Kept inside `answers` (no extra column needed).
+export const nameOf = (profile) => profile?.answers?.name?.trim() || ''
+
+export async function saveName(name) {
+  const profile = await fetchProfile()
+  await saveProfile({ answers: { ...(profile?.answers ?? {}), name: name.trim() } })
+  window.dispatchEvent(new CustomEvent('profile:name', { detail: name.trim() }))
+}

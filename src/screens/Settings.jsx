@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
+import Avatar from '../components/Avatar'
 import { cardBackground } from '../components/BankCard'
 import Icon from '../components/Icon'
+import Sheet from '../components/Sheet'
 import { budgetPeriod, startDayOf } from '../lib/budget'
 import { formatDayMonth, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
-import { fetchProfile, saveProfile } from '../lib/profile'
+import { fetchProfile, nameOf, saveName, saveProfile } from '../lib/profile'
 import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
@@ -18,12 +20,17 @@ function ordinal(n) {
 
 export default function Settings({ session }) {
   const [startDay, setStartDay] = useState(null)
+  const [name, setName] = useState('')
+  const [editingName, setEditingName] = useState(false)
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     fetchProfile()
-      .then((p) => setStartDay(startDayOf(p)))
+      .then((p) => {
+        setStartDay(startDayOf(p))
+        setName(nameOf(p))
+      })
       .catch((e) => setError(e.message))
     // A short summary under each row; the rows work without it
     Promise.all([fetchLookups(), fetchRecurring()])
@@ -58,6 +65,17 @@ export default function Settings({ session }) {
 
   return (
     <div className="space-y-5 pt-2 pb-8">
+      <section className="mx-4 flex items-center gap-3.5 rounded-[24px] bg-card px-4 py-4">
+        <Avatar name={name} email={session.user.email} size={58} />
+        <span className="min-w-0 flex-1">
+          <span className={`block truncate font-display text-lg font-bold ${name ? '' : 'text-muted'}`}>{name || 'Add your name'}</span>
+          <span className="block truncate text-sm text-muted">{session.user.email}</span>
+        </span>
+        <button onClick={() => setEditingName(true)} className="shrink-0 rounded-full bg-cobalt/10 px-3.5 py-1.5 text-sm font-semibold text-cobalt">
+          Edit
+        </button>
+      </section>
+
       <Group label="Your money">
         <Row
           onClick={() => navigate('/settings/accounts')}
@@ -120,15 +138,22 @@ export default function Settings({ session }) {
         </p>
       </section>
 
-      <Group label="Account">
-        <Row tile={<Icon name="mail" />} tileClass="bg-paper text-muted" title="Signed in as" sub={session.user.email} />
-        <Row
-          onClick={() => supabase.auth.signOut()}
-          tile={<Icon name="logout" />}
-          tileClass="bg-loss/10 text-loss"
-          title={<span className="text-loss">Sign out</span>}
+      <div className="px-4">
+        <button onClick={() => supabase.auth.signOut()} className="w-full rounded-[20px] bg-card py-3.5 text-[15px] font-semibold text-loss">
+          Sign out
+        </button>
+      </div>
+
+      {editingName && (
+        <NameSheet
+          name={name}
+          onClose={() => setEditingName(false)}
+          onSaved={(n) => {
+            setName(n)
+            setEditingName(false)
+          }}
         />
-      </Group>
+      )}
 
       <div className="flex flex-col items-center gap-1 pt-2 text-center">
         <img src="/logo.png" alt="" className="size-14" />
@@ -136,6 +161,48 @@ export default function Settings({ session }) {
         <p className="text-xs text-muted">Your data is private to your login</p>
       </div>
     </div>
+  )
+}
+
+function NameSheet({ name, onClose, onSaved }) {
+  const [value, setValue] = useState(name)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function save(e) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await saveName(value)
+      onSaved(value.trim())
+    } catch (err) {
+      setError(`Couldn't save: ${err.message}`)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Sheet title="Your name" onClose={onClose}>
+      <form onSubmit={save} className="space-y-4">
+        <input
+          autoFocus
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Your first name"
+          autoComplete="given-name"
+          className="w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt"
+        />
+        {error && <p className="text-sm text-loss">{error}</p>}
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
+        >
+          Save
+        </button>
+      </form>
+    </Sheet>
   )
 }
 

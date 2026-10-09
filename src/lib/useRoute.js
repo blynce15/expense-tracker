@@ -15,6 +15,21 @@ export function useRoute() {
   return route
 }
 
+// How many screens deep we are since the app opened, so Back can return to the previous screen
+let depth = 0
+
 export function navigate(path) {
+  if (current() === path) return
+  depth += 1
   window.location.hash = path
+}
+
+// Previous screen if we came from one in the app, otherwise the given parent page
+export function goBack(fallback) {
+  if (depth > 0) {
+    depth -= 1
+    window.history.back()
+  } else {
+    window.location.replace(`#${fallback}`)
+  }
 }

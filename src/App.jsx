@@ -10,7 +10,6 @@ import { fetchProfile } from './lib/profile'
 import { navigate, useRoute } from './lib/useRoute'
 import { useOnline } from './lib/useOnline'
 import { useSession } from './lib/useSession'
-import Account from './screens/Account'
 import Accounts from './screens/Accounts'
 import Analytics from './screens/Analytics'
 import Categories from './screens/Categories'
@@ -75,7 +74,7 @@ function App() {
 
   return (
     <div className="min-h-full pb-[calc(6rem+max(env(safe-area-inset-bottom),12px))]">
-      <TopBar title={screen.title} back={screen.back} action={screen.action} center={screen.center} />
+      <TopBar title={screen.title} back={screen.back} action={screen.action} center={screen.center} email={session.user.email} />
       {!online && (
         <p role="status" className="mx-4 mb-2 rounded-xl bg-ink px-4 py-2.5 text-sm text-white">
           You're offline. Your data will load again when you're back online.
@@ -132,16 +131,18 @@ function screenFor(route, session, dataVersion, tx) {
       return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
     case '/savings':
       return { title: 'Savings', body: <Savings key={dataVersion} /> }
+    case '/profile':
     case '/settings':
-      return { title: 'Settings', back: '/home', body: <Settings session={session} /> }
+    case '/account':
+      return { title: 'Profile', back: '/home', body: <Settings session={session} /> }
     case '/settings/accounts':
-      return { title: 'Accounts & cards', back: '/settings', body: <Accounts key={dataVersion} /> }
+      return { title: 'Accounts & cards', back: '/profile', body: <Accounts key={dataVersion} /> }
     case '/settings/categories':
-      return { title: 'Categories', back: '/settings', body: <Categories /> }
+      return { title: 'Categories', back: '/profile', body: <Categories /> }
     case '/recurring':
       return {
         title: 'Recurring payments',
-        back: '/home',
+        back: '/profile',
         action: (
           <button
             onClick={() => window.dispatchEvent(new Event('recurring:add'))}
@@ -153,8 +154,6 @@ function screenFor(route, session, dataVersion, tx) {
         ),
         body: <Recurring key={dataVersion} />,
       }
-    case '/account':
-      return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:
       return {
         title: 'Home',

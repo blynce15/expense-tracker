@@ -1,5 +1,6 @@
+import Avatar, { useDisplayName } from './Avatar'
 import Icon from './Icon'
-import { navigate } from '../lib/useRoute'
+import { goBack, navigate } from '../lib/useRoute'
 
 const TABS = [
   { path: '/home', label: 'Home', icon: 'home' },
@@ -8,7 +9,8 @@ const TABS = [
   { path: '/savings', label: 'Savings', icon: 'target' },
 ]
 
-export function TopBar({ title, back, action, center }) {
+export function TopBar({ title, back, action, center, email }) {
+  const name = useDisplayName()
   return (
     <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="relative flex h-14 items-center gap-1 px-2">
@@ -16,7 +18,7 @@ export function TopBar({ title, back, action, center }) {
           <p className="pointer-events-none absolute inset-x-0 text-center text-sm font-semibold text-muted">{center}</p>
         )}
         {back ? (
-          <button onClick={() => navigate(back)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back">
+          <button onClick={() => goBack(back)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back">
             <Icon name="chevronLeft" />
           </button>
         ) : (
@@ -25,14 +27,9 @@ export function TopBar({ title, back, action, center }) {
         <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
         {action}
         {!back && (
-          <>
-            <button onClick={() => navigate('/settings')} className="grid size-11 place-items-center rounded-full text-muted" aria-label="Settings">
-              <Icon name="settings" size={22} />
-            </button>
-            <button onClick={() => navigate('/account')} className="grid size-11 place-items-center rounded-full text-muted" aria-label="Account">
-              <Icon name="user" size={22} />
-            </button>
-          </>
+          <button onClick={() => navigate('/profile')} className="grid size-11 place-items-center rounded-full" aria-label="Profile">
+            <Avatar name={name} email={email} size={34} className="shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]" />
+          </button>
         )}
       </div>
     </header>
