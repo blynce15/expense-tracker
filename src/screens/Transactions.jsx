@@ -357,7 +357,6 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
             </li>
           ))}
         </ul>
-        <p className="px-1 text-sm text-muted">Transfers show up if the money left or arrived on a selected card.</p>
         {doneButton}
       </div>
     )
