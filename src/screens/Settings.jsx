@@ -13,6 +13,7 @@ import { fetchProfile, saveDefaultAccount, saveName, savePhoto, saveProfile, squ
 import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { getTheme, setTheme } from '../lib/theme'
+import DeleteAllData from './DeleteAllData'
 import { isStandalone, pushSupported, remindersOn, sendTestReminder, turnOffReminders, turnOnReminders } from '../lib/push'
 import { navigate } from '../lib/useRoute'
 
@@ -32,6 +33,7 @@ export default function Settings({ session }) {
   const [theme, setThemeState] = useState(getTheme)
   const [reminders, setReminders] = useState(null) // null while checking
   const [reminderNote, setReminderNote] = useState(null)
+  const [deleting, setDeleting] = useState(false)
   const [pinFlow, setPinFlow] = useState(null) // null | 'enable' | 'change' | 'disable'
 
   useEffect(() => {
@@ -301,6 +303,23 @@ export default function Settings({ session }) {
           Sign out
         </button>
       </div>
+
+      <Group label="Danger zone">
+        <li>
+          <button onClick={() => setDeleting(true)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+            <Tile className="bg-loss/10 text-loss">
+              <Icon name="trash" />
+            </Tile>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold text-loss">Delete all data</span>
+              <span className="block truncate text-xs text-muted">Erase everything and start over</span>
+            </span>
+            <Icon name="chevronRight" size={18} className="shrink-0 text-muted/60" />
+          </button>
+        </li>
+      </Group>
+
+      {deleting && <DeleteAllData onClose={() => setDeleting(false)} />}
 
       {pinFlow && (
         <PinSheet
