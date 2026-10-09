@@ -103,6 +103,8 @@ Done:
 - Same card style everywhere: Settings accounts row (gradient mini stack), Accounts & cards page (each account is a full card, tap to edit), Edit account sheet (live card preview at the top), Transactions Cards filter (mini cards with type icon) and the card filter chip. Shared pieces: BankCard, MiniCard, cardBackground in src/components/BankCard.jsx. Published.
 - Home budget card redesigned ("Daily bars", chosen from mockups, in app colours): light blue card, one bar per day of the budget period (blue, orange above the daily budget, faint for future days), dashed daily-budget line, pace tag; touch a bar to read that day's spending. Very big days are capped at the top of the chart. Published.
 - Transactions filter: "Custom" date range opens a calendar right away (src/components/RangeCalendar.jsx): tap the first day, then the last day; the range is highlighted. Calendar only, no From/To boxes or hint (owner's choice). Published.
+- Removed helper text the owner found unnecessary: the Filters sheet instructions line and the transfers note on the Cards filter page. Published.
+- Deploy note: `npx vercel deploy --prod --yes` sometimes fails once with "Not authorized"; running it again works.
 - Test harness note: the in-memory mock has no `.or(...in.(...))` or row counts, so the Transactions card filter shows empty and "Show undefined transactions" in tests (fine in the real app).
 
 Next:
