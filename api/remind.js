@@ -19,6 +19,12 @@ function tomorrowISO() {
   return d.toISOString().slice(0, 10)
 }
 
+// "Sat 10 Oct"
+function shortDay(iso) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '').replace('Sept', 'Sep')
+}
+
 const euros = (cents) =>
   new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100).replace(/\s?€$/, '').replace(/^/, '€')
 
@@ -73,20 +79,33 @@ export default async function handler(req, res) {
     if (token !== process.env.CRON_SECRET) return res.status(401).json({ error: 'Not allowed.' })
 
     const due = tomorrowISO()
-    const { data: payments, error } = await db.from('recurring_payments').select('user_id, name, icon, amount_cents').eq('active', true).eq('next_due', due)
+    const { data: payments, error } = await db.from('recurring_payments').select('user_id, name, icon, amount_cents, account_id').eq('active', true).eq('next_due', due)
     if (error) throw error
+
+    // Card names ("Main card"). Needs migration 008; without it the reminder just leaves the card out.
+    const cardName = new Map()
+    const ids = [...new Set(payments.map((p) => p.account_id).filter(Boolean))]
+    if (ids.length) {
+      const { data: accounts } = await db.from('accounts').select('id, name').in('id', ids)
+      for (const a of accounts ?? []) cardName.set(a.id, a.name)
+    }
 
     const byUser = new Map()
     for (const p of payments) byUser.set(p.user_id, [...(byUser.get(p.user_id) ?? []), p])
 
     let sent = 0
     for (const [userId, list] of byUser) {
+      // Calendar style: "Due tomorrow · 🎬 Netflix" / "€12,99 · Main card · Sat 10 Oct"
+      const label = (p) => `${p.icon ? `${p.icon} ` : ''}${p.name}`
       const message =
         list.length === 1
-          ? { title: `${list[0].icon ?? ''} ${list[0].name} · due tomorrow`.trim(), body: `${euros(list[0].amount_cents)} will be due tomorrow. Tap to see it.` }
+          ? {
+              title: `Due tomorrow · ${label(list[0])}`,
+              body: [euros(list[0].amount_cents), cardName.get(list[0].account_id), shortDay(due)].filter(Boolean).join(' · '),
+            }
           : {
-              title: `${list.length} payments due tomorrow`,
-              body: list.map((p) => `${p.name} ${euros(p.amount_cents)}`).join(' · '),
+              title: `Due tomorrow · ${list.length} payments`,
+              body: list.map((p) => `${label(p)} ${euros(p.amount_cents)}`).join('\n'),
             }
       sent += await notify(userId, { ...message, tag: `due-${due}`, url: '/#/recurring' })
     }
