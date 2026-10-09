@@ -113,6 +113,7 @@ Done:
 - Profile ideas still open (owner picks next): hide amounts on open, change password, first day of week, CSV export, app info/what's new, dark mode, change email, stats; bigger: per-category budgets, payment reminders (push), bank CSV import, delete all data.
 - Deploy note: `npx vercel deploy --prod --yes` sometimes fails once with "Not authorized"; running it again works.
 - Dark mode: Profile → Appearance (Light / Dark / Auto = follow iPhone), stored on the device (localStorage theme, default light) and applied by an inline script in index.html before the app draws. Colours are Tailwind theme tokens in src/index.css with dark values under [data-theme=dark] and the system media query; extra tokens: tint-from/tint-to (light-blue cards), bubble, warn-bg/warn, orange-text, navy (always-dark surfaces: account page, sheet backdrops). Inverted chips use bg-ink text-paper. Rule for new code: use the tokens, never fixed hex for surfaces/text. Checked every screen, sheet, dropdown and onboarding step in dark mode.
+- App icon and launch screen stay light (owner's choice). A home-screen web app can't switch its icon with the iPhone's dark/tinted icon setting; a dark icon and dark launch screens were made and then discarded.
 - Test harness note: the in-memory mock (kept between tests in the session scratchpad) supports `.or()` with eq/in and `{ count: 'exact' }`; data resets on every reload. Screenshots fail when the Claude window is minimized; then check through page content instead.
 
 Next:
