@@ -13,6 +13,8 @@ import { daysUntil, dueLabel, fetchRecurring, FREQUENCIES } from '../lib/recurri
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
 import AccountPage from './AccountPage'
+import { RecurringForm } from './Recurring'
+import RecurringDetails from './RecurringDetails'
 import TransactionDetails from './TransactionDetails'
 
 const RECENT_COUNT = 3
@@ -37,6 +39,8 @@ export default function Home({ onSeeAccount }) {
   const [paying, setPaying] = useState(null)
   const [hidden, setHidden] = useState(readHidden)
   const [openAccountId, setOpenAccountId] = useState(null)
+  const [openPaymentId, setOpenPaymentId] = useState(null)
+  const [editingPayment, setEditingPayment] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -111,13 +115,41 @@ export default function Home({ onSeeAccount }) {
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your overview: {error}</p>
   if (!data) return null
   const openAccount = data.accounts.find((a) => a.id === openAccountId)
+  const openPayment = data.upcoming.find((p) => p.id === openPaymentId)
 
   return (
     <div className="space-y-3 pb-1">
       <Balance accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} onOpenAccount={setOpenAccountId} />
       <BudgetCard budget={data.budget} hidden={hidden} />
-      <ComingUp payments={data.upcoming} onPay={setPaying} />
+      <ComingUp payments={data.upcoming} onPay={setPaying} onOpen={(p) => setOpenPaymentId(p.id)} />
       <Recent data={data} onSelect={setEditing} />
+
+      {openPayment && !paying && !editingPayment && (
+        <RecurringDetails
+          payment={openPayment}
+          lookups={data.lookups}
+          onClose={() => setOpenPaymentId(null)}
+          onPay={() => setPaying(openPayment)}
+          onEdit={() => setEditingPayment(openPayment)}
+          onChanged={() => {
+            setOpenPaymentId(null)
+            load()
+          }}
+        />
+      )}
+
+      {editingPayment && (
+        <RecurringForm
+          payment={editingPayment}
+          lookups={data.lookups}
+          onClose={() => setEditingPayment(null)}
+          onSaved={() => {
+            setEditingPayment(null)
+            setOpenPaymentId(null)
+            load()
+          }}
+        />
+      )}
 
       {paying && (
         <PaySheet
@@ -436,7 +468,7 @@ function SectionHead({ title, onSeeAll }) {
 }
 
 // The next recurring payments, with the date shown like a calendar page
-function ComingUp({ payments, onPay }) {
+function ComingUp({ payments, onPay, onOpen }) {
   return (
     <section>
       <SectionHead title="Coming up" onSeeAll={() => navigate('/recurring')} />
@@ -453,22 +485,24 @@ function ComingUp({ payments, onPay }) {
             const month = new Date(2000, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' }).replace('Sept', 'Sep')
             const every = FREQUENCIES.find((f) => f.value === p.frequency)?.per
             return (
-              <li key={p.id} className="flex items-center gap-3 border-b border-line px-4 py-2 last:border-0">
-                <span
-                  className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${due ? 'bg-[#0d0f14] text-white' : 'bg-paper'}`}
-                >
-                  <span className="text-[9px] font-bold tracking-wider uppercase opacity-70">{days === 0 ? 'Today' : days < 0 ? 'Late' : month}</span>
-                  <span className="font-display text-base leading-none font-bold">{d}</span>
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-base font-medium">
-                    {p.icon} {p.name}
+              <li key={p.id} className="flex items-center gap-3 border-b border-line pr-4 last:border-0">
+                <button onClick={() => onOpen(p)} className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-4 text-left">
+                  <span
+                    className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${due ? 'bg-[#0d0f14] text-white' : 'bg-paper'}`}
+                  >
+                    <span className="text-[9px] font-bold tracking-wider uppercase opacity-70">{days === 0 ? 'Today' : days < 0 ? 'Late' : month}</span>
+                    <span className="font-display text-base leading-none font-bold">{d}</span>
                   </span>
-                  <span className={`block text-sm ${days < 0 ? 'font-semibold text-loss' : 'text-muted'}`}>
-                    {days < 0 ? dueLabel(p.next_due) : `Every ${every}`}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-base font-medium">
+                      {p.icon} {p.name}
+                    </span>
+                    <span className={`block text-sm ${days < 0 ? 'font-semibold text-loss' : 'text-muted'}`}>
+                      {days < 0 ? dueLabel(p.next_due) : `Every ${every}`}
+                    </span>
                   </span>
-                </span>
-                <span className="tabular shrink-0 font-display text-base font-semibold">{formatCents(p.amount_cents)}</span>
+                  <span className="tabular shrink-0 font-display text-base font-semibold">{formatCents(p.amount_cents)}</span>
+                </button>
                 {due && (
                   <button onClick={() => onPay(p)} className="shrink-0 rounded-full bg-cobalt px-3.5 py-1.5 text-sm font-semibold text-white">
                     Paid

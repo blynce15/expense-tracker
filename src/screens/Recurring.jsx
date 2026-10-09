@@ -337,7 +337,7 @@ function PaymentRow({ p, sub, due, late, onOpen, onPay, compact }) {
   )
 }
 
-function RecurringForm({ payment, lookups, onClose, onSaved }) {
+export function RecurringForm({ payment, lookups, onClose, onSaved }) {
   const isNew = !payment
   const categories = lookups.categories.filter((c) => c.kind === 'expense' && (!c.archived || c.id === payment?.category_id))
   const accounts = lookups.accounts.filter((a) => !a.archived || a.id === payment?.account_id)
