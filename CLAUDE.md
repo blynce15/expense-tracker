@@ -19,7 +19,7 @@ Single user (the owner). Currency: EUR only.
 ## Navigation
 Bottom tab bar: Home · Transactions · [+] · Analytics · Savings
 - [+] is a raised center button that opens "Add transaction".
-- Top bar: Settings and Account.
+- Top bar: one profile avatar that opens Profile (settings live there).
 - Mobile-first. Respect iPhone safe areas (notch, home indicator). Large tap targets.
 
 ## Data model (Supabase tables)
@@ -107,6 +107,7 @@ Done:
 - Recurring payments page redesigned (design "C", chosen from mockups): blue summary card (per month, per year, active count), big month calendar with each payment's icon on its day (tap a day for a panel with that day's payments; arrows change month), list grouped This month / Later / Paused, + in the top bar. Tapping a payment opens a details sheet (src/screens/RecurringDetails.jsx, adapted from the owner's reference picture): status tag, Mark paid, amount, Next payment / Repeats / Total paid / Category boxes, Paid from card, Pause/Resume and Delete, pencil to edit. No auto-renew or reminders (owner: not for now). "Total paid" = expenses with the payment's name as note and its category. Published.
 - Home "Coming up": tapping a payment opens the same details sheet (edit via the exported RecurringForm). Published.
 - Savings page redesigned (design "A", chosen from mockups): blue total card with white progress ring and Target / Goals boxes; savings-account chart as a light blue card (blue months in, orange months out, current month faded, tap a bar); goal cards with whole-euro amounts, "€X to go" and a pace tag (€/month, No deadline, Deadline passed); reached goals listed as small rows at the end. Published.
+- Settings + Account merged into Profile (design "A"): the top bar has one round avatar (photo, or first letter of name/email) on every tab, opening #/profile (#/settings and #/account still work). Profile: name card (avatar with camera badge, name, email, Edit profile sheet with name + Add/Change/Remove photo), Your money rows, Budget start day, Sign out. Old Account page deleted. Name and photo live in user_settings.answers (answers.name, answers.photo = 256px square JPEG data URL); no schema change. Back buttons return to the previous screen (useRoute goBack), falling back to the parent page. "About you" answers not shown (owner: not now). Published.
 - Deploy note: `npx vercel deploy --prod --yes` sometimes fails once with "Not authorized"; running it again works.
 - Test harness note: the in-memory mock (kept between tests in the session scratchpad) supports `.or()` with eq/in, but not row counts, so the filter sheet says "Show undefined transactions" in tests (fine in the real app).
 
