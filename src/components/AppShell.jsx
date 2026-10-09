@@ -5,7 +5,7 @@ import { goBack, navigate } from '../lib/useRoute'
 const TABS = [
   { path: '/home', label: 'Home', icon: 'home' },
   { path: '/transactions', label: 'Transactions', icon: 'list' },
-  { path: '/analytics', label: 'Analytics', icon: 'pie' },
+  { path: '/analytics', label: 'Analytics', icon: 'bars' },
   { path: '/savings', label: 'Savings', icon: 'target' },
 ]
 
