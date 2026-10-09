@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import Avatar, { useProfileLook } from '../components/Avatar'
-import { cardBackground } from '../components/BankCard'
+import { cardBackground, MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { budgetPeriod, startDayOf } from '../lib/budget'
 import { formatDayMonth, todayISO } from '../lib/dates'
-import { fetchLookups } from '../lib/lookups'
+import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
-import { fetchProfile, saveName, savePhoto, saveProfile, squareJpeg } from '../lib/profile'
+import { fetchProfile, saveDefaultAccount, saveName, savePhoto, saveProfile, squareJpeg } from '../lib/profile'
 import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
@@ -22,12 +22,17 @@ export default function Settings({ session }) {
   const [startDay, setStartDay] = useState(null)
   const { name, photo } = useProfileLook()
   const [editingName, setEditingName] = useState(false)
+  const [pinnedId, setPinnedId] = useState(undefined) // undefined while loading, null = last used
+  const [pickingAccount, setPickingAccount] = useState(false)
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     fetchProfile()
-      .then((p) => setStartDay(startDayOf(p)))
+      .then((p) => {
+        setStartDay(startDayOf(p))
+        setPinnedId(p?.answers?.defaultAccountId ?? null)
+      })
       .catch((e) => setError(e.message))
     // A short summary under each row; the rows work without it
     Promise.all([fetchLookups(), fetchRecurring()])
@@ -42,6 +47,21 @@ export default function Settings({ session }) {
       })
       .catch(() => {})
   }, [])
+
+  async function changeDefaultAccount(id) {
+    const before = pinnedId
+    setPinnedId(id)
+    setPickingAccount(false)
+    lookupCache.pinnedAccountId = id
+    setError(null)
+    try {
+      await saveDefaultAccount(id)
+    } catch (e) {
+      setPinnedId(before)
+      lookupCache.pinnedAccountId = before
+      setError(`Couldn't save: ${e.message}`)
+    }
+  }
 
   async function changeStartDay(day) {
     const before = startDay
@@ -59,6 +79,7 @@ export default function Settings({ session }) {
   const expenses = o?.categories.filter((c) => c.kind === 'expense') ?? []
   const income = o?.categories.filter((c) => c.kind === 'income') ?? []
   const period = startDay ? budgetPeriod(todayISO(), startDay) : null
+  const pinned = o?.accounts.find((a) => a.id === pinnedId)
 
   return (
     <div className="space-y-5 pt-2 pb-8">
@@ -85,6 +106,13 @@ export default function Settings({ session }) {
           tileClass="bg-paper"
           title="Accounts & cards"
           sub={o && (o.accounts.length ? `${o.accounts.length} · ${o.accounts.map((a) => a.name).join(', ')}` : 'Add your first account')}
+        />
+        <Row
+          onClick={() => setPickingAccount(true)}
+          tile={pinned ? <MiniCard color={pinned.color} type={pinned.type} className="h-7 w-10 rounded-md" iconSize={13} /> : <Icon name="card" />}
+          tileClass={pinned ? 'bg-paper' : undefined}
+          title="Default account"
+          sub={pinnedId === undefined || !o ? ' ' : pinned ? `${pinned.name} · used for new transactions` : 'Last used · changes as you add'}
         />
         <Row
           onClick={() => navigate('/settings/categories')}
@@ -146,6 +174,10 @@ export default function Settings({ session }) {
         </button>
       </div>
 
+      {pickingAccount && o && (
+        <DefaultAccountSheet accounts={o.accounts} pinnedId={pinned ? pinnedId : null} onPick={changeDefaultAccount} onClose={() => setPickingAccount(false)} />
+      )}
+
       {editingName && (
         <NameSheet name={name} email={session.user.email} photo={photo} onClose={() => setEditingName(false)} onSaved={() => setEditingName(false)} />
       )}
@@ -177,6 +209,42 @@ function PhotoPicker({ onError, className = 'relative shrink-0 rounded-full', ch
       {children}
       <input ref={input} type="file" accept="image/*" onChange={picked} className="hidden" />
     </button>
+  )
+}
+
+// Choose the account new transactions start on, or keep "Last used"
+function DefaultAccountSheet({ accounts, pinnedId, onPick, onClose }) {
+  const option = (id, swatch, title, sub) => (
+    <li key={id ?? 'last'} className="border-b border-line last:border-0">
+      <button onClick={() => onPick(id)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        {swatch}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold">{title}</span>
+          <span className="block truncate text-xs text-muted">{sub}</span>
+        </span>
+        <span className={`grid size-5 shrink-0 place-items-center rounded-full ${pinnedId === id ? 'bg-cobalt text-white' : 'ring-2 ring-line'}`}>
+          {pinnedId === id && <Icon name="check" size={12} strokeWidth={3.2} />}
+        </span>
+      </button>
+    </li>
+  )
+  return (
+    <Sheet title="Default account" onClose={onClose}>
+      <p className="pb-3 text-sm text-muted">New transactions start on this account. You can still switch while adding one.</p>
+      <ul className="overflow-hidden rounded-[20px] bg-card">
+        {option(
+          null,
+          <span className="grid h-8 w-11 shrink-0 place-items-center rounded-lg bg-paper text-cobalt">
+            <Icon name="repeat" size={16} />
+          </span>,
+          'Last used',
+          'Whichever account you used most recently',
+        )}
+        {accounts.map((a) =>
+          option(a.id, <MiniCard color={a.color} type={a.type} className="h-8 w-11 rounded-lg" />, a.name, TYPE_INFO[a.type]?.label ?? a.type),
+        )}
+      </ul>
+    </Sheet>
   )
 }
 

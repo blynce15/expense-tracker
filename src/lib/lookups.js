@@ -1,8 +1,9 @@
+import { fetchProfile } from './profile'
 import { supabase } from './supabase'
 
 // Last fetched values, so the Add screen can open instantly with them
 // while a fresh copy loads in the background.
-export const lookupCache = { lookups: null, lastUsedAccountId: null }
+export const lookupCache = { lookups: null, lastUsedAccountId: null, pinnedAccountId: null }
 
 // Accounts and categories, used to fill pickers and label transactions.
 export async function fetchLookups() {
@@ -21,19 +22,21 @@ export async function fetchLookups() {
 }
 
 // The account used by the most recently added transaction, if any.
+// Also loads the account pinned in Profile → Default account.
 export async function fetchLastUsedAccountId() {
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('account_id')
-    .order('created_at', { ascending: false })
-    .limit(1)
+  const [{ data, error }, profile] = await Promise.all([
+    supabase.from('transactions').select('account_id').order('created_at', { ascending: false }).limit(1),
+    fetchProfile().catch(() => null),
+  ])
   if (error) throw error
   lookupCache.lastUsedAccountId = data[0]?.account_id ?? null
+  lookupCache.pinnedAccountId = profile?.answers?.defaultAccountId ?? null
   return lookupCache.lastUsedAccountId
 }
 
-// Picks the default account for a new transaction: last used, else the first active one.
+// Picks the default account for a new transaction: the pinned one, else last used, else the first active one.
 export function defaultAccountId(lookups, lastUsedId) {
   const active = lookups.accounts.filter((a) => !a.archived)
-  return (active.find((a) => a.id === lastUsedId) ?? active[0])?.id ?? null
+  const pick = (id) => active.find((a) => a.id === id)
+  return (pick(lookupCache.pinnedAccountId) ?? pick(lastUsedId) ?? active[0])?.id ?? null
 }
