@@ -26,6 +26,20 @@ export default async function handler(req, res) {
   const missing = ['VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'CRON_SECRET'].filter((k) => !process.env[k])
   if (missing.length) return res.status(500).json({ error: `Reminders aren't set up yet (missing ${missing.join(', ')} in Vercel).` })
 
+  // The publishable key looks similar but can't read other tables; say so clearly
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  let keyRole = key.startsWith('sb_secret_') ? 'service_role' : key.startsWith('sb_publishable_') ? 'anon' : null
+  if (!keyRole) {
+    try {
+      keyRole = JSON.parse(Buffer.from(key.split('.')[1], 'base64url').toString()).role
+    } catch {
+      keyRole = 'unknown'
+    }
+  }
+  if (keyRole === 'anon') {
+    return res.status(500).json({ error: 'The key in Vercel (SUPABASE_SERVICE_ROLE_KEY) is the publishable one. Use the secret key from Supabase → Project Settings → API Keys.' })
+  }
+
   const db = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
   webpush.setVapidDetails('https://expense-tracker-phi-ivory-98.vercel.app', process.env.VITE_VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY)
   const token = (req.headers.authorization || '').replace(/^Bearer /, '')
@@ -78,6 +92,7 @@ export default async function handler(req, res) {
     }
     return res.status(200).json({ due, payments: payments.length, sent })
   } catch (e) {
-    return res.status(500).json({ error: e.message })
+    const hint = /permission denied/.test(e.message) ? ' Run supabase/migrations/007_reminders_server_access.sql in the Supabase SQL Editor.' : ''
+    return res.status(500).json({ error: e.message + hint })
   }
 }
