@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
+import LockScreen from './components/LockScreen'
+import { lockSettings, shouldLockOnLeave } from './lib/applock'
 import { formatTodayLabel } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
 import { activeFilterCount, EMPTY_FILTER } from './lib/filters'
@@ -27,6 +29,15 @@ function App() {
   const route = useRoute()
   const online = useOnline()
   const [adding, setAdding] = useState(false)
+  // App lock: locked when the app starts and every time you come back to it
+  const [locked, setLocked] = useState(() => !!lockSettings())
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden' && shouldLockOnLeave()) setLocked(true)
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
   // Bumped after a save so screens reload their data
   const [dataVersion, setDataVersion] = useState(0)
   // Transactions filter lives here so it's kept when switching tabs
@@ -82,6 +93,7 @@ function App() {
       )}
       <main>{screen.body}</main>
       <TabBar route={route} onAdd={() => setAdding(true)} />
+      {locked && lockSettings() && <LockScreen email={session.user.email} onUnlock={() => setLocked(false)} />}
       {adding && (
         <TransactionSheet
           transaction={null}

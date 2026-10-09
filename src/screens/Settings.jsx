@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import Avatar, { useProfileLook } from '../components/Avatar'
 import { cardBackground, MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
+import PinPad, { FaceIdIcon } from '../components/PinPad'
 import Sheet from '../components/Sheet'
+import { allowLeavingOnce, changePin, checkPin, disableLock, enableLock, faceIdSupported, lockSettings, setUpFaceId, turnOffFaceId } from '../lib/applock'
 import { budgetPeriod, startDayOf } from '../lib/budget'
 import { formatDayMonth, todayISO } from '../lib/dates'
 import { fetchLookups, lookupCache } from '../lib/lookups'
@@ -24,6 +26,24 @@ export default function Settings({ session }) {
   const [editingName, setEditingName] = useState(false)
   const [pinnedId, setPinnedId] = useState(undefined) // undefined while loading, null = last used
   const [pickingAccount, setPickingAccount] = useState(false)
+  const [lock, setLock] = useState(lockSettings)
+  const [pinFlow, setPinFlow] = useState(null) // null | 'enable' | 'change' | 'disable'
+
+  useEffect(() => {
+    const refresh = () => setLock(lockSettings())
+    window.addEventListener('applock:changed', refresh)
+    return () => window.removeEventListener('applock:changed', refresh)
+  }, [])
+
+  async function toggleFaceId() {
+    setError(null)
+    if (lock?.credentialId) return turnOffFaceId()
+    try {
+      await setUpFaceId({ email: session.user.email, name })
+    } catch (e) {
+      setError(e?.name === 'NotAllowedError' ? 'Face ID was cancelled.' : `Couldn't set up Face ID: ${e.message}`)
+    }
+  }
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState(null)
 
@@ -168,11 +188,34 @@ export default function Settings({ session }) {
         </p>
       </section>
 
+      <Group label="Security">
+        <SwitchRow
+          icon="lock"
+          title="App lock"
+          sub={lock ? (lock.credentialId ? 'Face ID or PIN · locks every time you leave' : 'PIN · locks every time you leave') : 'Ask for Face ID or a PIN to open the app'}
+          on={!!lock}
+          onToggle={() => setPinFlow(lock ? 'disable' : 'enable')}
+        />
+        {lock && faceIdSupported() && (
+          <SwitchRow faceId title="Face ID" sub={lock.credentialId ? 'On for this iPhone' : 'Unlock with a glance'} on={!!lock.credentialId} onToggle={toggleFaceId} />
+        )}
+        {lock && <Row onClick={() => setPinFlow('change')} tile={<Icon name="pencil" />} title="Change PIN" />}
+      </Group>
+
       <div className="px-4">
         <button onClick={() => supabase.auth.signOut()} className="w-full rounded-[20px] bg-card py-3.5 text-[15px] font-semibold text-loss">
           Sign out
         </button>
       </div>
+
+      {pinFlow && (
+        <PinSheet
+          flow={pinFlow}
+          canFaceId={faceIdSupported()}
+          onFaceId={toggleFaceId}
+          onClose={() => setPinFlow(null)}
+        />
+      )}
 
       {pickingAccount && o && (
         <DefaultAccountSheet accounts={o.accounts} pinnedId={pinned ? pinnedId : null} onPick={changeDefaultAccount} onClose={() => setPickingAccount(false)} />
@@ -205,10 +248,117 @@ function PhotoPicker({ onError, className = 'relative shrink-0 rounded-full', ch
     }
   }
   return (
-    <button type="button" onClick={() => input.current.click()} className={className} aria-label="Change profile photo">
+    <button
+      type="button"
+      onClick={() => {
+        allowLeavingOnce()
+        input.current.click()
+      }}
+      className={className}
+      aria-label="Change profile photo"
+    >
       {children}
       <input ref={input} type="file" accept="image/*" onChange={picked} className="hidden" />
     </button>
+  )
+}
+
+// A row with an on/off switch on the right
+function SwitchRow({ icon, faceId, title, sub, on, onToggle }) {
+  return (
+    <li>
+      <button onClick={onToggle} role="switch" aria-checked={on} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        <Tile>{faceId ? <FaceIdIcon size={22} strokeWidth={3} /> : <Icon name={icon} />}</Tile>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold">{title}</span>
+          <span className="block truncate text-xs text-muted">{sub}</span>
+        </span>
+        <span className={`relative h-[30px] w-[50px] shrink-0 rounded-full transition-colors ${on ? 'bg-cobalt' : 'bg-line'}`}>
+          <span className={`absolute top-[3px] size-6 rounded-full bg-white shadow transition-[left] ${on ? 'left-[23px]' : 'left-[3px]'}`} />
+        </span>
+      </button>
+    </li>
+  )
+}
+
+// Turning the lock on (choose + confirm a PIN, then offer Face ID), changing the PIN, or turning it off
+function PinSheet({ flow, canFaceId, onFaceId, onClose }) {
+  const first = flow === 'enable' ? 'new' : 'current'
+  const [step, setStep] = useState(first) // current → new → confirm → faceid
+  const [chosen, setChosen] = useState(null)
+  const [wrong, setWrong] = useState(0)
+  const [note, setNote] = useState(null)
+
+  const titles = {
+    current: flow === 'disable' ? 'Enter your PIN to turn off the lock' : 'Enter your current PIN',
+    new: flow === 'change' ? 'Choose a new PIN' : 'Choose a 4-digit PIN',
+    confirm: 'Enter it again',
+  }
+
+  async function complete(pin) {
+    setNote(null)
+    if (step === 'current') {
+      if (!(await checkPin(pin))) return setWrong((w) => w + 1)
+      if (flow === 'disable') {
+        disableLock()
+        return onClose()
+      }
+      return setStep('new')
+    }
+    if (step === 'new') {
+      setChosen(pin)
+      return setStep('confirm')
+    }
+    if (pin !== chosen) {
+      setNote("Those didn't match. Choose your PIN again.")
+      setWrong((w) => w + 1)
+      setChosen(null)
+      return setStep('new')
+    }
+    if (flow === 'change') {
+      await changePin(pin)
+      return onClose()
+    }
+    await enableLock(pin)
+    if (canFaceId) setStep('faceid')
+    else onClose()
+  }
+
+  if (step === 'faceid') {
+    return (
+      <Sheet title="App lock is on" onClose={onClose}>
+        <div className="flex flex-col items-center pb-2 text-center">
+          <span className="grid size-20 place-items-center rounded-[26px] bg-card text-cobalt shadow-[0_16px_30px_-18px_rgba(11,27,69,0.6)]">
+            <FaceIdIcon size={44} strokeWidth={2.6} />
+          </span>
+          <p className="mt-4 font-display text-lg font-bold">Also unlock with Face ID?</p>
+          <p className="mt-1 text-sm text-muted">Your iPhone will ask for Face ID once to set it up. Your PIN always works too.</p>
+          <button
+            onClick={async () => {
+              await onFaceId()
+              onClose()
+            }}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-cobalt py-4 font-semibold text-white active:bg-cobalt-deep"
+          >
+            <FaceIdIcon size={20} strokeWidth={3.4} />
+            Set up Face ID
+          </button>
+          <button onClick={onClose} className="mt-2 w-full py-3 font-semibold text-muted">
+            Not now
+          </button>
+        </div>
+      </Sheet>
+    )
+  }
+
+  return (
+    <Sheet title={flow === 'disable' ? 'Turn off app lock' : flow === 'change' ? 'Change PIN' : 'Turn on app lock'} onClose={onClose}>
+      <div className="flex flex-col items-center pb-3">
+        <p className="mb-1 font-display text-lg font-bold">{titles[step]}</p>
+        <p className="mb-5 min-h-5 text-sm text-loss">{note}</p>
+        <PinPad key={step} onComplete={complete} error={wrong} />
+      </div>
+    </Sheet>
   )
 }
 
