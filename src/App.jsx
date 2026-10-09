@@ -139,7 +139,20 @@ function screenFor(route, session, dataVersion, tx) {
     case '/settings/categories':
       return { title: 'Categories', back: '/settings', body: <Categories /> }
     case '/recurring':
-      return { title: 'Recurring payments', back: '/home', body: <Recurring key={dataVersion} /> }
+      return {
+        title: 'Recurring payments',
+        back: '/home',
+        action: (
+          <button
+            onClick={() => window.dispatchEvent(new Event('recurring:add'))}
+            className="mr-1 grid size-10 place-items-center rounded-full bg-cobalt text-white shadow-[0_8px_16px_-8px_rgba(31,79,224,0.8)] active:bg-cobalt-deep"
+            aria-label="Add recurring payment"
+          >
+            <Icon name="plus" size={22} strokeWidth={2.4} />
+          </button>
+        ),
+        body: <Recurring key={dataVersion} />,
+      }
     case '/account':
       return { title: 'Account', back: '/home', body: <Account session={session} /> }
     default:

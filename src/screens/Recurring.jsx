@@ -1,16 +1,56 @@
 import { useCallback, useEffect, useState } from 'react'
 import DatePicker from '../components/DatePicker'
+import Icon from '../components/Icon'
 import PaySheet from '../components/PaySheet'
 import Sheet from '../components/Sheet'
 import { formatDay, todayISO } from '../lib/dates'
 import { EMOJIS } from '../lib/emojis'
 import { fetchLookups } from '../lib/lookups'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
-import { daysUntil, dueLabel, fetchRecurring, FREQUENCIES, monthlyCents } from '../lib/recurring'
+import { daysUntil, fetchRecurring, FREQUENCIES, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
+import RecurringDetails from './RecurringDetails'
 
 const inputClass = 'w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt'
 const perLabel = (f) => FREQUENCIES.find((x) => x.value === f)?.per
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
+const pad = (n) => String(n).padStart(2, '0')
+const toISO = (y, m, d) => `${y}-${pad(m + 1)}-${pad(d)}` // m is 0-11
+const shiftISO = (iso, days) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  const t = new Date(y, m - 1, d + days)
+  return toISO(t.getFullYear(), t.getMonth(), t.getDate())
+}
+// "Thu 15 Oct"
+const shortDay = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
+}
+
+// The dates in month y/m (0-11) a payment falls on, following its schedule backwards and forwards from next_due
+function datesInMonth(p, y, m) {
+  const first = toISO(y, m, 1)
+  const last = toISO(y, m, new Date(y, m + 1, 0).getDate())
+  const out = []
+  if (p.frequency === 'weekly') {
+    let iso = p.next_due
+    while (iso > last) iso = shiftISO(iso, -7)
+    while (iso >= first) {
+      out.push(iso)
+      iso = shiftISO(iso, -7)
+    }
+    for (let next = shiftISO(p.next_due, 7); next <= last; next = shiftISO(next, 7)) if (next >= first) out.push(next)
+    if (p.next_due >= first && p.next_due <= last && !out.includes(p.next_due)) out.push(p.next_due)
+    return out
+  }
+  const anchor = Number((p.start_date ?? p.next_due).slice(8))
+  const day = Math.min(anchor, new Date(y, m + 1, 0).getDate())
+  if (p.frequency === 'yearly') return Number(p.next_due.slice(5, 7)) - 1 === m ? [toISO(y, m, day)] : []
+  // Monthly: the next due date wins in its own month (it can differ from the anchor after an edit)
+  if (p.next_due.slice(0, 7) === first.slice(0, 7)) return [p.next_due]
+  return [toISO(y, m, day)]
+}
 
 export default function Recurring() {
   const [payments, setPayments] = useState(null)
@@ -18,6 +58,7 @@ export default function Recurring() {
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null) // null | 'new' | payment
   const [paying, setPaying] = useState(null)
+  const [openId, setOpenId] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -33,49 +74,55 @@ export default function Recurring() {
     load()
   }, [load])
 
+  // The + in the top bar
+  useEffect(() => {
+    const add = () => setEditing('new')
+    window.addEventListener('recurring:add', add)
+    return () => window.removeEventListener('recurring:add', add)
+  }, [])
+
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load recurring payments: {error}</p>
   if (!payments || !lookups) return null
 
   const active = payments.filter((p) => p.active)
   const paused = payments.filter((p) => !p.active)
   const perMonth = active.reduce((s, p) => s + monthlyCents(p), 0)
+  const monthEnd = toISO(new Date().getFullYear(), new Date().getMonth(), new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate())
+  const thisMonth = active.filter((p) => p.next_due <= monthEnd)
+  const later = active.filter((p) => p.next_due > monthEnd)
+  const open = payments.find((p) => p.id === openId)
 
   return (
-    <div className="space-y-5 px-4 pt-1 pb-6">
+    <div className="space-y-4 px-4 pt-1 pb-6">
       {payments.length === 0 ? (
-        <div className="rounded-3xl bg-card px-5 py-8 text-center">
+        <button onClick={() => setEditing('new')} className="w-full rounded-[26px] bg-card px-5 py-8 text-center">
           <p className="text-4xl">🔁</p>
           <p className="mt-2 font-display text-lg font-bold">Add your recurring payments</p>
           <p className="mt-1 text-muted">Rent, subscriptions, the gym. See what's due and record each payment with one tap.</p>
-        </div>
+        </button>
       ) : (
-        <section className="rounded-3xl bg-card p-5">
-          <p className="text-base font-medium text-muted">Recurring costs</p>
-          <p className="tabular mt-1 font-display text-[44px] leading-none font-bold tracking-tight">
-            {formatCents(perMonth)}
-            <span className="ml-1 text-xl font-semibold text-muted">/month</span>
-          </p>
-          <p className="mt-2 text-sm text-muted">
-            About <span className="tabular font-semibold text-ink">{formatCents(perMonth * 12)}</span> a year across {active.length}{' '}
-            {active.length === 1 ? 'payment' : 'payments'}
-          </p>
-        </section>
+        <>
+          <Summary perMonth={perMonth} count={active.length} />
+          <MonthCalendar payments={active} onOpen={(p) => setOpenId(p.id)} onPay={setPaying} />
+        </>
       )}
 
-      {active.length > 0 && <PaymentList payments={active} onSelect={setEditing} onPay={setPaying} />}
+      {thisMonth.length > 0 && <Group title="This month" payments={thisMonth} onOpen={(p) => setOpenId(p.id)} onPay={setPaying} />}
+      {later.length > 0 && <Group title="Later" payments={later} onOpen={(p) => setOpenId(p.id)} onPay={setPaying} />}
+      {paused.length > 0 && <Group title="Paused" payments={paused} onOpen={(p) => setOpenId(p.id)} />}
 
-      <button
-        onClick={() => setEditing('new')}
-        className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep"
-      >
-        Add recurring payment
-      </button>
-
-      {paused.length > 0 && (
-        <div>
-          <h2 className="px-1 pb-1.5 text-sm font-semibold text-muted">Paused</h2>
-          <PaymentList payments={paused} onSelect={setEditing} />
-        </div>
+      {open && !editing && !paying && (
+        <RecurringDetails
+          payment={open}
+          lookups={lookups}
+          onClose={() => setOpenId(null)}
+          onPay={() => setPaying(open)}
+          onEdit={() => setEditing(open)}
+          onChanged={() => {
+            setOpenId(null)
+            load()
+          }}
+        />
       )}
 
       {editing && (
@@ -85,6 +132,7 @@ export default function Recurring() {
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
+            setOpenId(null)
             load()
           }}
         />
@@ -104,39 +152,188 @@ export default function Recurring() {
   )
 }
 
-function PaymentList({ payments, onSelect, onPay }) {
+function Summary({ perMonth, count }) {
+  const [whole] = formatCents(perMonth).split(',')
   return (
-    <ul className="overflow-hidden rounded-2xl bg-card">
-      {payments.map((p) => {
-        const days = daysUntil(p.next_due)
-        const due = p.active && days <= 0
-        return (
-          <li key={p.id} className="flex items-center border-b border-line last:border-0">
-            <button onClick={() => onSelect(p)} className="flex min-w-0 flex-1 items-center gap-3 py-3 pl-4 text-left">
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-paper text-lg">{p.icon}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-base font-medium">{p.name}</span>
-                <span className={`block truncate text-sm ${days < 0 && p.active ? 'font-medium text-loss' : 'text-muted'}`}>
-                  {!p.active ? 'Paused' : days === 0 ? 'Due today' : `${dueLabel(p.next_due)}, ${formatDay(p.next_due)}`}
+    <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
+      <span className="pointer-events-none absolute -top-20 -right-14 size-48 rounded-full bg-white/10" />
+      <p className="relative flex items-center gap-1.5 text-sm font-semibold text-white/80">
+        <Icon name="repeat" size={15} />
+        Recurring costs
+      </p>
+      <p className="tabular relative mt-1 font-display leading-none font-bold">
+        <span className="text-[40px] tracking-tight">{whole}</span>
+        <span className="ml-1 text-base font-semibold text-white/65">/ month</span>
+      </p>
+      <div className="relative mt-3.5 grid grid-cols-2 rounded-2xl bg-white/[.12]">
+        <SummaryFact icon="calendar" label="Per year" value={formatCents(perMonth * 12).split(',')[0]} />
+        <SummaryFact icon="check" label={count === 1 ? 'Active payment' : 'Active payments'} value={count} divider />
+      </div>
+    </section>
+  )
+}
+
+function SummaryFact({ icon, label, value, divider }) {
+  return (
+    <div className={`flex items-center gap-2.5 px-3 py-2.5 ${divider ? 'border-l border-white/15' : ''}`}>
+      <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-white/15">
+        <Icon name={icon} size={16} strokeWidth={2.2} />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[11px] font-semibold text-white/70">{label}</span>
+        <span className="tabular block truncate font-display text-[15px] font-bold">{value}</span>
+      </span>
+    </div>
+  )
+}
+
+// This month as a calendar: each payment's icon on its day; tap a day to see what's due
+function MonthCalendar({ payments, onOpen, onPay }) {
+  const today = todayISO()
+  const [view, setView] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 }))
+  const [selected, setSelected] = useState(null)
+
+  const byDay = new Map()
+  for (const p of payments) {
+    for (const iso of datesInMonth(p, view.y, view.m)) byDay.set(iso, [...(byDay.get(iso) ?? []), p])
+  }
+  const monthTotal = [...byDay.values()].flat().reduce((s, p) => s + p.amount_cents, 0)
+  const leading = (new Date(view.y, view.m, 1).getDay() + 6) % 7 // Monday = 0
+  const days = new Date(view.y, view.m + 1, 0).getDate()
+  const dayItems = selected ? (byDay.get(selected) ?? []) : []
+
+  function move(delta) {
+    const d = new Date(view.y, view.m + delta, 1)
+    setView({ y: d.getFullYear(), m: d.getMonth() })
+    setSelected(null)
+  }
+
+  return (
+    <section className="rounded-[26px] bg-card px-3 pt-3.5 pb-3 shadow-[0_10px_24px_-20px_rgba(11,27,69,0.5)]">
+      <div className="flex items-center gap-1.5 px-1 pb-2.5">
+        <p className="flex-1 font-display text-lg font-bold">
+          {MONTH_NAMES[view.m]}
+          {view.y !== Number(today.slice(0, 4)) && ` ${view.y}`}
+          <span className="tabular ml-1.5 text-sm font-semibold text-muted">{formatCents(monthTotal).split(',')[0]}</span>
+        </p>
+        <button onClick={() => move(-1)} className="grid size-9 place-items-center rounded-full bg-paper" aria-label="Previous month">
+          <Icon name="chevronLeft" size={18} />
+        </button>
+        <button onClick={() => move(1)} className="grid size-9 place-items-center rounded-full bg-paper" aria-label="Next month">
+          <Icon name="chevronRight" size={18} />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {WEEKDAYS.map((w) => (
+          <span key={w} className="pb-1 text-center text-[11px] font-bold tracking-wide text-muted uppercase">
+            {w}
+          </span>
+        ))}
+        {Array.from({ length: leading }, (_, i) => (
+          <span key={`b${i}`} />
+        ))}
+        {Array.from({ length: days }, (_, i) => {
+          const iso = toISO(view.y, view.m, i + 1)
+          const items = byDay.get(iso) ?? []
+          const isToday = iso === today
+          return (
+            <button
+              key={iso}
+              onClick={() => setSelected((s) => (s === iso ? null : iso))}
+              aria-pressed={selected === iso}
+              aria-label={`${i + 1} ${MONTH_NAMES[view.m]}${items.length ? `, ${items.map((p) => p.name).join(', ')}` : ''}`}
+              className={`grid h-[52px] grid-rows-[20px_1fr] justify-items-center rounded-[14px] pt-1.5 text-[13px] font-bold ${
+                selected === iso ? 'bg-cobalt/10 ring-2 ring-cobalt ring-inset' : items.length ? 'bg-paper' : ''
+              } ${iso < today && !isToday ? 'text-muted/50' : ''}`}
+            >
+              <span className={`tabular ${isToday ? 'rounded-full bg-cobalt px-[7px] text-white' : ''}`}>{i + 1}</span>
+              {items.length > 0 && (
+                <span className="flex items-center gap-px text-sm leading-none">
+                  {items[0].icon}
+                  {items.length > 1 && <span className="text-[9px] font-extrabold text-muted">+{items.length - 1}</span>}
                 </span>
-              </span>
-              <span className="tabular shrink-0 pr-4 text-right text-base font-semibold">
-                {formatCents(p.amount_cents)}
-                <span className="block text-xs font-normal text-muted">/{perLabel(p.frequency)}</span>
-              </span>
+              )}
             </button>
-            {due && onPay && (
-              <button
-                onClick={() => onPay(p)}
-                className="mr-3 shrink-0 rounded-full bg-cobalt px-3.5 py-2 text-sm font-semibold text-white active:bg-cobalt-deep"
-              >
-                Paid
-              </button>
-            )}
-          </li>
-        )
-      })}
-    </ul>
+          )
+        })}
+      </div>
+
+      {selected && (
+        <div className="mt-2.5 rounded-[18px] bg-paper px-3 py-2.5">
+          <p className="flex justify-between text-xs font-bold text-muted">
+            <span>{shortDay(selected)}</span>
+            {dayItems.length > 0 && <span className="tabular">{formatCents(dayItems.reduce((s, p) => s + p.amount_cents, 0))}</span>}
+          </p>
+          {dayItems.length === 0 ? (
+            <p className="pt-1 text-sm text-muted">Nothing due this day.</p>
+          ) : (
+            <ul>
+              {dayItems.map((p) => (
+                <li key={p.id} className="border-b border-line last:border-0">
+                  <PaymentRow p={p} sub={`Every ${perLabel(p.frequency)}`} due={p.next_due === selected && daysUntil(p.next_due) <= 0} onOpen={onOpen} onPay={onPay} compact />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function Group({ title, payments, onOpen, onPay }) {
+  return (
+    <section>
+      <p className="flex justify-between px-1.5 pb-1.5 text-xs font-bold tracking-wider text-muted uppercase">
+        <span>{title}</span>
+        {onPay && <span className="tabular">{formatCents(payments.reduce((s, p) => s + p.amount_cents, 0))}</span>}
+      </p>
+      <ul className="overflow-hidden rounded-[22px] bg-card">
+        {payments.map((p) => {
+          const days = daysUntil(p.next_due)
+          const sub = !p.active
+            ? 'Paused'
+            : days === 0
+              ? 'Due today'
+              : days < 0
+                ? `${-days} ${days === -1 ? 'day' : 'days'} late`
+                : `${days === 1 ? 'Tomorrow' : `In ${days} days`} · ${shortDay(p.next_due)}`
+          return (
+            <li key={p.id} className={`border-b border-line last:border-0 ${p.active ? '' : 'opacity-55'}`}>
+              <PaymentRow p={p} sub={sub} due={p.active && days <= 0} late={p.active && days < 0} onOpen={onOpen} onPay={onPay} />
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+function PaymentRow({ p, sub, due, late, onOpen, onPay, compact }) {
+  return (
+    <div className={`flex items-center gap-3 ${compact ? 'py-2' : 'pr-3.5'}`}>
+      <button onClick={() => onOpen(p)} className={`flex min-w-0 flex-1 items-center gap-3 text-left ${compact ? '' : 'py-3 pl-3.5'}`}>
+        <span className={`grid shrink-0 place-items-center rounded-[14px] bg-paper ${compact ? 'size-9 text-lg' : 'size-11 text-xl'} ${compact ? 'bg-card' : ''}`}>
+          {p.icon}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] font-semibold">{p.name}</span>
+          <span className={`block truncate text-xs ${late ? 'font-semibold text-loss' : due ? 'font-semibold text-cobalt' : 'text-muted'}`}>{sub}</span>
+        </span>
+        {!(due && onPay) && (
+          <span className="tabular shrink-0 text-right text-[15px] font-bold">
+            {formatCents(p.amount_cents)}
+            <span className="block text-[11px] font-semibold text-muted">/{perLabel(p.frequency)}</span>
+          </span>
+        )}
+      </button>
+      {due && onPay && (
+        <button onClick={() => onPay(p)} className="shrink-0 rounded-full bg-cobalt px-3.5 py-1.5 text-sm font-semibold text-white active:bg-cobalt-deep">
+          Paid
+        </button>
+      )}
+    </div>
   )
 }
 
