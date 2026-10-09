@@ -13,6 +13,7 @@ import { fetchProfile, saveDefaultAccount, saveName, savePhoto, saveProfile, squ
 import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { getTheme, setTheme } from '../lib/theme'
+import { isStandalone, pushSupported, remindersOn, sendTestReminder, turnOffReminders, turnOnReminders } from '../lib/push'
 import { navigate } from '../lib/useRoute'
 
 // 1 → "1st", 22 → "22nd"
@@ -29,6 +30,8 @@ export default function Settings({ session }) {
   const [pickingAccount, setPickingAccount] = useState(false)
   const [lock, setLock] = useState(lockSettings)
   const [theme, setThemeState] = useState(getTheme)
+  const [reminders, setReminders] = useState(null) // null while checking
+  const [reminderNote, setReminderNote] = useState(null)
   const [pinFlow, setPinFlow] = useState(null) // null | 'enable' | 'change' | 'disable'
 
   useEffect(() => {
@@ -36,6 +39,33 @@ export default function Settings({ session }) {
     window.addEventListener('applock:changed', refresh)
     return () => window.removeEventListener('applock:changed', refresh)
   }, [])
+
+  useEffect(() => {
+    if (pushSupported()) remindersOn().then(setReminders).catch(() => setReminders(false))
+  }, [])
+
+  async function toggleReminders() {
+    setReminderNote(null)
+    const wasOn = reminders
+    setReminders(!wasOn)
+    try {
+      if (wasOn) await turnOffReminders()
+      else await turnOnReminders()
+    } catch (e) {
+      setReminders(wasOn)
+      setReminderNote(e.message)
+    }
+  }
+
+  async function testReminder() {
+    setReminderNote('Sending…')
+    try {
+      const { sent } = await sendTestReminder()
+      setReminderNote(sent ? 'Sent. It should appear in a few seconds.' : 'No phone is set up for reminders yet.')
+    } catch (e) {
+      setReminderNote(`Couldn't send: ${e.message}`)
+    }
+  }
 
   async function toggleFaceId() {
     setError(null)
@@ -226,6 +256,31 @@ export default function Settings({ session }) {
           </div>
         </li>
       </Group>
+
+      <section>
+        <Group label="Notifications">
+          {pushSupported() ? (
+            <>
+              <SwitchRow
+                icon="bell"
+                title="Payment reminders"
+                sub={reminders ? 'The morning before a payment is due' : 'A notification the day before each payment'}
+                on={!!reminders}
+                onToggle={toggleReminders}
+              />
+              {reminders && <Row onClick={testReminder} tile={<Icon name="bell" />} title="Send a test notification" />}
+            </>
+          ) : (
+            <Row
+              tile={<Icon name="bell" />}
+              tileClass="bg-paper text-muted"
+              title="Payment reminders"
+              sub={isStandalone() ? 'Needs iOS 16.4 or newer' : 'Open the app from your Home Screen to turn these on'}
+            />
+          )}
+        </Group>
+        {reminderNote && <p className="px-5 pt-2 text-sm text-muted">{reminderNote}</p>}
+      </section>
 
       <Group label="Security">
         <SwitchRow
