@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import EmptyLynx from '../components/EmptyLynx'
 import BankCard from '../components/BankCard'
 import Icon from '../components/Icon'
 import TransactionRow from '../components/TransactionRow'
@@ -110,7 +111,10 @@ export default function AccountPage({ account, monthFlow, lookups, hidden, onTog
 
           {error && <p className="px-1 pt-4 text-loss">Couldn't load transactions: {error}</p>}
           {list?.length === 0 && (
-            <p className="px-1 pt-4 text-muted">Nothing recorded on this account yet. Tap + to add the first one.</p>
+            <div className="px-1 pt-8 text-center">
+              <EmptyLynx className="mb-3" />
+              <p className="text-muted">Nothing recorded on this account yet. Tap + to add the first one.</p>
+            </div>
           )}
           {days.map(([date, items]) => (
             <div key={date}>

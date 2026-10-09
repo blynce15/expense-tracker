@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import LynxWatermark from '../components/LynxWatermark'
 import Icon from '../components/Icon'
 import { monthRange, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
@@ -145,7 +146,7 @@ function Headline({ stats, month }) {
 
   return (
     <section className="relative overflow-hidden rounded-[24px] bg-cobalt p-5 text-white shadow-[0_18px_34px_-18px_#1f4fe0]">
-      <span className="pointer-events-none absolute -top-16 -right-12 size-48 rounded-full bg-white/10" />
+      <LynxWatermark />
       <div className="relative flex items-start justify-between gap-2">
         <p className="text-sm text-white/75">Spent in {monthLabel(month, { month: 'long' })}</p>
         {pct !== null && diff !== 0 && (

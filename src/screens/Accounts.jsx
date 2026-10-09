@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import EmptyLynx from '../components/EmptyLynx'
 import BankCard from '../components/BankCard'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
@@ -54,6 +55,7 @@ export default function Accounts() {
     <div className="px-4 pt-2 pb-6">
       {active.length === 0 ? (
         <div className="rounded-2xl bg-card px-5 py-8 text-center">
+          <EmptyLynx className="mb-3" />
           <p className="font-display text-lg font-bold">Add your first account</p>
           <p className="mt-1 text-muted">Add each card, cash wallet or savings account you want to track.</p>
         </div>

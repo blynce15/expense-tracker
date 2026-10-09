@@ -298,7 +298,13 @@ export default function Settings({ session }) {
         />
       </ul>
 
-      <p className="pt-1 text-center text-xs text-muted">LynxOS · your data is private to your login</p>
+      <div className="flex flex-col items-center gap-1 pt-2 text-center">
+        <img src="/logo.png" alt="" className="size-11 opacity-90" />
+        <p className="font-display text-[15px] font-extrabold tracking-tight">
+          Lynx<span className="brand-text">OS</span>
+        </p>
+        <p className="text-xs text-muted">Your data is private to your login</p>
+      </div>
 
       {deleting && <DeleteAllData onClose={() => setDeleting(false)} />}
 

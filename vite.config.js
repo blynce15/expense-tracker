@@ -32,7 +32,7 @@ export default defineConfig({
       },
       workbox: {
         // The app itself is stored on the phone; launch screens are only needed by iOS at install time
-        globPatterns: ['**/*.{js,css,html}', 'icons/*.png', 'app-icon.png', 'logo.png'],
+        globPatterns: ['**/*.{js,css,html}', 'icons/*.png', 'app-icon.png', 'logo.png', 'logo-white.png'],
         navigateFallback: '/index.html',
         // Payment reminders: show pushed notifications (public/push-sw.js)
         importScripts: ['push-sw.js'],

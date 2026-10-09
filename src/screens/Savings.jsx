@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import LynxWatermark from '../components/LynxWatermark'
+import EmptyLynx from '../components/EmptyLynx'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
@@ -142,7 +144,7 @@ export default function Savings() {
 
       {goals.length === 0 ? (
         <div className="rounded-[22px] bg-card px-5 py-8 text-center">
-          <p className="text-4xl">🐷</p>
+          <EmptyLynx />
           <p className="mt-2 font-display text-lg font-bold">Start your first savings goal</p>
           <p className="mt-1 text-muted">A trip, an emergency fund, a new laptop. Set a target and track your progress.</p>
         </div>
@@ -206,7 +208,7 @@ function TotalRing({ saved, target, count, reached }) {
   const [whole, decimals] = formatCents(saved).split(',')
   return (
     <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
-      <span className="pointer-events-none absolute -top-20 -right-14 size-48 rounded-full bg-white/10" />
+      <LynxWatermark className="-bottom-14 -left-10" />
       <div className="relative flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white/80">Total saved</p>

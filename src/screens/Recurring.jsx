@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import LynxWatermark from '../components/LynxWatermark'
+import EmptyLynx from '../components/EmptyLynx'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import PaySheet from '../components/PaySheet'
@@ -96,7 +98,7 @@ export default function Recurring() {
     <div className="space-y-4 px-4 pt-1 pb-6">
       {payments.length === 0 ? (
         <button onClick={() => setEditing('new')} className="w-full rounded-[26px] bg-card px-5 py-8 text-center">
-          <p className="text-4xl">🔁</p>
+          <EmptyLynx />
           <p className="mt-2 font-display text-lg font-bold">Add your recurring payments</p>
           <p className="mt-1 text-muted">Rent, subscriptions, the gym. See what's due and record each payment with one tap.</p>
         </button>
@@ -156,7 +158,7 @@ function Summary({ perMonth, count }) {
   const [whole] = formatCents(perMonth).split(',')
   return (
     <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
-      <span className="pointer-events-none absolute -top-20 -right-14 size-48 rounded-full bg-white/10" />
+      <LynxWatermark />
       <p className="relative flex items-center gap-1.5 text-sm font-semibold text-white/80">
         <Icon name="repeat" size={15} />
         Recurring costs

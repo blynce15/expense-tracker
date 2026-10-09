@@ -22,7 +22,8 @@ export function TopBar({ title, back, action, center, email }) {
             <Icon name="chevronLeft" />
           </button>
         ) : (
-          <div className="w-2" />
+          // The LynxOS lynx before the title of each main tab
+          <img src="/logo.png" alt="" className="ml-2 size-8 shrink-0" />
         )}
         <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
         {action}

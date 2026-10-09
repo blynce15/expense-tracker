@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import EmptyLynx from '../components/EmptyLynx'
 import { MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
 import RangeCalendar from '../components/RangeCalendar'
@@ -168,6 +169,7 @@ function TransactionList({ rows, lookups, filtered, onSelect }) {
   if (rows.length === 0) {
     return (
       <div className="mt-1 rounded-[20px] bg-card px-5 py-8 text-center">
+        <EmptyLynx className="mb-3" />
         <p className="font-display text-lg font-bold">{filtered ? 'Nothing matches' : 'No transactions yet'}</p>
         <p className="mt-1 text-muted">
           {filtered ? 'Try another tab or change the filters.' : 'Tap the + button to record your first expense or income.'}
