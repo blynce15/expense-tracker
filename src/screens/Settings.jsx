@@ -14,7 +14,7 @@ import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { getTheme, setTheme } from '../lib/theme'
 import DeleteAllData from './DeleteAllData'
-import { isStandalone, pushSupported, remindersOn, sendTestReminder, turnOffReminders, turnOnReminders } from '../lib/push'
+import { isStandalone, pushSupported, remindersOn, turnOffReminders, turnOnReminders } from '../lib/push'
 import { navigate } from '../lib/useRoute'
 
 // 1 → "1st", 22 → "22nd"
@@ -56,16 +56,6 @@ export default function Settings({ session }) {
     } catch (e) {
       setReminders(wasOn)
       setReminderNote(e.message)
-    }
-  }
-
-  async function testReminder() {
-    setReminderNote('Sending…')
-    try {
-      const { sent } = await sendTestReminder()
-      setReminderNote(sent ? 'Sent. It should appear in a few seconds.' : 'No phone is set up for reminders yet.')
-    } catch (e) {
-      setReminderNote(`Couldn't send: ${e.message}`)
     }
   }
 
@@ -262,7 +252,6 @@ export default function Settings({ session }) {
                 on={!!reminders}
                 onToggle={toggleReminders}
               />
-              {reminders && <Row onClick={testReminder} tile={<ColorTile color="#e64980" icon="bell" soft />} title="Send a test notification" />}
             </>
           ) : (
             <Row

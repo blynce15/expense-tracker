@@ -48,12 +48,3 @@ export async function turnOffReminders() {
   await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint)
   await sub.unsubscribe()
 }
-
-// Asks the server to send a test notification to this account's phones
-export async function sendTestReminder() {
-  const { data } = await supabase.auth.getSession()
-  const res = await fetch('/api/remind?test=1', { method: 'POST', headers: { Authorization: `Bearer ${data.session?.access_token}` } })
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(body.error || `The server answered ${res.status}.`)
-  return body
-}
