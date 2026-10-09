@@ -105,6 +105,7 @@ Done:
 - Transactions filter: "Custom" date range opens a calendar right away (src/components/RangeCalendar.jsx): tap the first day, then the last day; the range is highlighted. Calendar only, no From/To boxes or hint (owner's choice). Published.
 - Removed helper text the owner found unnecessary: the Filters sheet instructions line and the transfers note on the Cards filter page. Published.
 - Recurring payments page redesigned (design "C", chosen from mockups): blue summary card (per month, per year, active count), big month calendar with each payment's icon on its day (tap a day for a panel with that day's payments; arrows change month), list grouped This month / Later / Paused, + in the top bar. Tapping a payment opens a details sheet (src/screens/RecurringDetails.jsx, adapted from the owner's reference picture): status tag, Mark paid, amount, Next payment / Repeats / Total paid / Category boxes, Paid from card, Pause/Resume and Delete, pencil to edit. No auto-renew or reminders (owner: not for now). "Total paid" = expenses with the payment's name as note and its category. Published.
+- Home "Coming up": tapping a payment opens the same details sheet (edit via the exported RecurringForm). Published.
 - Deploy note: `npx vercel deploy --prod --yes` sometimes fails once with "Not authorized"; running it again works.
 - Test harness note: the in-memory mock has no `.or(...in.(...))` or row counts, so the Transactions card filter shows empty and "Show undefined transactions" in tests (fine in the real app).
 
