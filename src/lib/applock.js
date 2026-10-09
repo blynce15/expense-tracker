@@ -60,8 +60,8 @@ export async function setUpFaceId({ email, name }) {
   const cred = await navigator.credentials.create({
     publicKey: {
       challenge: randomBytes(32),
-      rp: { name: 'Expense Tracker', id: location.hostname },
-      user: { id: randomBytes(16), name: email || 'Expense Tracker', displayName: name || email || 'Expense Tracker' },
+      rp: { name: 'LynxOS', id: location.hostname },
+      user: { id: randomBytes(16), name: email || 'LynxOS', displayName: name || email || 'LynxOS' },
       pubKeyCredParams: [
         { type: 'public-key', alg: -7 },
         { type: 'public-key', alg: -257 },

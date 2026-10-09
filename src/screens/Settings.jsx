@@ -298,7 +298,7 @@ export default function Settings({ session }) {
         />
       </ul>
 
-      <p className="pt-1 text-center text-xs text-muted">Expense Tracker · your data is private to your login</p>
+      <p className="pt-1 text-center text-xs text-muted">LynxOS · your data is private to your login</p>
 
       {deleting && <DeleteAllData onClose={() => setDeleting(false)} />}
 

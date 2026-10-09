@@ -14,9 +14,9 @@ export default defineConfig({
       injectRegister: 'auto',
       includeAssets: ['app-icon.png', 'icons/apple-touch-icon.png'],
       manifest: {
-        name: 'Expense Tracker',
-        short_name: 'Expenses',
-        description: 'Personal expense tracker',
+        name: 'LynxOS',
+        short_name: 'LynxOS',
+        description: 'LynxOS: your personal money tracker',
         lang: 'en',
         start_url: '/',
         scope: '/',

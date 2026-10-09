@@ -20,7 +20,7 @@ export default function Login() {
     <main className="flex min-h-full flex-col justify-center px-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto w-full max-w-sm">
         <img src="/app-icon.png" alt="" className="mx-auto mb-5 size-24 rounded-[26px] shadow-[0_6px_20px_-8px_rgba(11,27,69,0.35)]" />
-        <h1 className="mb-8 text-center font-display text-3xl font-bold tracking-tight">Expense Tracker</h1>
+        <h1 className="mb-8 text-center font-display text-3xl font-bold tracking-tight">LynxOS</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
             type="email"

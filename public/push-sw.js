@@ -9,7 +9,7 @@ self.addEventListener('push', (event) => {
     data = { body: event.data?.text() }
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Expense Tracker', {
+    self.registration.showNotification(data.title || 'LynxOS', {
       body: data.body || '',
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',

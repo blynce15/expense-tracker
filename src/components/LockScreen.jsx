@@ -52,7 +52,7 @@ export default function LockScreen({ email, onUnlock }) {
       {mode === 'face' ? (
         <div className="relative flex w-full max-w-sm flex-1 flex-col items-center px-6 pt-[calc(env(safe-area-inset-top)+20px)] pb-[calc(env(safe-area-inset-bottom)+28px)]">
           <span className="flex items-center gap-1.5 rounded-full bg-white/[.14] px-3 py-1.5 text-xs font-bold">
-            <LockGlyph /> Expense Tracker
+            <LockGlyph /> LynxOS
           </span>
           <div className="flex-1" />
           <Avatar
