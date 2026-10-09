@@ -286,7 +286,6 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
             <FilterRow emoji="🏷️" tint="bg-gain/10" label="Categories" value={categoryText} set={draft.categoryIds.length > 0} onClick={() => setPage('cats')} />
           )}
         </ul>
-        <p className="px-1 text-sm text-muted">Tap a row to change it. Leave a row on "All" to include everything.</p>
         {showButton}
       </div>
     )
