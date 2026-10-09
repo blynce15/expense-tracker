@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { MiniCard, TYPE_INFO } from '../components/BankCard'
-import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
+import RangeCalendar from '../components/RangeCalendar'
 import Sheet from '../components/Sheet'
 import TransactionRow from '../components/TransactionRow'
 import { formatDay, todayISO } from '../lib/dates'
-import { activeFilterCount, applyFilter, DATE_PRESETS, describeDate, describeRange, EMPTY_FILTER, shortDate, usesCategories } from '../lib/filters'
+import { activeFilterCount, applyFilter, DATE_PRESETS, describeDate, describeRange, EMPTY_FILTER, usesCategories } from '../lib/filters'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
@@ -213,7 +213,7 @@ function TransactionList({ rows, lookups, filtered, onSelect }) {
   })
 }
 
-const PAGE_TITLES = { main: 'Filters', date: 'Date range', cards: 'Cards', cats: 'Categories', from: 'From', to: 'To' }
+const PAGE_TITLES = { main: 'Filters', date: 'Date range', cards: 'Cards', cats: 'Categories', range: 'Custom dates' }
 
 // Filter sheet: a short list (date range, cards, categories); each row opens its own page
 function FilterSheet({ filter, lookups, onApply, onClose }) {
@@ -242,7 +242,7 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
     setDraft((d) => ({ ...d, [key]: d[key].includes(id) ? d[key].filter((x) => x !== id) : [...d[key], id] }))
   const setDate = (date) => setDraft((d) => ({ ...d, date }))
 
-  const back = page === 'from' || page === 'to' ? 'date' : 'main'
+  const back = page === 'range' ? 'date' : 'main'
   const resetButton = (
     <button onClick={() => setDraft({ ...EMPTY_FILTER, type: draft.type })} className="px-2 py-2 text-[15px] font-semibold text-cobalt">
       Reset
@@ -301,8 +301,9 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
                 <button
                   onClick={() => {
                     if (p.value === 'custom') {
-                      // Start a custom range at this month so far
+                      // Start a custom range at this month so far, then open the calendar
                       if (!on) setDate({ preset: 'custom', from: `${todayISO().slice(0, 8)}01`, to: todayISO() })
+                      setPage('range')
                     } else {
                       setDate({ preset: p.value })
                       setPage('main')
@@ -313,38 +314,22 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
                 >
                   <Check on={on} round />
                   <span className="flex-1 text-base font-medium">{p.label}</span>
-                  <span className="text-sm text-muted">{p.value === 'custom' ? (on ? '' : 'Pick dates') : describeRange({ preset: p.value })}</span>
+                  <span className="text-sm text-muted">{p.value === 'custom' ? (on ? describeDate(draft.date) : 'Pick dates') : describeRange({ preset: p.value })}</span>
                 </button>
               </li>
             )
           })}
         </ul>
-        {draft.date.preset === 'custom' && (
-          <div className="grid grid-cols-2 gap-2">
-            {['from', 'to'].map((k) => (
-              <button key={k} onClick={() => setPage(k)} className="rounded-2xl border-[1.5px] border-line bg-card px-4 py-2.5 text-left">
-                <span className="block text-xs text-muted">{k === 'from' ? 'From' : 'To'}</span>
-                <span className="block text-base font-semibold">{shortDate(draft.date[k])}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {draft.date.preset === 'custom' && doneButton}
       </div>
     )
-  } else if (page === 'from' || page === 'to') {
+  } else if (page === 'range') {
     body = (
-      <DatePicker
-        value={draft.date[page]}
-        dimFuture={false}
-        quickPicks={false}
-        onChange={(iso) => {
-          let { from, to } = { ...draft.date, [page]: iso }
-          if (from > to) [from, to] = [to, from]
-          setDate({ preset: 'custom', from, to })
-          setPage('date')
-        }}
-      />
+      <div className="space-y-3">
+        <RangeCalendar from={draft.date.from} to={draft.date.to} onChange={({ from, to }) => setDate({ preset: 'custom', from, to })} />
+        <button onClick={() => setPage('main')} className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep">
+          Done
+        </button>
+      </div>
     )
   } else if (page === 'cards') {
     const allOn = accounts.length > 0 && accounts.every((a) => draft.accountIds.includes(a.id))
