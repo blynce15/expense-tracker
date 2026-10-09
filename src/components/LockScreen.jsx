@@ -51,11 +51,11 @@ export default function LockScreen({ email, onUnlock }) {
 
       {mode === 'face' ? (
         <div className="relative flex w-full max-w-sm flex-1 flex-col items-center px-6 pt-[calc(env(safe-area-inset-top)+20px)] pb-[calc(env(safe-area-inset-bottom)+28px)]">
+          <img src="/logo-white.png" alt="" className="mb-3 size-16" />
           <span className="flex items-center gap-1.5 rounded-full bg-white/[.14] px-3 py-1.5 text-xs font-bold">
             <LockGlyph /> LynxOS
           </span>
           <div className="flex-1" />
-          <img src="/logo-white.png" alt="LynxOS" className="mb-5 size-16" />
           <Avatar
             name={name}
             email={email}
