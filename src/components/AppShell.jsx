@@ -1,4 +1,4 @@
-import Avatar, { useDisplayName } from './Avatar'
+import Avatar, { useProfileLook } from './Avatar'
 import Icon from './Icon'
 import { goBack, navigate } from '../lib/useRoute'
 
@@ -10,7 +10,7 @@ const TABS = [
 ]
 
 export function TopBar({ title, back, action, center, email }) {
-  const name = useDisplayName()
+  const look = useProfileLook()
   return (
     <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="relative flex h-14 items-center gap-1 px-2">
@@ -28,7 +28,7 @@ export function TopBar({ title, back, action, center, email }) {
         {action}
         {!back && (
           <button onClick={() => navigate('/profile')} className="grid size-11 place-items-center rounded-full" aria-label="Profile">
-            <Avatar name={name} email={email} size={34} className="shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]" />
+            <Avatar name={look.name} email={email} photo={look.photo} size={34} className="shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]" />
           </button>
         )}
       </div>

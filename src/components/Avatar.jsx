@@ -1,32 +1,37 @@
 import { useEffect, useState } from 'react'
-import { fetchProfile, nameOf } from '../lib/profile'
+import { fetchProfile, nameOf, photoOf } from '../lib/profile'
 
-let cachedName = null
+let cached = null // { name, photo }
 
-// The user's name, loaded once and updated when it's changed in Profile
-export function useDisplayName() {
-  const [name, setName] = useState(cachedName ?? '')
+// The user's name and photo, loaded once and updated when they're changed in Profile
+export function useProfileLook() {
+  const [look, setLook] = useState(cached ?? { name: '', photo: null })
   useEffect(() => {
-    if (cachedName === null) {
+    if (cached === null) {
       fetchProfile()
         .then((p) => {
-          cachedName = nameOf(p)
-          setName(cachedName)
+          cached = { name: nameOf(p), photo: photoOf(p) }
+          setLook(cached)
         })
         .catch(() => {})
     }
     const onChange = (e) => {
-      cachedName = e.detail
-      setName(e.detail)
+      cached = { ...(cached ?? { name: '', photo: null }), ...e.detail }
+      setLook(cached)
     }
-    window.addEventListener('profile:name', onChange)
-    return () => window.removeEventListener('profile:name', onChange)
+    window.addEventListener('profile:look', onChange)
+    return () => window.removeEventListener('profile:look', onChange)
   }, [])
-  return name
+  return look
 }
 
-// Round blue avatar with the first letter of the name (or of the email until a name is set)
-export default function Avatar({ name, email, size = 32, className = '' }) {
+// Round avatar: the profile photo, or a blue circle with the first letter of the name (or email)
+export default function Avatar({ name, email, photo, size = 32, className = '' }) {
+  if (photo) {
+    return (
+      <img src={photo} alt="" width={size} height={size} className={`shrink-0 rounded-full object-cover ${className}`} style={{ width: size, height: size }} />
+    )
+  }
   const letter = (name || email || '?').trim().charAt(0).toUpperCase()
   return (
     <span

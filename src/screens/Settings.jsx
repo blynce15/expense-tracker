@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import Avatar from '../components/Avatar'
+import { useEffect, useRef, useState } from 'react'
+import Avatar, { useProfileLook } from '../components/Avatar'
 import { cardBackground } from '../components/BankCard'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
@@ -7,7 +7,7 @@ import { budgetPeriod, startDayOf } from '../lib/budget'
 import { formatDayMonth, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
-import { fetchProfile, nameOf, saveName, saveProfile } from '../lib/profile'
+import { fetchProfile, saveName, savePhoto, saveProfile, squareJpeg } from '../lib/profile'
 import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
@@ -20,17 +20,14 @@ function ordinal(n) {
 
 export default function Settings({ session }) {
   const [startDay, setStartDay] = useState(null)
-  const [name, setName] = useState('')
+  const { name, photo } = useProfileLook()
   const [editingName, setEditingName] = useState(false)
   const [overview, setOverview] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     fetchProfile()
-      .then((p) => {
-        setStartDay(startDayOf(p))
-        setName(nameOf(p))
-      })
+      .then((p) => setStartDay(startDayOf(p)))
       .catch((e) => setError(e.message))
     // A short summary under each row; the rows work without it
     Promise.all([fetchLookups(), fetchRecurring()])
@@ -66,7 +63,12 @@ export default function Settings({ session }) {
   return (
     <div className="space-y-5 pt-2 pb-8">
       <section className="mx-4 flex items-center gap-3.5 rounded-[24px] bg-card px-4 py-4">
-        <Avatar name={name} email={session.user.email} size={58} />
+        <PhotoPicker onError={setError}>
+          <Avatar name={name} email={session.user.email} photo={photo} size={58} />
+          <span className="absolute -right-0.5 -bottom-0.5 grid size-[22px] place-items-center rounded-full bg-card text-cobalt shadow-[0_2px_6px_rgba(11,27,69,0.25)]">
+            <Icon name="camera" size={13} strokeWidth={2.2} />
+          </span>
+        </PhotoPicker>
         <span className="min-w-0 flex-1">
           <span className={`block truncate font-display text-lg font-bold ${name ? '' : 'text-muted'}`}>{name || 'Add your name'}</span>
           <span className="block truncate text-sm text-muted">{session.user.email}</span>
@@ -145,14 +147,7 @@ export default function Settings({ session }) {
       </div>
 
       {editingName && (
-        <NameSheet
-          name={name}
-          onClose={() => setEditingName(false)}
-          onSaved={(n) => {
-            setName(n)
-            setEditingName(false)
-          }}
-        />
+        <NameSheet name={name} email={session.user.email} photo={photo} onClose={() => setEditingName(false)} onSaved={() => setEditingName(false)} />
       )}
 
       <div className="flex flex-col items-center gap-1 pt-2 text-center">
@@ -164,7 +159,28 @@ export default function Settings({ session }) {
   )
 }
 
-function NameSheet({ name, onClose, onSaved }) {
+// Wraps its children in a button that opens the photo library / camera and saves the picked picture
+function PhotoPicker({ onError, className = 'relative shrink-0 rounded-full', children }) {
+  const input = useRef(null)
+  async function picked(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      await savePhoto(await squareJpeg(file))
+    } catch (err) {
+      onError(`Couldn't save the photo: ${err.message}`)
+    }
+  }
+  return (
+    <button type="button" onClick={() => input.current.click()} className={className} aria-label="Change profile photo">
+      {children}
+      <input ref={input} type="file" accept="image/*" onChange={picked} className="hidden" />
+    </button>
+  )
+}
+
+function NameSheet({ name, email, photo, onClose, onSaved }) {
   const [value, setValue] = useState(name)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
@@ -175,7 +191,7 @@ function NameSheet({ name, onClose, onSaved }) {
     setError(null)
     try {
       await saveName(value)
-      onSaved(value.trim())
+      onSaved()
     } catch (err) {
       setError(`Couldn't save: ${err.message}`)
       setBusy(false)
@@ -183,16 +199,35 @@ function NameSheet({ name, onClose, onSaved }) {
   }
 
   return (
-    <Sheet title="Your name" onClose={onClose}>
+    <Sheet title="Edit profile" onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
+        <div className="flex items-center gap-3.5">
+          <Avatar name={value || name} email={email} photo={photo} size={64} />
+          <div className="flex flex-wrap gap-2">
+            <PhotoPicker onError={setError} className="rounded-full bg-cobalt/10 px-3.5 py-2 text-sm font-semibold text-cobalt">
+              {photo ? 'Change photo' : 'Add photo'}
+            </PhotoPicker>
+            {photo && (
+              <button
+                type="button"
+                onClick={() => savePhoto(null).catch((err) => setError(`Couldn't remove the photo: ${err.message}`))}
+                className="rounded-full bg-loss/10 px-3.5 py-2 text-sm font-semibold text-loss"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium text-muted">Name</span>
         <input
-          autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="Your first name"
           autoComplete="given-name"
           className="w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt"
         />
+        </label>
         {error && <p className="text-sm text-loss">{error}</p>}
         <button
           type="submit"
