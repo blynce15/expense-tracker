@@ -136,199 +136,173 @@ export default function Settings({ session }) {
   const pinned = o?.accounts.find((a) => a.id === pinnedId)
 
   return (
-    <div className="space-y-5 pt-2 pb-8">
-      <section className="mx-4 flex items-center gap-3.5 rounded-[24px] bg-card px-4 py-4">
+    <div className="space-y-4 pt-1 pb-8">
+      {/* You: big centered photo (tap to change), name, email, Edit profile */}
+      <section className="flex flex-col items-center px-4 pt-1 text-center">
         <PhotoPicker onError={setError}>
-          <Avatar name={name} email={session.user.email} photo={photo} size={58} />
-          <span className="absolute -right-0.5 -bottom-0.5 grid size-[22px] place-items-center rounded-full bg-card text-cobalt shadow-[0_2px_6px_rgba(11,27,69,0.25)]">
-            <Icon name="camera" size={13} strokeWidth={2.2} />
+          <Avatar name={name} email={session.user.email} photo={photo} size={88} className="shadow-[0_14px_30px_-14px_rgba(11,27,69,0.55)]" />
+          <span className="absolute right-0 bottom-0 grid size-7 place-items-center rounded-full bg-card text-cobalt shadow-[0_2px_8px_rgba(11,27,69,0.25)]">
+            <Icon name="camera" size={15} strokeWidth={2.2} />
           </span>
         </PhotoPicker>
-        <span className="min-w-0 flex-1">
-          <span className={`block truncate font-display text-lg font-bold ${name ? '' : 'text-muted'}`}>{name || 'Add your name'}</span>
-          <span className="block truncate text-sm text-muted">{session.user.email}</span>
-        </span>
-        <button onClick={() => setEditingName(true)} className="shrink-0 rounded-full bg-cobalt/10 px-3.5 py-1.5 text-sm font-semibold text-cobalt">
-          Edit
+        <p className={`mt-3 max-w-full truncate font-display text-[22px] leading-tight font-bold ${name ? '' : 'text-muted'}`}>{name || 'Add your name'}</p>
+        <p className="max-w-full truncate text-sm text-muted">{session.user.email}</p>
+        <button onClick={() => setEditingName(true)} className="mt-2.5 rounded-full bg-cobalt/10 px-4 py-1.5 text-sm font-semibold text-cobalt">
+          Edit profile
         </button>
       </section>
 
-      <Group label="Your money">
-        <Row
+      {/* Your money: four tiles */}
+      <section className="grid grid-cols-2 gap-2.5 px-4">
+        <QuickTile
           onClick={() => navigate('/settings/accounts')}
-          tile={<CardStack accounts={o?.accounts ?? []} />}
-          tileClass="bg-paper"
+          icon={<CardStack accounts={o?.accounts ?? []} />}
+          iconClass="bg-paper"
           title="Accounts & cards"
           sub={o && (o.accounts.length ? `${o.accounts.length} · ${o.accounts.map((a) => a.name).join(', ')}` : 'Add your first account')}
         />
-        <Row
-          onClick={() => setPickingAccount(true)}
-          tile={pinned ? <MiniCard color={pinned.color} type={pinned.type} className="h-7 w-10 rounded-md" iconSize={13} /> : <Icon name="card" />}
-          tileClass={pinned ? 'bg-paper' : undefined}
-          title="Default account"
-          sub={pinnedId === undefined || !o ? ' ' : pinned ? `${pinned.name} · used for new transactions` : 'Last used · changes as you add'}
-        />
-        <Row
-          onClick={() => navigate('/settings/categories')}
-          tile={<Icon name="tag" />}
-          title="Categories"
-          sub={o && `${expenses.length} expense · ${income.length} income  ${expenses.slice(0, 5).map((c) => c.icon).join(' ')}`}
-        />
-        <Row
+        <QuickTile
           onClick={() => navigate('/recurring')}
-          tile={<Icon name="repeat" />}
-          title="Recurring payments"
-          sub={o && (o.payments ? `${o.payments} active · about ${formatCents(o.perMonth).replace(/,\d\d$/, '')} a month` : 'Rent, subscriptions, bills')}
+          icon={<Icon name="repeat" size={19} />}
+          color="#7b3fe4"
+          title="Recurring"
+          sub={o && (o.payments ? `${o.payments} · ${formatCents(o.perMonth).replace(/,\d\d$/, '')} a month` : 'Rent, subscriptions')}
         />
-      </Group>
-
-      <section>
-        <Group label="Budget">
-          <li>
-            <label className="flex items-center gap-3 px-4 py-3">
-              <Tile>
-                <Icon name="calendar" />
-              </Tile>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-semibold">Period starts on</span>
-                <span className="block truncate text-xs text-muted">
-                  {period ? `${formatDayMonth(period.start)} – ${formatDayMonth(period.end)} this time` : ' '}
-                </span>
-              </span>
-              <span className="relative">
-                <select
-                  id="budget-start-day"
-                  value={startDay ?? ''}
-                  disabled={startDay == null}
-                  onChange={(e) => changeStartDay(Number(e.target.value))}
-                  className="appearance-none rounded-xl bg-paper py-2 pr-8 pl-3 text-sm font-bold text-cobalt outline-none"
-                >
-                  {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-                    <option key={d} value={d}>
-                      {ordinal(d)}
-                    </option>
-                  ))}
-                </select>
-                <Icon name="chevronDown" size={16} strokeWidth={2.4} className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-cobalt" />
-              </span>
-            </label>
-          </li>
-        </Group>
-        {error && <p className="px-5 pt-2 text-sm text-loss">{error}</p>}
-        <p className="px-5 pt-2 text-xs text-muted">
-          Set this to your payday. Your budget is the money in bank and cash accounts, so moving money to savings lowers it. Savings and
-          credit cards are left out.
-          {startDay > 28 && ' In shorter months the period starts on the last day of the month.'}
-        </p>
+        <QuickTile
+          onClick={() => navigate('/settings/categories')}
+          icon={<Icon name="tag" size={19} />}
+          color="#12a150"
+          title="Categories"
+          sub={o && `${expenses.length} expense · ${income.length} income`}
+        />
+        <QuickTile
+          onClick={() => setPickingAccount(true)}
+          icon={pinned ? <MiniCard color={pinned.color} type={pinned.type} className="h-6 w-9 rounded-md" iconSize={12} /> : <Icon name="card" size={19} />}
+          color={pinned ? null : '#2b8ef7'}
+          iconClass={pinned ? 'bg-paper' : ''}
+          title="Default account"
+          sub={pinnedId === undefined || !o ? ' ' : pinned ? pinned.name : 'Last used'}
+        />
       </section>
 
-      <Group label="Appearance">
-        <li className="px-4 py-3">
-          <div className="flex items-center gap-3">
-          <Tile>
-            <Icon name={theme === 'dark' ? 'moon' : theme === 'system' ? 'phone' : 'sun'} />
-          </Tile>
+      {/* Budget day */}
+      <section className="px-4">
+        <div className="relative flex items-center gap-3 rounded-[22px] bg-card px-4 py-3">
+          <ColorTile color="#f08c00" icon="calendar" />
           <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-semibold">Theme</span>
-            <span className="block truncate text-xs text-muted">{theme === 'system' ? 'Follows your iPhone' : theme === 'dark' ? 'Always dark' : 'Always light'}</span>
+            <span className="block text-[15px] font-semibold">Budget starts on</span>
+            <span className="block truncate text-xs text-muted">
+              {period ? `${formatDayMonth(period.start)} – ${formatDayMonth(period.end)} this time` : ' '}
+            </span>
           </span>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-paper p-1" role="radiogroup" aria-label="Theme">
-            {[
-              ['light', 'Light', 'sun'],
-              ['dark', 'Dark', 'moon'],
-              ['system', 'Auto', 'phone'],
-            ].map(([value, label, icon]) => (
-              <button
-                key={value}
-                role="radio"
-                aria-checked={theme === value}
-                onClick={() => {
-                  setTheme(value)
-                  setThemeState(value)
-                }}
-                className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
-                  theme === value ? 'bg-card text-cobalt shadow-[0_4px_12px_-6px_rgba(11,27,69,0.4)]' : 'text-muted'
-                }`}
-              >
-                <Icon name={icon} size={16} strokeWidth={2.2} />
-                {label}
-              </button>
+          <span className="flex items-center gap-1 text-[15px] font-semibold text-muted">
+            {startDay ? ordinal(startDay) : ''}
+            <Icon name="chevronRight" size={17} className="text-muted/60" />
+          </span>
+          {/* The whole row opens the day picker */}
+          <select
+            id="budget-start-day"
+            aria-label="Budget starts on"
+            value={startDay ?? ''}
+            disabled={startDay == null}
+            onChange={(e) => changeStartDay(Number(e.target.value))}
+            className="absolute inset-0 cursor-pointer opacity-0"
+          >
+            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+              <option key={d} value={d}>
+                {ordinal(d)}
+              </option>
             ))}
-          </div>
-        </li>
-      </Group>
+          </select>
+        </div>
+        <p className="px-2 pt-1.5 text-xs text-muted">
+          Your payday. The budget is the money in bank and cash accounts.
+          {startDay > 28 && ' Short months start on their last day.'}
+        </p>
+        {error && <p className="px-2 pt-1.5 text-sm text-loss">{error}</p>}
+      </section>
 
-      <section>
-        <Group label="Notifications">
+      {/* Appearance: three little previews of the app */}
+      <TopicCard icon="sun" color="#f08c00" title="Appearance">
+        <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="Theme">
+          {[
+            ['light', 'Light'],
+            ['dark', 'Dark'],
+            ['system', 'Auto'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              role="radio"
+              aria-checked={theme === value}
+              onClick={() => {
+                setTheme(value)
+                setThemeState(value)
+              }}
+              className={`flex flex-col items-center gap-1.5 rounded-2xl p-1.5 text-[13px] font-semibold ring-2 transition-colors ${
+                theme === value ? 'text-cobalt ring-cobalt' : 'text-muted ring-transparent'
+              }`}
+            >
+              <ThemePreview kind={value} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </TopicCard>
+
+      {/* Notifications & security */}
+      <TopicCard icon="bell" color="#e64980" title="Notifications & security">
+        <ul className="divide-y divide-line overflow-hidden rounded-[18px] bg-paper">
           {pushSupported() ? (
             <>
               <SwitchRow
+                color="#e64980"
                 icon="bell"
                 title="Payment reminders"
-                sub={reminders ? 'The morning before a payment is due' : 'A notification the day before each payment'}
+                sub={reminders ? 'The morning before it’s due' : 'The day before each payment'}
                 on={!!reminders}
                 onToggle={toggleReminders}
               />
-              {reminders && <Row onClick={testReminder} tile={<Icon name="bell" />} title="Send a test notification" />}
+              {reminders && <Row onClick={testReminder} tile={<ColorTile color="#e64980" icon="bell" soft />} title="Send a test notification" />}
             </>
           ) : (
             <Row
-              tile={<Icon name="bell" />}
-              tileClass="bg-paper text-muted"
+              tile={<ColorTile color="#8892a6" icon="bell" />}
               title="Payment reminders"
               sub={isStandalone() ? 'Needs iOS 16.4 or newer' : 'Open the app from your Home Screen to turn these on'}
             />
           )}
-        </Group>
-        {reminderNote && <p className="px-5 pt-2 text-sm text-muted">{reminderNote}</p>}
-      </section>
+          <SwitchRow
+            color="#0c8599"
+            icon="lock"
+            title="App lock"
+            sub={lock ? (lock.credentialId ? 'Face ID or PIN · every time you leave' : 'PIN · every time you leave') : 'Ask for Face ID or a PIN to open'}
+            on={!!lock}
+            onToggle={() => setPinFlow(lock ? 'disable' : 'enable')}
+          />
+          {lock && faceIdSupported() && (
+            <SwitchRow color="#12a150" faceId title="Face ID" sub={lock.credentialId ? 'On for this iPhone' : 'Unlock with a glance'} on={!!lock.credentialId} onToggle={toggleFaceId} />
+          )}
+          {lock && <Row onClick={() => setPinFlow('change')} tile={<ColorTile color="#8892a6" icon="pencil" />} title="Change PIN" />}
+        </ul>
+        {reminderNote && <p className="px-1 text-sm text-muted">{reminderNote}</p>}
+      </TopicCard>
 
-      <Group label="Security">
-        <SwitchRow
-          icon="lock"
-          title="App lock"
-          sub={lock ? (lock.credentialId ? 'Face ID or PIN · locks every time you leave' : 'PIN · locks every time you leave') : 'Ask for Face ID or a PIN to open the app'}
-          on={!!lock}
-          onToggle={() => setPinFlow(lock ? 'disable' : 'enable')}
+      {/* Sign out, Delete all data */}
+      <ul className="mx-4 divide-y divide-line overflow-hidden rounded-[22px] bg-card">
+        <Row onClick={() => supabase.auth.signOut()} tile={<ColorTile color="#8892a6" icon="logout" />} title="Sign out" plain />
+        <Row
+          onClick={() => setDeleting(true)}
+          tile={<ColorTile color="#d9452b" icon="trash" />}
+          title={<span className="text-loss">Delete all data</span>}
+          sub="Erase everything and start over"
         />
-        {lock && faceIdSupported() && (
-          <SwitchRow faceId title="Face ID" sub={lock.credentialId ? 'On for this iPhone' : 'Unlock with a glance'} on={!!lock.credentialId} onToggle={toggleFaceId} />
-        )}
-        {lock && <Row onClick={() => setPinFlow('change')} tile={<Icon name="pencil" />} title="Change PIN" />}
-      </Group>
+      </ul>
 
-      <div className="px-4">
-        <button onClick={() => supabase.auth.signOut()} className="w-full rounded-[20px] bg-card py-3.5 text-[15px] font-semibold text-loss">
-          Sign out
-        </button>
-      </div>
-
-      <Group label="Danger zone">
-        <li>
-          <button onClick={() => setDeleting(true)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-            <Tile className="bg-loss/10 text-loss">
-              <Icon name="trash" />
-            </Tile>
-            <span className="min-w-0 flex-1">
-              <span className="block text-[15px] font-semibold text-loss">Delete all data</span>
-              <span className="block truncate text-xs text-muted">Erase everything and start over</span>
-            </span>
-            <Icon name="chevronRight" size={18} className="shrink-0 text-muted/60" />
-          </button>
-        </li>
-      </Group>
+      <p className="pt-1 text-center text-xs text-muted">Expense Tracker · your data is private to your login</p>
 
       {deleting && <DeleteAllData onClose={() => setDeleting(false)} />}
 
-      {pinFlow && (
-        <PinSheet
-          flow={pinFlow}
-          canFaceId={faceIdSupported()}
-          onFaceId={toggleFaceId}
-          onClose={() => setPinFlow(null)}
-        />
-      )}
+      {pinFlow && <PinSheet flow={pinFlow} canFaceId={faceIdSupported()} onFaceId={toggleFaceId} onClose={() => setPinFlow(null)} />}
 
       {pickingAccount && o && (
         <DefaultAccountSheet accounts={o.accounts} pinnedId={pinned ? pinnedId : null} onPick={changeDefaultAccount} onClose={() => setPickingAccount(false)} />
@@ -337,13 +311,71 @@ export default function Settings({ session }) {
       {editingName && (
         <NameSheet name={name} email={session.user.email} photo={photo} onClose={() => setEditingName(false)} onSaved={() => setEditingName(false)} />
       )}
-
-      <div className="flex flex-col items-center gap-1 pt-2 text-center">
-        <img src="/logo.png" alt="" className="size-14" />
-        <p className="text-sm font-semibold">Expense Tracker</p>
-        <p className="text-xs text-muted">Your data is private to your login</p>
-      </div>
     </div>
+  )
+}
+
+// One of the four "Your money" tiles
+function QuickTile({ onClick, icon, color, iconClass = '', title, sub }) {
+  return (
+    <button onClick={onClick} className="flex min-w-0 flex-col items-start gap-2.5 rounded-[22px] bg-card p-3.5 text-left active:scale-[.98]">
+      <span
+        className={`grid size-9 place-items-center rounded-xl ${iconClass}`}
+        style={color ? { backgroundColor: `${color}1f`, color } : undefined}
+      >
+        {icon}
+      </span>
+      <span className="w-full min-w-0">
+        <span className="block truncate text-[15px] font-semibold">{title}</span>
+        <span className="block min-h-4 truncate text-xs text-muted">{sub}</span>
+      </span>
+    </button>
+  )
+}
+
+// A card for one topic, with a small coloured header
+function TopicCard({ icon, color, title, children }) {
+  return (
+    <section className="mx-4 space-y-3 rounded-[24px] bg-card p-3.5">
+      <p className="flex items-center gap-2 px-0.5 text-[15px] font-bold">
+        <span className="grid size-7 place-items-center rounded-lg" style={{ backgroundColor: `${color}1f`, color }}>
+          <Icon name={icon} size={15} strokeWidth={2.2} />
+        </span>
+        {title}
+      </p>
+      {children}
+    </section>
+  )
+}
+
+// Tiny picture of the app in light, dark, or half and half (Auto)
+function ThemePreview({ kind }) {
+  const light = { bg: '#f4f7fd', bar: '#1f4fe0', line: '#dce4f5', card: '#ffffff' }
+  const dark = { bg: '#0a1022', bar: '#4c7dff', line: '#26325a', card: '#151e3b' }
+  const page = (c) => (
+    <span className="flex h-full flex-1 flex-col gap-1 p-1.5" style={{ background: c.bg }}>
+      <span className="h-2 w-3/5 rounded-sm" style={{ background: c.bar }} />
+      <span className="h-4 rounded" style={{ background: c.card }} />
+      <span className="h-1.5 w-4/5 rounded-sm" style={{ background: c.line }} />
+    </span>
+  )
+  return (
+    <span className="flex h-16 w-full overflow-hidden rounded-xl ring-1 ring-line">
+      {kind === 'dark' ? page(dark) : page(light)}
+      {kind === 'system' && page(dark)}
+    </span>
+  )
+}
+
+// Solid coloured icon square (soft = pale version)
+function ColorTile({ color, icon, faceId, soft }) {
+  return (
+    <span
+      className="grid size-8 shrink-0 place-items-center rounded-[10px]"
+      style={soft ? { backgroundColor: `${color}1f`, color } : { backgroundColor: color, color: '#fff' }}
+    >
+      {faceId ? <FaceIdIcon size={18} strokeWidth={3} /> : <Icon name={icon} size={17} strokeWidth={2.1} />}
+    </span>
   )
 }
 
@@ -377,11 +409,11 @@ function PhotoPicker({ onError, className = 'relative shrink-0 rounded-full', ch
 }
 
 // A row with an on/off switch on the right
-function SwitchRow({ icon, faceId, title, sub, on, onToggle }) {
+function SwitchRow({ color, icon, faceId, title, sub, on, onToggle }) {
   return (
     <li>
-      <button onClick={onToggle} role="switch" aria-checked={on} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-        <Tile>{faceId ? <FaceIdIcon size={22} strokeWidth={3} /> : <Icon name={icon} />}</Tile>
+      <button onClick={onToggle} role="switch" aria-checked={on} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left">
+        <ColorTile color={color} icon={icon} faceId={faceId} />
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-semibold">{title}</span>
           <span className="block truncate text-xs text-muted">{sub}</span>
@@ -572,39 +604,26 @@ function NameSheet({ name, email, photo, onClose, onSaved }) {
   )
 }
 
-function Group({ label, children }) {
-  return (
-    <section>
-      <h2 className="px-5 pb-1.5 text-xs font-semibold tracking-wider text-muted uppercase">{label}</h2>
-      <ul className="mx-4 divide-y divide-line overflow-hidden rounded-[22px] bg-card">{children}</ul>
-    </section>
-  )
-}
-
-function Tile({ className = 'bg-cobalt/10 text-cobalt', children }) {
-  return <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${className}`}>{children}</span>
-}
-
-// A settings row; tappable when it has onClick
-function Row({ onClick, tile, tileClass, title, sub }) {
+// A settings row; tappable when it has onClick (plain = no arrow)
+function Row({ onClick, tile, title, sub, plain }) {
   const inner = (
     <>
-      <Tile className={tileClass}>{tile}</Tile>
+      {tile}
       <span className="min-w-0 flex-1">
         <span className="block text-[15px] font-semibold">{title}</span>
         {sub !== undefined && <span className="block min-h-4 truncate text-xs text-muted">{sub}</span>}
       </span>
-      {onClick && <Icon name="chevronRight" size={18} className="shrink-0 text-muted/60" />}
+      {onClick && !plain && <Icon name="chevronRight" size={18} className="shrink-0 text-muted/60" />}
     </>
   )
   return (
     <li>
       {onClick ? (
-        <button onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        <button onClick={onClick} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left">
           {inner}
         </button>
       ) : (
-        <div className="flex items-center gap-3 px-4 py-3">{inner}</div>
+        <div className="flex items-center gap-3 px-3.5 py-2.5">{inner}</div>
       )}
     </li>
   )
