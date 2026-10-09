@@ -46,26 +46,25 @@ export default function LockScreen({ email, onUnlock }) {
       aria-modal="true"
       aria-label="App locked"
     >
-      <span className="pointer-events-none absolute top-[12%] left-1/2 size-[420px] -translate-x-1/2 rounded-full border border-white/[.12]" />
-      <span className="pointer-events-none absolute top-[calc(12%+60px)] left-1/2 size-[300px] -translate-x-1/2 rounded-full border border-white/[.18]" />
-
       {mode === 'face' ? (
         <div className="relative flex w-full max-w-sm flex-1 flex-col items-center px-6 pt-[calc(env(safe-area-inset-top)+20px)] pb-[calc(env(safe-area-inset-bottom)+28px)]">
-          <img src="/logo-white.png" alt="" className="mb-3 size-16" />
-          <span className="flex items-center gap-1.5 rounded-full bg-white/[.14] px-3 py-1.5 text-xs font-bold">
-            <LockGlyph /> LynxOS
-          </span>
+          <Brand />
           <div className="flex-1" />
-          <Avatar
-            name={name}
-            email={email}
-            photo={photo}
-            size={110}
-            className="shadow-[0_0_0_6px_rgba(255,255,255,0.22),0_24px_44px_-16px_rgba(5,20,80,0.8)]"
-          />
-          <p className="mt-5 font-display text-[28px] font-extrabold tracking-tight">Welcome back</p>
+          {/* Photo with two soft rings centred on it */}
+          <div className="relative grid place-items-center">
+            <span className="pointer-events-none absolute size-[230px] rounded-full border border-white/[.18]" />
+            <span className="pointer-events-none absolute size-[330px] rounded-full border border-white/[.10]" />
+            <Avatar
+              name={name}
+              email={email}
+              photo={photo}
+              size={116}
+              className="shadow-[0_0_0_6px_rgba(255,255,255,0.22),0_24px_44px_-16px_rgba(5,20,80,0.8)]"
+            />
+          </div>
+          <p className="mt-8 font-display text-[28px] font-extrabold tracking-tight">Welcome back</p>
           {name && <p className="text-base text-white/75">{name}</p>}
-          <div className="flex-[1.3]" />
+          <div className="flex-1" />
           {message && <p className="mb-3 text-center text-sm text-white/85">{message}</p>}
           <button
             onClick={faceId}
@@ -80,7 +79,8 @@ export default function LockScreen({ email, onUnlock }) {
         </div>
       ) : (
         <div className="relative flex w-full max-w-sm flex-1 flex-col items-center px-6 pt-[calc(env(safe-area-inset-top)+28px)] pb-[calc(env(safe-area-inset-bottom)+20px)]">
-          <Avatar name={name} email={email} photo={photo} size={64} className="shadow-[0_0_0_4px_rgba(255,255,255,0.2)]" />
+          <Brand small />
+          <Avatar name={name} email={email} photo={photo} size={56} className="mt-4 shadow-[0_0_0_4px_rgba(255,255,255,0.2)]" />
           <p className="mt-3 mb-5 font-display text-lg font-extrabold">Enter your PIN</p>
           <PinPad
             dark
@@ -100,6 +100,18 @@ export default function LockScreen({ email, onUnlock }) {
           </button>
         </div>
       )}
+    </div>
+  )
+}
+
+// The white lynx with the LynxOS name under it, at the top of the lock screen
+function Brand({ small }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <img src="/logo-white.png" alt="" className={small ? 'size-10' : 'size-14'} />
+      <span className={`flex items-center gap-1 font-display font-extrabold tracking-tight text-white/90 ${small ? 'text-[13px]' : 'text-[15px]'}`}>
+        <LockGlyph /> LynxOS
+      </span>
     </div>
   )
 }
