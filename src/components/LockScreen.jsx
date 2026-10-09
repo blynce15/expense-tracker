@@ -46,22 +46,25 @@ export default function LockScreen({ email, onUnlock }) {
       aria-modal="true"
       aria-label="App locked"
     >
-      {/* A large, faint lynx behind everything, plus a soft glow behind the photo */}
-      <img src="/logo-white.png" alt="" className="pointer-events-none absolute top-[14%] left-1/2 size-[440px] max-w-none -translate-x-[46%] opacity-[.07]" />
-      <span className="pointer-events-none absolute top-[24%] left-1/2 size-72 -translate-x-1/2 rounded-full bg-white/[.10] blur-3xl" />
+      <span className="pointer-events-none absolute top-[12%] left-1/2 size-[420px] -translate-x-1/2 rounded-full border border-white/[.12]" />
+      <span className="pointer-events-none absolute top-[calc(12%+60px)] left-1/2 size-[300px] -translate-x-1/2 rounded-full border border-white/[.18]" />
 
       {mode === 'face' ? (
         <div className="relative flex w-full max-w-sm flex-1 flex-col items-center px-6 pt-[calc(env(safe-area-inset-top)+20px)] pb-[calc(env(safe-area-inset-bottom)+28px)]">
-          <BrandTag />
-          <div className="flex-1" />
-          <span className="rounded-full bg-white/15 p-1.5 ring-1 ring-white/25 backdrop-blur-sm">
-            <Avatar name={name} email={email} photo={photo} size={112} className="shadow-[0_24px_44px_-16px_rgba(5,20,80,0.8)]" />
+          <span className="flex items-center gap-1.5 rounded-full bg-white/[.14] px-3 py-1.5 text-xs font-bold">
+            <LockGlyph /> LynxOS
           </span>
-          <p className="mt-6 text-[15px] font-semibold text-white/75">{greeting()}</p>
-          <p className="max-w-full truncate font-display text-[32px] leading-tight font-extrabold tracking-tight">{name || 'Welcome back'}</p>
-          <p className="mt-2 flex items-center gap-1.5 text-[13px] text-white/60">
-            <LockGlyph /> Locked
-          </p>
+          <div className="flex-1" />
+          <img src="/logo-white.png" alt="LynxOS" className="mb-5 size-16" />
+          <Avatar
+            name={name}
+            email={email}
+            photo={photo}
+            size={110}
+            className="shadow-[0_0_0_6px_rgba(255,255,255,0.22),0_24px_44px_-16px_rgba(5,20,80,0.8)]"
+          />
+          <p className="mt-5 font-display text-[28px] font-extrabold tracking-tight">Welcome back</p>
+          {name && <p className="text-base text-white/75">{name}</p>}
           <div className="flex-[1.3]" />
           {message && <p className="mb-3 text-center text-sm text-white/85">{message}</p>}
           <button
@@ -71,17 +74,13 @@ export default function LockScreen({ email, onUnlock }) {
             <FaceIdIcon size={22} strokeWidth={3.4} />
             Unlock with Face ID
           </button>
-          <button onClick={() => setMode('pin')} className="mt-3 px-4 py-2 text-[15px] font-bold text-white/85">
+          <button onClick={() => setMode('pin')} className="mt-4 px-4 py-2 text-[15px] font-bold text-white/85">
             Use PIN
           </button>
-          <p className="mt-2 text-xs text-white/45">Your data stays private</p>
         </div>
       ) : (
         <div className="relative flex w-full max-w-sm flex-1 flex-col items-center px-6 pt-[calc(env(safe-area-inset-top)+28px)] pb-[calc(env(safe-area-inset-bottom)+20px)]">
-          <BrandTag />
-          <span className="mt-5 rounded-full bg-white/15 p-1 ring-1 ring-white/25">
-            <Avatar name={name} email={email} photo={photo} size={60} />
-          </span>
+          <Avatar name={name} email={email} photo={photo} size={64} className="shadow-[0_0_0_4px_rgba(255,255,255,0.2)]" />
           <p className="mt-3 mb-5 font-display text-lg font-extrabold">Enter your PIN</p>
           <PinPad
             dark
@@ -102,22 +101,6 @@ export default function LockScreen({ email, onUnlock }) {
         </div>
       )}
     </div>
-  )
-}
-
-// "Good morning" / "Good afternoon" / "Good evening"
-function greeting() {
-  const h = new Date().getHours()
-  return h < 5 ? 'Good evening' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
-}
-
-// The white lynx with LynxOS, at the top of the lock screen
-function BrandTag() {
-  return (
-    <span className="flex items-center gap-1.5 rounded-full bg-white/[.14] py-1.5 pr-3.5 pl-2 text-[13px] font-extrabold tracking-tight ring-1 ring-white/15 backdrop-blur-sm">
-      <img src="/logo-white.png" alt="" className="size-5" />
-      LynxOS
-    </span>
   )
 }
 
