@@ -345,7 +345,7 @@ function BudgetCard({ budget, hidden }) {
       <section className="px-4">
         <button
           onClick={() => navigate('/settings/accounts')}
-          className="relative w-full overflow-hidden rounded-[24px] bg-gradient-to-br from-[#eef3ff] to-[#dce6ff] p-4 text-left"
+          className="relative w-full overflow-hidden rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to p-4 text-left"
         >
           <span className="flex items-center gap-2 font-semibold">
             <Icon name="calendar" size={18} className="text-cobalt" />
@@ -381,14 +381,14 @@ function BudgetCard({ budget, hidden }) {
 
   return (
     <section className="px-4">
-      <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#eef3ff] to-[#dce6ff] px-4 pt-3 pb-2.5 shadow-[0_16px_30px_-22px_rgba(31,79,224,0.7)]">
+      <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to px-4 pt-3 pb-2.5 shadow-[0_16px_30px_-22px_rgba(31,79,224,0.7)]">
         <div className="flex items-center justify-between gap-2">
           <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-muted">
             <Icon name="calendar" size={15} className="shrink-0 text-cobalt" />
             {day ? `On ${shortDate(dateOf(period.start, day))} you spent` : 'Left to spend'}
           </p>
           {budgetCents > 0 && (
-            <span className={`shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-bold ${diff > 0 ? 'text-loss' : 'text-gain'}`}>
+            <span className={`shrink-0 rounded-full bg-card px-2 py-0.5 text-xs font-bold ${diff > 0 ? 'text-loss' : 'text-gain'}`}>
               {diff > 0 ? `▲ ${money(diff)} over pace` : `▼ ${money(-diff)} under pace`}
             </span>
           )}
@@ -420,7 +420,7 @@ function BudgetCard({ budget, hidden }) {
             const future = d > today
             const cents = daily[i] ?? 0
             const h = future ? 3 : barH(cents)
-            const fill = future ? '#1f4fe0' : d === (day ?? today) ? '#0b1b45' : cents > dailyBudget ? '#f08c00' : '#1f4fe0'
+            const fill = future ? '#1f4fe0' : d === (day ?? today) ? 'var(--color-ink)' : cents > dailyBudget ? '#f08c00' : '#1f4fe0'
             return (
               <rect
                 key={d}
@@ -435,7 +435,7 @@ function BudgetCard({ budget, hidden }) {
             )
           })}
           {budgetCents > 0 && (
-            <line x1="0" x2={W} y1={budgetY} y2={budgetY} stroke="#0b1b45" strokeOpacity=".35" strokeWidth="1" strokeDasharray="3 3" />
+            <line x1="0" x2={W} y1={budgetY} y2={budgetY} stroke="var(--color-ink)" strokeOpacity=".35" strokeWidth="1" strokeDasharray="3 3" />
           )}
         </svg>
         <div className="mt-1 flex justify-between text-[10px] leading-none text-muted">
@@ -488,7 +488,7 @@ function ComingUp({ payments, onPay, onOpen }) {
               <li key={p.id} className="flex items-center gap-3 border-b border-line pr-4 last:border-0">
                 <button onClick={() => onOpen(p)} className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-4 text-left">
                   <span
-                    className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${due ? 'bg-[#0d0f14] text-white' : 'bg-paper'}`}
+                    className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${due ? 'bg-ink text-paper' : 'bg-paper'}`}
                   >
                     <span className="text-[9px] font-bold tracking-wider uppercase opacity-70">{days === 0 ? 'Today' : days < 0 ? 'Late' : month}</span>
                     <span className="font-display text-base leading-none font-bold">{d}</span>

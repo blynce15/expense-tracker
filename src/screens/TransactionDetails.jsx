@@ -101,7 +101,7 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
   const amountText =
     tx.type === 'expense' ? formatCents(-tx.amount_cents) : tx.type === 'income' ? `+${formatCents(tx.amount_cents)}` : formatCents(tx.amount_cents)
   const amountColor = tx.type === 'income' ? 'text-gain' : isTransfer ? 'text-muted' : 'text-ink'
-  const iconBg = isTransfer ? '#dce4f5' : `${category?.color ?? '#868e96'}22`
+  const iconBg = isTransfer ? 'var(--color-line)' : `${category?.color ?? '#868e96'}22`
 
   const accountValue = (id) => (
     <>
@@ -124,7 +124,7 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
     <div className="relative">
       <button
         onClick={() => setMode(mode === 'menu' ? 'view' : 'menu')}
-        className={`grid size-10 place-items-center rounded-full ${mode === 'menu' ? 'bg-ink text-white' : 'bg-card text-ink'}`}
+        className={`grid size-10 place-items-center rounded-full ${mode === 'menu' ? 'bg-ink text-paper' : 'bg-card text-ink'}`}
         aria-label="More options"
         aria-expanded={mode === 'menu'}
       >

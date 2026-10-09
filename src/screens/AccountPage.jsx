@@ -47,7 +47,7 @@ export default function AccountPage({ account, monthFlow, lookups, hidden, onTog
   }
 
   return (
-    <div className="fixed inset-0 z-[25] overflow-y-auto bg-ink motion-safe:animate-[page-in_260ms_cubic-bezier(.2,.8,.2,1)]">
+    <div className="fixed inset-0 z-[25] overflow-y-auto bg-navy motion-safe:animate-[page-in_260ms_cubic-bezier(.2,.8,.2,1)]">
       <div className="pt-[env(safe-area-inset-top)]">
         <header className="flex h-14 items-center px-2 text-white">
           <button onClick={onClose} className="grid size-11 place-items-center rounded-full" aria-label="Back">

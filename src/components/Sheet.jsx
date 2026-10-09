@@ -16,7 +16,7 @@ export default function Sheet({ title, onClose, onBack, action, tall = false, ch
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="absolute inset-0 bg-ink/40" onClick={onClose} />
+      <div className="absolute inset-0 bg-navy/50" onClick={onClose} />
       <div className={`relative flex max-h-[92dvh] ${tall ? 'h-[92dvh]' : ''} w-full max-w-lg flex-col rounded-t-3xl bg-paper pb-[env(safe-area-inset-bottom)] motion-safe:animate-[sheet-up_220ms_ease-out]`}>
         <div className={`flex items-center gap-2 pt-4 pb-2 ${onBack ? 'pr-5 pl-2' : 'px-5'}`}>
           {onBack && (

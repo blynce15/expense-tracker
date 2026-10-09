@@ -13,6 +13,57 @@
   --color-cobalt-deep: #1638a8;
   --color-gain: #0f8a5f;
   --color-loss: #c23b22;
+  /* Light-blue cards (budget, savings chart), the active tab bubble, cream tags */
+  --color-tint-from: #eef3ff;
+  --color-tint-to: #dce6ff;
+  --color-bubble: #e3ebff;
+  --color-warn-bg: #fff1d6;
+  --color-warn: #a35f00;
+  --color-orange-text: #c26b00;
+  /* Always-dark surfaces (account page top, dimmed backdrops) */
+  --color-navy: #0b1b45;
+}
+
+/* Dark mode: chosen in Profile → Appearance (data-theme set in index.html before the app draws) */
+:root[data-theme='dark'] {
+  --color-paper: #0a1022;
+  --color-card: #151e3b;
+  --color-ink: #e8eeff;
+  --color-muted: #94a3c4;
+  --color-line: #26325a;
+  --color-cobalt: #4c7dff;
+  --color-cobalt-deep: #2f5fe8;
+  --color-gain: #3ccf8e;
+  --color-loss: #ff6b55;
+  --color-tint-from: #17234a;
+  --color-tint-to: #1d2d62;
+  --color-bubble: #24366f;
+  --color-warn-bg: #3a2a0e;
+  --color-warn: #ffb84d;
+  --color-orange-text: #ffa94d;
+  --color-navy: #070d24;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    --color-paper: #0a1022;
+    --color-card: #151e3b;
+    --color-ink: #e8eeff;
+    --color-muted: #94a3c4;
+    --color-line: #26325a;
+    --color-cobalt: #4c7dff;
+    --color-cobalt-deep: #2f5fe8;
+    --color-gain: #3ccf8e;
+    --color-loss: #ff6b55;
+    --color-tint-from: #17234a;
+    --color-tint-to: #1d2d62;
+    --color-bubble: #24366f;
+    --color-warn-bg: #3a2a0e;
+    --color-warn: #ffb84d;
+    --color-orange-text: #ffa94d;
+    --color-navy: #070d24;
+    color-scheme: dark;
+  }
 }
 
 html,

@@ -230,7 +230,7 @@ function AccountForm({ account, onClose, onSaved }) {
                   type="button"
                   onClick={() => setNegative(neg)}
                   aria-pressed={negative === neg}
-                  className={`w-16 text-sm font-medium ${negative === neg ? 'bg-ink text-white' : 'text-muted'}`}
+                  className={`w-16 text-sm font-medium ${negative === neg ? 'bg-ink text-paper' : 'text-muted'}`}
                 >
                   {neg ? (isCredit ? 'Owed' : '−') : isCredit ? 'Credit' : '+'}
                 </button>

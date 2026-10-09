@@ -3,6 +3,7 @@ import { TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
 import LockScreen from './components/LockScreen'
 import { lockSettings, shouldLockOnLeave } from './lib/applock'
+import './lib/theme'
 import { formatTodayLabel } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
 import { activeFilterCount, EMPTY_FILTER } from './lib/filters'
@@ -87,7 +88,7 @@ function App() {
     <div className="min-h-full pb-[calc(6rem+max(env(safe-area-inset-bottom),12px))]">
       <TopBar title={screen.title} back={screen.back} action={screen.action} center={screen.center} email={session.user.email} />
       {!online && (
-        <p role="status" className="mx-4 mb-2 rounded-xl bg-ink px-4 py-2.5 text-sm text-white">
+        <p role="status" className="mx-4 mb-2 rounded-xl bg-ink px-4 py-2.5 text-sm text-paper">
           You're offline. Your data will load again when you're back online.
         </p>
       )}

@@ -12,6 +12,7 @@ import { formatCents } from '../lib/money'
 import { fetchProfile, saveDefaultAccount, saveName, savePhoto, saveProfile, squareJpeg } from '../lib/profile'
 import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
+import { getTheme, setTheme } from '../lib/theme'
 import { navigate } from '../lib/useRoute'
 
 // 1 → "1st", 22 → "22nd"
@@ -27,6 +28,7 @@ export default function Settings({ session }) {
   const [pinnedId, setPinnedId] = useState(undefined) // undefined while loading, null = last used
   const [pickingAccount, setPickingAccount] = useState(false)
   const [lock, setLock] = useState(lockSettings)
+  const [theme, setThemeState] = useState(getTheme)
   const [pinFlow, setPinFlow] = useState(null) // null | 'enable' | 'change' | 'disable'
 
   useEffect(() => {
@@ -187,6 +189,43 @@ export default function Settings({ session }) {
           {startDay > 28 && ' In shorter months the period starts on the last day of the month.'}
         </p>
       </section>
+
+      <Group label="Appearance">
+        <li className="px-4 py-3">
+          <div className="flex items-center gap-3">
+          <Tile>
+            <Icon name={theme === 'dark' ? 'moon' : theme === 'system' ? 'phone' : 'sun'} />
+          </Tile>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Theme</span>
+            <span className="block truncate text-xs text-muted">{theme === 'system' ? 'Follows your iPhone' : theme === 'dark' ? 'Always dark' : 'Always light'}</span>
+          </span>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-paper p-1" role="radiogroup" aria-label="Theme">
+            {[
+              ['light', 'Light', 'sun'],
+              ['dark', 'Dark', 'moon'],
+              ['system', 'Auto', 'phone'],
+            ].map(([value, label, icon]) => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={theme === value}
+                onClick={() => {
+                  setTheme(value)
+                  setThemeState(value)
+                }}
+                className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-sm font-semibold transition-colors ${
+                  theme === value ? 'bg-card text-cobalt shadow-[0_4px_12px_-6px_rgba(11,27,69,0.4)]' : 'text-muted'
+                }`}
+              >
+                <Icon name={icon} size={16} strokeWidth={2.2} />
+                {label}
+              </button>
+            ))}
+          </div>
+        </li>
+      </Group>
 
       <Group label="Security">
         <SwitchRow

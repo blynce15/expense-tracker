@@ -16,7 +16,7 @@ export default function TransactionRow({ t, category, accountName }) {
     <>
       <span
         className="grid size-10 shrink-0 place-items-center rounded-xl text-lg"
-        style={{ backgroundColor: isTransfer ? '#dce4f5' : `${category?.color ?? '#868e96'}22` }}
+        style={{ backgroundColor: isTransfer ? 'var(--color-line)' : `${category?.color ?? '#868e96'}22` }}
       >
         {isTransfer ? '⇄' : category?.icon}
       </span>

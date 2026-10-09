@@ -676,7 +676,7 @@ function CategoriesStep({ categories, setCategories, kind, setKind, form, setFor
           >
             <span
               className="relative grid size-10 shrink-0 place-items-center rounded-xl text-lg"
-              style={{ backgroundColor: c.selected ? `${c.color ?? '#868e96'}1f` : '#eef2fa' }}
+              style={{ backgroundColor: c.selected ? `${c.color ?? '#868e96'}1f` : 'var(--color-paper)' }}
             >
               <span className={c.selected ? '' : 'opacity-40 grayscale'}>{c.icon}</span>
               {c.selected && (
@@ -817,7 +817,7 @@ function DateBlock({ iso, dark }) {
   const [, m, d] = iso.split('-').map(Number)
   const month = new Date(2000, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' }).replace('Sept', 'Sep')
   return (
-    <span className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${dark ? 'bg-[#0d0f14] text-white' : 'bg-paper'}`}>
+    <span className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${dark ? 'bg-ink text-paper' : 'bg-paper'}`}>
       <span className="text-[9px] font-bold tracking-wider uppercase opacity-70">{month}</span>
       <span className="font-display text-base leading-none font-bold">{d}</span>
     </span>

@@ -69,7 +69,7 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
       ? { text: dueLabel(p.next_due), cls: 'bg-loss/10 text-loss' }
       : days === 0
         ? { text: 'Due today', cls: 'bg-cobalt/10 text-cobalt' }
-        : { text: days === 1 ? 'Tomorrow' : `In ${days} days`, cls: 'bg-[#fff1d6] text-[#a35f00]' }
+        : { text: days === 1 ? 'Tomorrow' : `In ${days} days`, cls: 'bg-warn-bg text-warn' }
   const [whole, decimals] = formatCents(p.amount_cents).split(',')
   const sameYear = p.next_due.slice(0, 4) === String(new Date().getFullYear())
   const nextDate = parse(p.next_due)
@@ -159,7 +159,7 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
           <button
             disabled={busy}
             onClick={() => run(() => supabase.from('recurring_payments').update({ active: !p.active }).eq('id', p.id))}
-            className="flex items-center justify-center gap-1.5 rounded-2xl bg-[#fff1d6] py-3.5 font-semibold text-[#a35f00] disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 rounded-2xl bg-warn-bg py-3.5 font-semibold text-warn disabled:opacity-50"
           >
             {p.active ? 'Pause' : 'Resume'}
           </button>

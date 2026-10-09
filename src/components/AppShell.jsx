@@ -42,7 +42,7 @@ export function TabBar({ route, onAdd }) {
   return (
     <nav className="pointer-events-none fixed inset-x-0 bottom-[max(env(safe-area-inset-bottom),12px)] z-30 px-4">
       <div className="mx-auto flex max-w-lg items-center gap-2.5">
-        <ul className="pointer-events-auto relative grid h-[60px] flex-1 grid-cols-4 rounded-[30px] border border-line/90 bg-white/80 px-1.5 shadow-[0_12px_30px_-14px_rgba(11,27,69,0.35)] backdrop-blur-xl">
+        <ul className="pointer-events-auto relative grid h-[60px] flex-1 grid-cols-4 rounded-[30px] border border-line/90 bg-card/80 px-1.5 shadow-[0_12px_30px_-14px_rgba(11,27,69,0.35)] backdrop-blur-xl">
           <span
             aria-hidden="true"
             className={`pointer-events-none absolute inset-y-1.5 left-1.5 grid w-[calc((100%-12px)/4)] place-items-center transition-[transform,opacity] duration-300 ease-[cubic-bezier(.3,1.3,.5,1)] motion-reduce:transition-none ${
@@ -50,7 +50,7 @@ export function TabBar({ route, onAdd }) {
             }`}
             style={{ transform: `translateX(${Math.max(current, 0) * 100}%)` }}
           >
-            <span className="h-[42px] w-[52px] rounded-[21px] bg-[#e3ebff]" />
+            <span className="h-[42px] w-[52px] rounded-[21px] bg-bubble" />
           </span>
           {TABS.map((tab, i) => (
             <li key={tab.path} className="relative grid">

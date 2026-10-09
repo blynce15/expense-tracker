@@ -253,7 +253,7 @@ function SavingsChart({ flow }) {
 
   if (!flow) {
     return (
-      <section className="rounded-[24px] bg-gradient-to-br from-[#eef3ff] to-[#dce6ff] p-5 text-sm text-muted">
+      <section className="rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to p-5 text-sm text-muted">
         Mark an account as <span className="font-semibold text-ink">Savings</span> in Settings → Accounts & cards to see how much goes into it
         each month.
       </section>
@@ -277,16 +277,16 @@ function SavingsChart({ flow }) {
   const p = picked === null ? null : flow[picked]
 
   return (
-    <section className="rounded-[24px] bg-gradient-to-br from-[#eef3ff] to-[#dce6ff] px-4 pt-3.5 pb-3 shadow-[0_16px_30px_-22px_rgba(31,79,224,0.7)]">
+    <section className="rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to px-4 pt-3.5 pb-3 shadow-[0_16px_30px_-22px_rgba(31,79,224,0.7)]">
       <div className="flex items-center justify-between gap-2">
         <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-muted">
           <Icon name="coins" size={15} className="shrink-0 text-cobalt" />
           Savings account · last 6 months
         </p>
-        <span className={`tabular shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-bold ${net < 0 ? 'text-loss' : 'text-gain'}`}>{signed(net)}</span>
+        <span className={`tabular shrink-0 rounded-full bg-card px-2 py-0.5 text-xs font-bold ${net < 0 ? 'text-loss' : 'text-gain'}`}>{signed(net)}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 block h-auto w-full overflow-visible" role="img" aria-label="Monthly change of your savings account">
-        <line x1="0" x2={W} y1={zero} y2={zero} strokeWidth="1" stroke="#0b1b45" strokeOpacity=".15" />
+        <line x1="0" x2={W} y1={zero} y2={zero} strokeWidth="1" stroke="var(--color-ink)" strokeOpacity=".15" />
         {flow.map((d, i) => {
           const pos = d.cents >= 0
           const x = i * colW + (colW - barW) / 2
@@ -311,7 +311,7 @@ function SavingsChart({ flow }) {
                   textAnchor="middle"
                   fontSize="10.5"
                   fontWeight="600"
-                  fill={pos ? '#0b1b45' : '#c26b00'}
+                  fill={pos ? 'var(--color-ink)' : 'var(--color-orange-text)'}
                 >
                   {label(d.cents)}
                 </text>
@@ -335,7 +335,7 @@ function SavingsChart({ flow }) {
           <>
             {shortMonth(p.key)}
             {p.partial && ' (so far)'}:{' '}
-            <span className={`tabular font-semibold ${p.cents < 0 ? 'text-[#c26b00]' : 'text-ink'}`}>{signed(p.cents)}</span>
+            <span className={`tabular font-semibold ${p.cents < 0 ? 'text-orange-text' : 'text-ink'}`}>{signed(p.cents)}</span>
           </>
         ) : (
           'Tap a bar for details'
@@ -385,7 +385,7 @@ function GoalCard({ goal, onOpen }) {
         ) : p ? (
           <span className="tabular rounded-full bg-cobalt/10 px-2 py-0.5 font-bold text-cobalt">{formatCents(p.perMonth).replace(/,\d\d$/, '')} / month</span>
         ) : (
-          <span className="rounded-full bg-[#fff1d6] px-2 py-0.5 font-bold text-[#a35f00]">No deadline</span>
+          <span className="rounded-full bg-warn-bg px-2 py-0.5 font-bold text-warn">No deadline</span>
         )}
       </span>
     </button>

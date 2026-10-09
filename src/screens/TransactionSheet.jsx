@@ -235,7 +235,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                 key={t.value}
                 onClick={() => changeType(t.value)}
                 aria-pressed={type === t.value}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${type === t.value ? 'bg-ink text-white' : 'text-muted'}`}
+                className={`rounded-full px-4 py-2 text-sm font-semibold ${type === t.value ? 'bg-ink text-paper' : 'text-muted'}`}
               >
                 {t.label}
               </button>
@@ -292,7 +292,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         {/* Step 2: name + category, then Save */}
         {step === 2 && (
           <>
-            <div className="absolute inset-0 bg-ink/40" onClick={() => setStep(1)} />
+            <div className="absolute inset-0 bg-navy/50" onClick={() => setStep(1)} />
             <div className="absolute inset-x-0 bottom-0 flex max-h-[88%] flex-col rounded-t-3xl bg-paper pb-[env(safe-area-inset-bottom)] motion-safe:animate-[sheet-up_200ms_ease-out]">
               <div className="flex items-center px-3 pt-3">
                 <button onClick={() => setStep(1)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back to amount">
