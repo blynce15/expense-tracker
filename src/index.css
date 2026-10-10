@@ -83,7 +83,9 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-:focus-visible {
+/* Keyboard focus ring for buttons and links. Text boxes show focus with their own border
+   instead: a ring there just draws a rectangle around the text while typing. */
+:focus-visible:not(input, textarea, select) {
   outline: 2px solid var(--color-cobalt);
   outline-offset: 2px;
 }
