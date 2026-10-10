@@ -3,6 +3,7 @@ import LynxWatermark from '../components/LynxWatermark'
 import EmptyLynx from '../components/EmptyLynx'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import PaySheet from '../components/PaySheet'
 import Sheet from '../components/Sheet'
 import { formatDay, todayISO } from '../lib/dates'
@@ -252,7 +253,9 @@ function MonthCalendar({ payments, onOpen, onPay }) {
               <span className={`tabular ${isToday ? 'rounded-full bg-cobalt px-[7px] text-white' : ''}`}>{i + 1}</span>
               {items.length > 0 && (
                 <span className="flex items-center gap-px text-sm leading-none">
-                  {items[0].icon}
+                  <MerchantIcon name={items[0].name} className="size-4 rounded-[5px]">
+                    {items[0].icon}
+                  </MerchantIcon>
                   {items.length > 1 && <span className="text-[9px] font-extrabold text-muted">+{items.length - 1}</span>}
                 </span>
               )}
@@ -316,9 +319,9 @@ function PaymentRow({ p, sub, due, late, onOpen, onPay, compact }) {
   return (
     <div className={`flex items-center gap-3 ${compact ? 'py-2' : 'pr-3.5'}`}>
       <button onClick={() => onOpen(p)} className={`flex min-w-0 flex-1 items-center gap-3 text-left ${compact ? '' : 'py-3 pl-3.5'}`}>
-        <span className={`grid shrink-0 place-items-center rounded-[14px] bg-paper ${compact ? 'size-9 text-lg' : 'size-11 text-xl'} ${compact ? 'bg-card' : ''}`}>
+        <MerchantIcon name={p.name} className={`rounded-[14px] ${compact ? 'size-9 bg-card text-lg' : 'size-11 bg-paper text-xl'}`}>
           {p.icon}
-        </span>
+        </MerchantIcon>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[15px] font-semibold">{p.name}</span>
           <span className={`block truncate text-xs ${late ? 'font-semibold text-loss' : due ? 'font-semibold text-cobalt' : 'text-muted'}`}>{sub}</span>

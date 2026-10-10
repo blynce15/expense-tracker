@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import BankCard, { cardBackground, MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
@@ -495,7 +496,10 @@ function ComingUp({ payments, onPay, onOpen }) {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-base font-medium">
-                      {p.icon} {p.name}
+                      <MerchantIcon name={p.name} className="mr-1.5 size-5 rounded-md align-[-4px]">
+                        {p.icon}
+                      </MerchantIcon>
+                      {p.name}
                     </span>
                     <span className={`block text-sm ${days < 0 ? 'font-semibold text-loss' : 'text-muted'}`}>
                       {days < 0 ? dueLabel(p.next_due) : `Every ${every}`}

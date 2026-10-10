@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
 import { fetchAccountsWithBalances } from '../lib/balances'
 import { todayISO, shiftDays } from '../lib/dates'
@@ -193,9 +194,9 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
     <Sheet title="" onClose={onClose} action={menuButton}>
       <div className="space-y-4">
         <div className="flex flex-col items-center gap-1 text-center">
-          <span className="mb-1 grid size-14 place-items-center rounded-2xl text-3xl" style={{ backgroundColor: iconBg }}>
+          <MerchantIcon name={isTransfer ? null : tx.note} className="mb-1 size-14 rounded-2xl text-3xl" style={{ backgroundColor: iconBg }}>
             {isTransfer ? '⇄' : category?.icon}
-          </span>
+          </MerchantIcon>
           <p className="font-display text-xl font-bold">{name}</p>
           <p className={`tabular font-display text-4xl font-extrabold tracking-tight ${amountColor}`}>{amountText}</p>
         </div>

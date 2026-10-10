@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
 import { formatCents } from '../lib/money'
 import { daysUntil, dueLabel, FREQUENCIES } from '../lib/recurring'
@@ -103,12 +104,9 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
             )}
           </div>
           <div className="mt-3 flex items-center gap-3">
-            <span
-              className="grid size-14 shrink-0 place-items-center rounded-[18px] text-[28px]"
-              style={{ backgroundColor: `${category?.color ?? '#868e96'}22` }}
-            >
+            <MerchantIcon name={p.name} className="size-14 rounded-[18px] text-[28px]" style={{ backgroundColor: `${category?.color ?? '#868e96'}22` }}>
               {p.icon}
-            </span>
+            </MerchantIcon>
             <span className="min-w-0">
               <span className="block truncate font-display text-xl font-bold">{p.name}</span>
               <span className="block truncate text-sm text-muted">

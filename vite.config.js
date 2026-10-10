@@ -51,6 +51,16 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          // Shop logos (src/lib/merchants.js): kept on the phone for a month so they show offline
+          {
+            urlPattern: /^https:\/\/www\.google\.com\/s2\/favicons.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'shop-logos',
+              expiration: { maxEntries: 300, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           // Supabase (your data) is never cached: it always comes fresh from the server
         ],
       },
