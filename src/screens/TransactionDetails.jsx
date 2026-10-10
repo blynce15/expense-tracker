@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
-import { fetchAccountsWithBalances } from '../lib/balances'
+import { checkOverdraft, fetchAccountsWithBalances, overdraftProblem } from '../lib/balances'
 import { todayISO, shiftDays } from '../lib/dates'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
@@ -84,6 +84,16 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
   async function remove() {
     setBusy(true)
     setError(null)
+    try {
+      const problem = await checkOverdraft(tx, null)
+      if (problem) {
+        setBusy(false)
+        return setError(problem)
+      }
+    } catch (e) {
+      setBusy(false)
+      return setError(e.message)
+    }
     const { error } = await supabase.from('transactions').delete().eq('id', tx.id)
     setBusy(false)
     if (error) return setError(error.message)
@@ -120,6 +130,8 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
     ['Added', <span key="a" className="font-normal text-muted">{addedAt(tx.created_at)}</span>],
   ]
   const impact = balances ? balanceImpact(tx, balances) : []
+  // Deleting isn't allowed if it would take a debit, cash or savings account below €0
+  const blocked = balances ? overdraftProblem([...balances.values()], tx, null) : null
 
   const menuButton = (
     <div className="relative">
@@ -176,9 +188,9 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
               ))}
             </ul>
           )}
-          {error && <p className="text-sm text-loss">{error}</p>}
+          {(blocked || error) && <p className="text-sm text-loss">{blocked ?? error}</p>}
           <div className="space-y-2">
-            <button onClick={remove} disabled={busy} className="w-full rounded-2xl bg-loss py-4 text-base font-semibold text-white disabled:opacity-60">
+            <button onClick={remove} disabled={busy || !!blocked} className="w-full rounded-2xl bg-loss py-4 text-base font-semibold text-white disabled:opacity-60">
               {busy ? 'Deleting…' : 'Delete'}
             </button>
             <button onClick={() => setMode('view')} disabled={busy} className="w-full rounded-2xl bg-card py-4 text-base font-semibold">

@@ -55,11 +55,24 @@ export async function fetchRecurring() {
   return data
 }
 
-// Records one payment as an expense and moves the due date forward.
-// The expense is dated on the due date, or today if paying early.
+// Records one payment as an expense and moves the due date forward, both in one step
+// (database function from migration 010). The expense is dated on the due date, or today if paying early.
 export async function recordPayment(p, { amountCents, accountId }) {
   const today = todayISO()
   const date = p.next_due < today ? p.next_due : today
+  const nextDue = nextDueAfter(p.next_due, p.start_date, p.frequency)
+  const { error: rpcError } = await supabase.rpc('record_recurring_payment', {
+    p_payment_id: p.id,
+    p_due: p.next_due,
+    p_amount_cents: amountCents,
+    p_account_id: accountId,
+    p_date: date,
+    p_next_due: nextDue,
+  })
+  if (!rpcError) return
+  // Until migration 010 has been run the function doesn't exist yet: fall back to two separate saves
+  if (rpcError.code !== 'PGRST202') throw rpcError
+
   const { error } = await supabase.from('transactions').insert({
     type: 'expense',
     amount_cents: amountCents,
@@ -72,7 +85,7 @@ export async function recordPayment(p, { amountCents, accountId }) {
 
   const { error: updateError } = await supabase
     .from('recurring_payments')
-    .update({ next_due: nextDueAfter(p.next_due, p.start_date, p.frequency) })
+    .update({ next_due: nextDue })
     .eq('id', p.id)
   if (updateError) throw updateError
 }

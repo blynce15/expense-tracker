@@ -134,6 +134,11 @@ function AccountForm({ account, onClose, onSaved }) {
     e.preventDefault()
     const cents = balance.trim() === '' ? 0 : parseToCents(balance)
     if (cents === null) return setError('Enter the balance as a number, like 250 or 1250,50.')
+    // Money rule: only credit cards can be below €0 (what you owe)
+    if (!isCredit && negative && cents > 0) return setError('Only a credit card can start below €0. Choose + for this account.')
+    if (!isCredit && previewCents < 0 && (!account || previewCents < account.balance_cents || account.type === 'credit')) {
+      return setError(`This would leave ${name.trim() || 'the account'} at ${formatCents(previewCents)}. Only credit cards can go below €0.`)
+    }
 
     setBusy(true)
     setError(null)
@@ -152,6 +157,14 @@ function AccountForm({ account, onClose, onSaved }) {
   }
 
   async function setArchived(archived) {
+    // Money rule: an archived account drops out of your totals, so it has to be empty first
+    if (archived && account.balance_cents !== 0) {
+      return setError(
+        account.balance_cents < 0
+          ? `${account.name} still owes ${formatCents(-account.balance_cents)}. Pay it off first, then archive it.`
+          : `${account.name} still has ${formatCents(account.balance_cents)}. Move or spend it first, so the balance is €0, then archive it.`,
+      )
+    }
     setBusy(true)
     const { error } = await supabase.from('accounts').update({ archived }).eq('id', account.id)
     setBusy(false)
@@ -225,19 +238,22 @@ function AccountForm({ account, onClose, onSaved }) {
             {isNew ? 'Balance right now' : 'Starting balance'}
           </span>
           <div className="flex gap-2">
-            <div className="flex shrink-0 overflow-hidden rounded-xl border border-line bg-card">
-              {[false, true].map((neg) => (
-                <button
-                  key={String(neg)}
-                  type="button"
-                  onClick={() => setNegative(neg)}
-                  aria-pressed={negative === neg}
-                  className={`w-16 text-sm font-medium ${negative === neg ? 'bg-ink text-paper' : 'text-muted'}`}
-                >
-                  {neg ? (isCredit ? 'Owed' : '−') : isCredit ? 'Credit' : '+'}
-                </button>
-              ))}
-            </div>
+            {/* + / − only for credit cards (or to fix an older account that was saved below €0) */}
+            {(isCredit || negative) && (
+              <div className="flex shrink-0 overflow-hidden rounded-xl border border-line bg-card">
+                {[false, true].map((neg) => (
+                  <button
+                    key={String(neg)}
+                    type="button"
+                    onClick={() => setNegative(neg)}
+                    aria-pressed={negative === neg}
+                    className={`w-16 text-sm font-medium ${negative === neg ? 'bg-ink text-paper' : 'text-muted'}`}
+                  >
+                    {neg ? (isCredit ? 'Owed' : '−') : isCredit ? 'Credit' : '+'}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="relative flex-1">
               <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
               <input

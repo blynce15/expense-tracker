@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
+import { checkOverdraft } from '../lib/balances'
 import { formatDay, todayISO } from '../lib/dates'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents, formatTyping, parseToCents } from '../lib/money'
@@ -159,6 +160,16 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
       category_id: type === 'transfer' ? null : pick,
       note: name.trim() || null,
     }
+    try {
+      const problem = await checkOverdraft(transaction, row)
+      if (problem) {
+        setBusy(false)
+        return setError(problem)
+      }
+    } catch (e) {
+      setBusy(false)
+      return setError(e.message)
+    }
     const { error } = isNew
       ? await supabase.from('transactions').insert(row)
       : await supabase.from('transactions').update(row).eq('id', transaction.id)
@@ -171,6 +182,16 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   async function remove() {
     if (!window.confirm('Delete this transaction? This can’t be undone.')) return
     setBusy(true)
+    try {
+      const problem = await checkOverdraft(transaction, null)
+      if (problem) {
+        setBusy(false)
+        return setError(problem)
+      }
+    } catch (e) {
+      setBusy(false)
+      return setError(e.message)
+    }
     const { error } = await supabase.from('transactions').delete().eq('id', transaction.id)
     setBusy(false)
     if (error) return setError(error.message)

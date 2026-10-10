@@ -14,7 +14,10 @@ export function formatCents(cents) {
   return `${sign}€${groupThousands(euros)},${rest}`
 }
 
-// "12,5" / "12.50" / "1.234,56" / "2.100" → cents (integer), or null if invalid.
+// Largest amount anywhere in the app: €9.999.999,99 (the number pad's limit too), so a typo can't distort totals
+export const MAX_CENTS = 999999999
+
+// "12,5" / "12.50" / "1.234,56" / "2.100" → cents (integer), or null if invalid or above MAX_CENTS.
 // If there's a comma it's the decimal separator and dots are thousands.
 // Without a comma, dots in groups of three are thousands ("2.100" = 2100);
 // otherwise a dot is the decimal separator ("12.50").
@@ -23,7 +26,8 @@ export function parseToCents(input) {
   s = s.includes(',') || /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s
   if (!/^\d+(\.\d{0,2})?$/.test(s)) return null
   const [euros, decimals = ''] = s.split('.')
-  return Number(euros) * 100 + Number(decimals.padEnd(2, '0'))
+  const cents = Number(euros) * 100 + Number(decimals.padEnd(2, '0'))
+  return cents > MAX_CENTS ? null : cents
 }
 
 // cents → "12,50" for prefilling an input (no currency sign)
