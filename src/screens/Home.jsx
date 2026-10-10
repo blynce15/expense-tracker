@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import BankCard, { cardBackground, MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
-import MerchantIcon from '../components/MerchantIcon'
 import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
@@ -10,11 +9,11 @@ import { formatDayMonth, monthRange, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { fetchProfile } from '../lib/profile'
-import { daysUntil, dueLabel, fetchRecurring, FREQUENCIES } from '../lib/recurring'
+import { daysUntil, fetchRecurring } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
 import AccountPage from './AccountPage'
-import { RecurringForm } from './Recurring'
+import { dueText, PaymentRow, RecurringForm } from './Recurring'
 import RecurringDetails from './RecurringDetails'
 import TransactionDetails from './TransactionDetails'
 
@@ -468,7 +467,7 @@ function SectionHead({ title, onSeeAll }) {
   )
 }
 
-// The next recurring payments, with the date shown like a calendar page
+// The next recurring payments, in the same rows as the Recurring payments page
 function ComingUp({ payments, onPay, onOpen }) {
   return (
     <section>
@@ -481,37 +480,9 @@ function ComingUp({ payments, onPay, onOpen }) {
         <ul className="mx-4 overflow-hidden rounded-[20px] bg-card">
           {payments.map((p) => {
             const days = daysUntil(p.next_due)
-            const due = days <= 0
-            const [, m, d] = p.next_due.split('-').map(Number)
-            const month = new Date(2000, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' }).replace('Sept', 'Sep')
-            const every = FREQUENCIES.find((f) => f.value === p.frequency)?.per
             return (
-              <li key={p.id} className="flex items-center gap-3 border-b border-line pr-4 last:border-0">
-                <button onClick={() => onOpen(p)} className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-4 text-left">
-                  <span
-                    className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${due ? 'bg-ink text-paper' : 'bg-paper'}`}
-                  >
-                    <span className="text-[9px] font-bold tracking-wider uppercase opacity-70">{days === 0 ? 'Today' : days < 0 ? 'Late' : month}</span>
-                    <span className="font-display text-base leading-none font-bold">{d}</span>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-base font-medium">
-                      <MerchantIcon name={p.name} className="mr-1.5 size-5 rounded-md align-[-4px]">
-                        {p.icon}
-                      </MerchantIcon>
-                      {p.name}
-                    </span>
-                    <span className={`block text-sm ${days < 0 ? 'font-semibold text-loss' : 'text-muted'}`}>
-                      {days < 0 ? dueLabel(p.next_due) : `Every ${every}`}
-                    </span>
-                  </span>
-                  <span className="tabular shrink-0 font-display text-base font-semibold">{formatCents(p.amount_cents)}</span>
-                </button>
-                {due && (
-                  <button onClick={() => onPay(p)} className="shrink-0 rounded-full bg-cobalt px-3.5 py-1.5 text-sm font-semibold text-white">
-                    Paid
-                  </button>
-                )}
+              <li key={p.id} className="border-b border-line last:border-0">
+                <PaymentRow p={p} sub={dueText(p)} due={days <= 0} late={days < 0} onOpen={onOpen} onPay={onPay} />
               </li>
             )
           })}

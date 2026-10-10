@@ -1,4 +1,4 @@
-# LynxOS (expense tracker) — Project Brief
+﻿# LynxOS (expense tracker) — Project Brief
 
 ## About the user
 - The owner is not a programmer. Explain what you're doing in plain language, briefly.

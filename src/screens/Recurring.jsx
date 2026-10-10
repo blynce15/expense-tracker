@@ -297,16 +297,9 @@ function Group({ title, payments, onOpen, onPay }) {
       <ul className="overflow-hidden rounded-[22px] bg-card">
         {payments.map((p) => {
           const days = daysUntil(p.next_due)
-          const sub = !p.active
-            ? 'Paused'
-            : days === 0
-              ? 'Due today'
-              : days < 0
-                ? `${-days} ${days === -1 ? 'day' : 'days'} late`
-                : `${days === 1 ? 'Tomorrow' : `In ${days} days`} · ${shortDay(p.next_due)}`
           return (
             <li key={p.id} className={`border-b border-line last:border-0 ${p.active ? '' : 'opacity-55'}`}>
-              <PaymentRow p={p} sub={sub} due={p.active && days <= 0} late={p.active && days < 0} onOpen={onOpen} onPay={onPay} />
+              <PaymentRow p={p} sub={dueText(p)} due={p.active && days <= 0} late={p.active && days < 0} onOpen={onOpen} onPay={onPay} />
             </li>
           )
         })}
@@ -315,7 +308,17 @@ function Group({ title, payments, onOpen, onPay }) {
   )
 }
 
-function PaymentRow({ p, sub, due, late, onOpen, onPay, compact }) {
+// When a payment is due, in words: "Due today", "2 days late", "In 3 days · Tue 13 Oct"
+export function dueText(p) {
+  const days = daysUntil(p.next_due)
+  if (!p.active) return 'Paused'
+  if (days === 0) return 'Due today'
+  if (days < 0) return `${-days} ${days === -1 ? 'day' : 'days'} late`
+  return `${days === 1 ? 'Tomorrow' : `In ${days} days`} · ${shortDay(p.next_due)}`
+}
+
+// One payment: icon or shop logo, name, when it's due, amount (or a Paid button when due). Also used on Home.
+export function PaymentRow({ p, sub, due, late, onOpen, onPay, compact }) {
   return (
     <div className={`flex items-center gap-3 ${compact ? 'py-2' : 'pr-3.5'}`}>
       <button onClick={() => onOpen(p)} className={`flex min-w-0 flex-1 items-center gap-3 text-left ${compact ? '' : 'py-3 pl-3.5'}`}>
