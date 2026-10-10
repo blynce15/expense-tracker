@@ -1,4 +1,4 @@
-﻿# LynxOS (expense tracker) — Project Brief
+# LynxOS (expense tracker) — Project Brief
 
 ## About the user
 - The owner is not a programmer. Explain what you're doing in plain language, briefly.
@@ -124,6 +124,7 @@ Done:
 ### 2026-10-10
 Done:
 - Shop logos (style "A", chosen from mockups): transactions and recurring payments whose name matches a known shop show its full-colour logo in a white rounded tile instead of the emoji (Home, Transactions, transaction details, account page, Recurring list/calendar/details, Home "Coming up"). Built-in list of ~115 shops/services (global + Portugal) in src/lib/merchants.js (website first, then names; whole-word matching, short names and everyday words marked ^ only count at the start, e.g. "Dinner with Max" is not HBO Max). Tile: src/components/MerchantIcon.jsx; falls back to the emoji if the logo can't load. Logos come from Google's free website-icon service (no key; it sees only the shop's website, never amounts) and are kept on the phone for 30 days (workbox cache shop-logos) so they show offline. Every website in the list was checked visually; sites with no logo were left out. No "Change icon" option and no new table (owner's choice): new shops are added to the list on request.
+- Home "Coming up" now uses the same rows as the Recurring payments page (PaymentRow + dueText exported from src/screens/Recurring.jsx): big icon/logo on the left, name, "In 3 days · Tue 13 Oct" / "Due today", amount per month or a Paid button. The calendar-style date tile is gone.
 
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
