@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
+import { useGoalGuard } from '../components/GoalPicker'
 import Sheet from '../components/Sheet'
 import { checkOverdraft } from '../lib/balances'
 import { formatDay, todayISO } from '../lib/dates'
+import { takeFromGoals } from '../lib/goals'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents, formatTyping, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
@@ -86,6 +88,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const [picking, setPicking] = useState(null) // null | 'account' | 'date'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const { guard, picker } = useGoalGuard()
 
   useEffect(() => {
     Promise.all([fetchLookups(), isNew ? fetchLastUsedAccountId() : null])
@@ -166,6 +169,10 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         setBusy(false)
         return setError(problem)
       }
+      // Money leaving savings that's set aside in goals: ask which goal it comes out of
+      const picks = await guard(transaction, row)
+      if (!picks) return setBusy(false)
+      await takeFromGoals(picks)
     } catch (e) {
       setBusy(false)
       return setError(e.message)
@@ -188,6 +195,9 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         setBusy(false)
         return setError(problem)
       }
+      const picks = await guard(transaction, null)
+      if (!picks) return setBusy(false)
+      await takeFromGoals(picks)
     } catch (e) {
       setBusy(false)
       return setError(e.message)
@@ -456,6 +466,8 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
           </ul>
         </Sheet>
       )}
+
+      {picker}
     </div>
   )
 }

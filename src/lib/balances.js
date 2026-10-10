@@ -49,14 +49,19 @@ function effect(t, sign = 1) {
   return out
 }
 
+// How replacing `before` with `after` (either may be null) moves each account: Map account id → cents
+export function balanceChanges(before, after) {
+  const change = effect(after)
+  for (const [id, cents] of effect(before, -1)) change.set(id, (change.get(id) ?? 0) + cents)
+  return change
+}
+
 // Money rule: a debit, cash or savings account can't go below €0 (checked against today's balance).
 // `before` is the transaction as it is now (null when adding), `after` as it will be (null when deleting).
 // Returns a message saying why the change isn't allowed, or null if it's fine.
 // A change that doesn't lower an account is always allowed, even if that account is already below €0.
 export function overdraftProblem(accounts, before, after) {
-  const change = effect(after)
-  for (const [id, cents] of effect(before, -1)) change.set(id, (change.get(id) ?? 0) + cents)
-  for (const [id, cents] of change) {
+  for (const [id, cents] of balanceChanges(before, after)) {
     const a = accounts.find((x) => x.id === id)
     if (!a || cents >= 0 || !NO_OVERDRAFT_TYPES.includes(a.type)) continue
     const result = a.balance_cents + cents

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import Icon from '../components/Icon'
+import { useGoalGuard } from '../components/GoalPicker'
 import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
 import { checkOverdraft, fetchAccountsWithBalances, overdraftProblem } from '../lib/balances'
 import { todayISO, shiftDays } from '../lib/dates'
+import { takeFromGoals } from '../lib/goals'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
@@ -55,6 +57,7 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
   const [mode, setMode] = useState('view') // 'view' | 'menu' | 'confirm' | 'edit'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const { guard, picker } = useGoalGuard()
 
   const loadBalances = useCallback(async () => {
     try {
@@ -90,6 +93,9 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
         setBusy(false)
         return setError(problem)
       }
+      const picks = await guard(tx, null)
+      if (!picks) return setBusy(false)
+      await takeFromGoals(picks)
     } catch (e) {
       setBusy(false)
       return setError(e.message)
@@ -164,41 +170,44 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
 
   if (mode === 'confirm') {
     return (
-      <Sheet title="" onClose={onClose}>
-        <div className="space-y-4 text-center">
-          <span className="mx-auto grid size-14 place-items-center rounded-full bg-loss/10 text-loss">
-            <Icon name="trash" size={26} />
-          </span>
-          <div className="space-y-1">
-            <h2 className="font-display text-xl font-bold">Delete this transaction?</h2>
-            <p className="text-muted">
-              {name}, <span className="tabular font-semibold text-ink">{amountText}</span> on {longDate(tx.date)}. This can’t be undone.
-            </p>
+      <>
+        <Sheet title="" onClose={onClose}>
+          <div className="space-y-4 text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-full bg-loss/10 text-loss">
+              <Icon name="trash" size={26} />
+            </span>
+            <div className="space-y-1">
+              <h2 className="font-display text-xl font-bold">Delete this transaction?</h2>
+              <p className="text-muted">
+                {name}, <span className="tabular font-semibold text-ink">{amountText}</span> on {longDate(tx.date)}. This can’t be undone.
+              </p>
+            </div>
+            {impact.length > 0 && (
+              <ul className="overflow-hidden rounded-2xl bg-card text-left">
+                {impact.map((i) => (
+                  <li key={i.name} className="tabular flex items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm last:border-0">
+                    <span className="truncate">{i.name} balance</span>
+                    <span className="shrink-0">
+                      <span className="text-muted line-through">{formatCents(i.before)}</span> →{' '}
+                      <span className="font-bold">{formatCents(i.after)}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {(blocked || error) && <p className="text-sm text-loss">{blocked ?? error}</p>}
+            <div className="space-y-2">
+              <button onClick={remove} disabled={busy || !!blocked} className="w-full rounded-2xl bg-loss py-4 text-base font-semibold text-white disabled:opacity-60">
+                {busy ? 'Deleting…' : 'Delete'}
+              </button>
+              <button onClick={() => setMode('view')} disabled={busy} className="w-full rounded-2xl bg-card py-4 text-base font-semibold">
+                Cancel
+              </button>
+            </div>
           </div>
-          {impact.length > 0 && (
-            <ul className="overflow-hidden rounded-2xl bg-card text-left">
-              {impact.map((i) => (
-                <li key={i.name} className="tabular flex items-center justify-between gap-3 border-b border-line px-4 py-3 text-sm last:border-0">
-                  <span className="truncate">{i.name} balance</span>
-                  <span className="shrink-0">
-                    <span className="text-muted line-through">{formatCents(i.before)}</span> →{' '}
-                    <span className="font-bold">{formatCents(i.after)}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-          {(blocked || error) && <p className="text-sm text-loss">{blocked ?? error}</p>}
-          <div className="space-y-2">
-            <button onClick={remove} disabled={busy || !!blocked} className="w-full rounded-2xl bg-loss py-4 text-base font-semibold text-white disabled:opacity-60">
-              {busy ? 'Deleting…' : 'Delete'}
-            </button>
-            <button onClick={() => setMode('view')} disabled={busy} className="w-full rounded-2xl bg-card py-4 text-base font-semibold">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </Sheet>
+        </Sheet>
+        {picker}
+      </>
     )
   }
 
