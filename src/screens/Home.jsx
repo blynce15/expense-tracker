@@ -482,7 +482,7 @@ function ComingUp({ payments, onPay, onOpen }) {
             const days = daysUntil(p.next_due)
             return (
               <li key={p.id} className="border-b border-line last:border-0">
-                <PaymentRow p={p} sub={dueText(p)} due={days <= 0} late={days < 0} onOpen={onOpen} onPay={onPay} />
+                <PaymentRow p={p} sub={dueText(p)} due={days <= 0} late={days < 0} onOpen={onOpen} onPay={onPay} home />
               </li>
             )
           })}
