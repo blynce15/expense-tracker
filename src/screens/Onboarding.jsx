@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import LynxWatermark from '../components/LynxWatermark'
 import { BankLogo } from '../components/BankCard'
 import { BANKS, bankFor } from '../lib/banks'
@@ -20,7 +22,7 @@ const STEPS = [
   { key: 'accounts', title: 'Accounts' },
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
   { key: 'cats', title: 'Categories' },
-  { key: 'payments', title: 'Regular payments', sub: 'Rent, subscriptions, bills. The app reminds you when they are due.' },
+  { key: 'payments', title: 'Regular payments' },
   { key: 'about', title: 'A bit about you', sub: 'So tips fit you later. Skip any you like.' },
   { key: 'done' },
 ]
@@ -48,14 +50,23 @@ const CATEGORY_IDEAS = [
   ['Sales', '🏷️', '#d6336c', 'income'], ['Gifts', '🎁', '#e64980', 'income'], ['Rent received', '🏠', '#6741d9', 'income'],
   ['Cashback', '🪙', '#e8a400', 'income'],
 ]
-// name, icon, typical cents, category, days until due, frequency
+// Regular payment and income shortcuts: name (the logo comes from the name, src/lib/merchants.js),
+// emoji when there's no logo, preferred categories (first one the user kept), days until due, kind.
+// The amount starts empty: prices differ by plan and change (owner's choice).
+const SUBS = ['Subscriptions', 'Entertainment', 'Other']
+const UTILITIES = ['Bills', 'Other']
 const PAYMENT_IDEAS = [
-  ['Rent', '🏠', 85000, 'Housing', 25, 'monthly'], ['Netflix', '🎬', 1399, 'Entertainment', 5, 'monthly'],
-  ['Spotify', '🎧', 1199, 'Entertainment', 9, 'monthly'], ['Gym', '🏋️', 3900, 'Health', 12, 'monthly'],
-  ['Phone', '📱', 2500, 'Bills', 14, 'monthly'], ['Internet', '🌐', 3500, 'Bills', 3, 'monthly'],
-  ['Electricity', '💡', 6000, 'Bills', 18, 'monthly'], ['Car insurance', '🛡️', 42000, 'Bills', 70, 'yearly'],
+  ['Rent', '🏠', ['Housing', 'Bills'], 25, 'expense'], ['Netflix', '🎬', SUBS, 5, 'expense'], ['Spotify', '🎧', SUBS, 9, 'expense'],
+  ['Disney+', '🎬', SUBS, 12, 'expense'], ['HBO Max', '🎬', SUBS, 15, 'expense'], ['Prime Video', '🎬', SUBS, 18, 'expense'],
+  ['YouTube', '▶️', SUBS, 20, 'expense'], ['iCloud', '☁️', SUBS, 8, 'expense'], ['ChatGPT', '🤖', SUBS, 11, 'expense'],
+  ['Claude', '🤖', SUBS, 14, 'expense'], ['MEO', '📱', UTILITIES, 6, 'expense'], ['NOS', '📱', UTILITIES, 6, 'expense'],
+  ['Vodafone', '📱', UTILITIES, 6, 'expense'], ['EDP', '💡', UTILITIES, 18, 'expense'], ['Gym', '🏋️', ['Gym', 'Health', 'Other'], 3, 'expense'],
+  ['Salary', '💼', ['Salary', 'Other income'], 20, 'income'], ['Coverflex', '🍽️', ['Other income', 'Salary'], 20, 'income'],
+  ['Edenred', '🍽️', ['Other income', 'Salary'], 20, 'income'], ['Pluxee', '🍽️', ['Other income', 'Salary'], 20, 'income'],
+  ['Rent received', '🏠', ['Rent received', 'Other income'], 5, 'income'], ['Freelance', '💻', ['Freelance', 'Other income'], 15, 'income'],
 ]
-const FREQUENCIES = [['weekly', 'Weekly', 'Every week'], ['monthly', 'Monthly', 'Every month'], ['yearly', 'Yearly', 'Every year']]
+// value, label, "Every …", the period's name ("€13,99 a month")
+const FREQUENCIES = [['weekly', 'Weekly', 'Every week', 'week'], ['monthly', 'Monthly', 'Every month', 'month'], ['yearly', 'Yearly', 'Every year', 'year']]
 const QUESTIONS = [
   { id: 'goal', q: "What's your main goal right now?", opts: [['💰', 'Save more'], ['✂️', 'Spend less'], ['💳', 'Pay off debt'], ['👀', 'See where my money goes']] },
   { id: 'pay', q: 'How do you get paid?', opts: [['📅', 'Monthly salary'], ['🔁', 'Every two weeks'], ['🎲', 'Irregular / freelance'], ['🤷', 'Other']] },
@@ -178,26 +189,28 @@ export default function Onboarding({ onDone }) {
     setCategoryForm(null)
   }
 
-  function openPaymentForm(idea) {
+  function openPaymentForm(idea, type = 'expense') {
+    const income = type === 'income'
+    // Money comes in to a spending account; payments go out of spending accounts and credit cards
     const spendable = accounts.filter((a) => a.type !== 'savings')
-    const expenseNames = categories.filter((c) => c.kind === 'expense' && c.selected).map((c) => c.name)
-    const category = idea && expenseNames.includes(idea[3]) ? idea[3] : expenseNames[0]
+    const names = categories.filter((c) => c.kind === type && c.selected).map((c) => c.name)
     setPaymentForm({
+      type,
       name: idea?.[0] ?? '',
-      icon: idea?.[1] ?? '🔁',
-      amount: idea ? (idea[2] / 100).toFixed(2).replace('.', ',') : '',
-      frequency: idea?.[5] ?? 'monthly',
-      nextDue: shiftDays(today, idea?.[4] ?? 7),
+      icon: idea?.[1] ?? (income ? '💶' : '🔁'),
+      amount: '',
+      frequency: 'monthly',
+      nextDue: shiftDays(today, idea?.[3] ?? 7),
       accountKey: spendable[0]?.key ?? accounts[0]?.key,
-      categoryName: category,
+      categoryName: (idea?.[2] ?? []).find((n) => names.includes(n)) ?? names[0],
       error: null,
     })
   }
   function addPayment() {
     const f = paymentForm
     const cents = parseToCents(f.amount)
-    if (!f.name.trim()) return setPaymentForm({ ...f, error: 'Give it a name, like Rent or Netflix.' })
-    if (!cents) return setPaymentForm({ ...f, error: 'Enter the amount, like 13,99.' })
+    if (!f.name.trim()) return setPaymentForm({ ...f, error: f.type === 'income' ? 'Give it a name, like Salary.' : 'Give it a name, like Rent or Netflix.' })
+    if (!cents) return setPaymentForm({ ...f, error: 'Enter the amount.' })
     setPayments((list) => [...list, { ...f, name: f.name.trim(), cents }].sort((a, b) => a.nextDue.localeCompare(b.nextDue)))
     setPaymentForm(null)
   }
@@ -229,7 +242,7 @@ export default function Onboarding({ onDone }) {
     )
   } else if (key === 'payments')
     footer = paymentForm ? (
-      <button onClick={addPayment} className={primaryClass}>Add payment</button>
+      <button onClick={addPayment} className={primaryClass}>{paymentForm.type === 'income' ? 'Add income' : 'Add payment'}</button>
     ) : payments.length ? (
       <button onClick={() => go(1)} className={primaryClass}>Continue</button>
     ) : (
@@ -428,18 +441,6 @@ function RemoveButton({ label, onClick }) {
     <button onClick={onClick} aria-label={label} className="grid size-8 shrink-0 place-items-center rounded-full text-muted">
       <Glyph name="close" className="size-4" width={2.2} />
     </button>
-  )
-}
-
-function SummaryBox({ title, sub, value }) {
-  return (
-    <div className="mt-3 flex items-center justify-between rounded-2xl bg-cobalt/10 px-4 py-3.5">
-      <span className="text-sm text-ink/80">
-        {title}
-        <span className="block text-xs text-muted">{sub}</span>
-      </span>
-      <b className="tabular font-display text-xl text-cobalt">{value}</b>
-    </div>
   )
 }
 
@@ -796,74 +797,77 @@ function CategoryCreator({ form, setForm }) {
 }
 
 // ---------- Step 4: regular payments ----------
-function DateBlock({ iso, dark }) {
-  const [, m, d] = iso.split('-').map(Number)
-  const month = new Date(2000, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' }).replace('Sept', 'Sep')
-  return (
-    <span className={`flex size-10 shrink-0 flex-col items-center justify-center rounded-xl ${dark ? 'bg-ink text-paper' : 'bg-paper'}`}>
-      <span className="text-[9px] font-bold tracking-wider uppercase opacity-70">{month}</span>
-      <span className="font-display text-base leading-none font-bold">{d}</span>
-    </span>
-  )
+// "In 5 days · Thu 16 Oct" / "Today" / "Tomorrow · Fri 17 Oct"
+function whenText(iso, today) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const [ty, tm, td] = today.split('-').map(Number)
+  const days = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / 86400000)
+  const day = new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace(',', '').replace('Sept', 'Sep')
+  if (days <= 0) return 'Today'
+  return `${days === 1 ? 'Tomorrow' : `In ${days} days`} · ${day}`
 }
 
-// One payment as it appears under "Coming up" on Home
-function PaymentRow({ payment, today, accountName, children }) {
-  const cents = payment.cents ?? parseToCents(payment.amount) ?? 0
+// One added payment, like the rows on the Recurring page: logo, name, when, amount per period
+function PaymentRow({ payment, today, children }) {
+  const income = payment.type === 'income'
+  const per = FREQUENCIES.find((f) => f[0] === payment.frequency)[3]
   return (
-    <div className="flex items-center gap-3 border-b border-line px-4 py-2.5 last:border-0">
-      <DateBlock iso={payment.nextDue} dark={payment.nextDue === today} />
+    <div className="flex items-center gap-3 border-b border-line px-3.5 py-2.5 last:border-0">
+      <MerchantIcon name={payment.name} className="size-10 rounded-xl bg-paper text-lg">
+        {payment.icon}
+      </MerchantIcon>
       <span className="min-w-0 flex-1">
-        <b className="block truncate">
-          {payment.icon} {payment.name || 'New payment'}
-        </b>
-        <span className="block truncate text-xs text-muted">
-          {FREQUENCIES.find((f) => f[0] === payment.frequency)[2]}
-          {accountName ? ` · ${accountName}` : ''}
-        </span>
+        <b className="block truncate">{payment.name}</b>
+        <span className="block truncate text-xs text-muted">{whenText(payment.nextDue, today)}</span>
       </span>
-      <b className="tabular font-display">{formatCents(cents)}</b>
+      <span className={`tabular shrink-0 text-right font-display font-bold ${income ? 'text-gain' : ''}`}>
+        {income && '+'}
+        {formatCents(payment.cents)}
+        <span className="block text-[11px] font-semibold text-muted">/{per}</span>
+      </span>
       {children}
     </div>
   )
 }
 
 function PaymentsStep({ today, accounts, categories, payments, form, setForm, onOpen, onRemove }) {
-  const accountName = (k) => accounts.find((a) => a.key === k)?.name
+  const [kind, setKind] = useState('expense')
+  const [picking, setPicking] = useState(null) // null | 'amount' | 'date'
 
   if (form) {
-    const spendable = accounts.filter((a) => a.type !== 'savings')
-    const expenseCats = categories
-      .filter((c) => c.kind === 'expense' && c.selected)
-      .sort((a, b) => (b.name === form.categoryName) - (a.name === form.categoryName))
-    const pill = (on) => `flex shrink-0 items-center gap-2 rounded-full text-sm font-semibold transition ${on ? 'bg-cobalt text-white' : 'bg-card text-ink'}`
+    const income = form.type === 'income'
+    // Money comes in to any account; payments go out of spending accounts and credit cards
+    const choices = income ? accounts : accounts.filter((a) => a.type !== 'savings')
+    const cats = categories.filter((c) => c.kind === form.type && c.selected)
+    const cents = parseToCents(form.amount) ?? 0
+    const per = FREQUENCIES.find((f) => f[0] === form.frequency)[3]
+    const chip = (on) => `flex items-center gap-2 rounded-full border-[1.5px] text-sm font-semibold ${on ? 'border-cobalt bg-cobalt/15' : 'border-transparent bg-card'}`
     return (
       <div>
-        <div className="mb-3 flex items-center justify-between px-1">
-          <p className="text-sm font-semibold text-muted">{form.name ? `Add ${form.name}` : 'New payment'}</p>
+        <div className="flex items-center justify-between px-1">
+          <p className="text-sm font-semibold text-muted">{income ? 'New income' : 'New payment'}</p>
           <SectionAction label="Cancel" onClick={() => setForm(null)} />
         </div>
-        <p className="mb-1.5 px-1 text-xs font-semibold tracking-wider text-muted uppercase">On your Home</p>
-        <div className="overflow-hidden rounded-[20px] bg-card shadow-[0_10px_26px_-16px_rgba(11,27,69,0.45)] ring-1 ring-cobalt/15">
-          <PaymentRow payment={form} today={today} accountName={accountName(form.accountKey)} />
+
+        {/* How it will look: logo or emoji, name, amount per period */}
+        <div className="flex flex-col items-center pt-3">
+          <MerchantIcon name={form.name} className="size-[68px] rounded-[22px] bg-card text-[36px]">
+            {form.icon}
+          </MerchantIcon>
+          <b className={`mt-3 max-w-full truncate font-display text-2xl ${form.name.trim() ? '' : 'text-muted/50'}`}>{form.name.trim() || 'Name'}</b>
+          <span className={`tabular text-sm ${cents ? (income ? 'font-semibold text-gain' : 'text-muted') : 'text-muted/60'}`}>
+            {cents ? `${income ? '+' : ''}${formatCents(cents)} a ${per}` : 'Amount not set'}
+          </span>
         </div>
 
         <div className="mt-4 overflow-hidden rounded-2xl bg-card">
           <Row label="Name">
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, error: null })} placeholder="e.g. Netflix" maxLength={40} className={`w-full ${plainInput}`} />
+            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, error: null })} placeholder={income ? 'e.g. Salary' : 'e.g. Netflix'} maxLength={40} className={`w-full ${plainInput}`} />
           </Row>
           <Row label="Amount">
-            <span className="flex items-center gap-1">
-              <span className="font-semibold">€</span>
-              <input
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value, error: null })}
-                inputMode="decimal"
-                placeholder="0,00"
-                style={amountWidth(form.amount)}
-                className={`tabular max-w-[9rem] ${plainInput}`}
-              />
-            </span>
+            <button onClick={() => setPicking('amount')} className={`tabular text-base font-semibold ${cents ? 'text-ink' : 'text-muted/60'}`}>
+              {formatCents(cents)}
+            </button>
           </Row>
           <Row label="Repeats">
             <div className="grid grid-cols-3 gap-0.5 rounded-xl bg-paper p-0.5">
@@ -878,83 +882,100 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
               ))}
             </div>
           </Row>
-          <Row label="Next payment">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setForm({ ...form, nextDue: form.nextDue > today ? shiftDays(form.nextDue, -1) : today })}
-                aria-label="One day earlier"
-                className="grid size-8 place-items-center rounded-full bg-paper text-ink"
-              >
-                −
-              </button>
-              <b className="w-16 text-center text-sm">{form.nextDue === today ? 'Today' : formatDayMonth(form.nextDue)}</b>
-              <button onClick={() => setForm({ ...form, nextDue: shiftDays(form.nextDue, 1) })} aria-label="One day later" className="grid size-8 place-items-center rounded-full bg-paper text-ink">
-                +
-              </button>
-            </div>
+          <Row label={income ? 'Next date' : 'Next payment'}>
+            <button onClick={() => setPicking('date')} className="flex items-center gap-1 text-base font-semibold">
+              {form.nextDue === today ? 'Today' : formatDayMonth(form.nextDue)}
+              <Icon name="chevronRight" size={16} className="text-muted" />
+            </button>
           </Row>
         </div>
 
-        <p className="mt-4 mb-1.5 px-1 text-sm text-muted">Paid from</p>
-        <div className="-mr-5 flex gap-1.5 overflow-x-auto pr-5 [scrollbar-width:none]">
-          {spendable.map((a) => (
-            <button key={a.key} onClick={() => setForm({ ...form, accountKey: a.key })} className={`${pill(form.accountKey === a.key)} py-1.5 pr-3.5 pl-1.5`}>
+        <p className="mt-4 mb-1.5 px-1 text-sm text-muted">{income ? 'Paid into' : 'Paid from'}</p>
+        <div className="flex flex-wrap gap-2">
+          {choices.map((a) => (
+            <button key={a.key} onClick={() => setForm({ ...form, accountKey: a.key })} className={`${chip(form.accountKey === a.key)} py-1.5 pr-3.5 pl-1.5`}>
               <MiniCard account={a} className="h-6 w-8 rounded-md" iconClass="size-3" />
               {a.name}
             </button>
           ))}
         </div>
-        <p className="mt-3 mb-1.5 px-1 text-sm text-muted">Category</p>
-        <div className="-mr-5 flex gap-1.5 overflow-x-auto pr-5 [scrollbar-width:none]">
-          {expenseCats.map((c) => (
-            <button key={c.name} onClick={() => setForm({ ...form, categoryName: c.name })} className={`${pill(form.categoryName === c.name)} px-3.5 py-2`}>
+        <p className="mt-4 mb-1.5 px-1 text-sm text-muted">Category</p>
+        <div className="flex flex-wrap gap-2">
+          {cats.map((c) => (
+            <button key={c.name} onClick={() => setForm({ ...form, categoryName: c.name })} className={`${chip(form.categoryName === c.name)} px-3.5 py-2`}>
               {c.icon} {c.name}
             </button>
           ))}
         </div>
         {form.error && <p className="mt-3 px-1 text-sm text-loss">{form.error}</p>}
+
+        {picking === 'amount' && (
+          <AmountPad label={income ? 'Amount received' : 'Amount'} amount={form.amount} onChange={(amount) => setForm({ ...form, amount, error: null })} onDone={() => setPicking(null)} />
+        )}
+        {picking === 'date' && (
+          <>
+            <div className="fixed inset-0 z-30 bg-navy/50" onClick={() => setPicking(null)} />
+            <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg rounded-t-[28px] bg-card px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] motion-safe:animate-[sheet-up_200ms_ease-out]">
+              <p className="mb-2 font-display text-lg font-bold">{income ? 'Next date' : 'Next payment'}</p>
+              <DatePicker
+                value={form.nextDue}
+                dimFuture={false}
+                quickPicks={false}
+                onChange={(iso) => {
+                  setForm({ ...form, nextDue: iso < today ? today : iso })
+                  setPicking(null)
+                }}
+              />
+            </div>
+          </>
+        )}
       </div>
     )
   }
 
-  const ideas = PAYMENT_IDEAS.filter(([name]) => !payments.some((p) => p.name === name))
+  const shown = payments.map((p, i) => ({ p, i })).filter(({ p }) => (p.type ?? 'expense') === kind)
+  const ideas = PAYMENT_IDEAS.filter((idea) => idea[4] === kind && !payments.some((p) => p.name === idea[0]))
   return (
     <div>
-      {payments.length > 0 && (
-        <>
-          <div className="overflow-hidden rounded-[20px] bg-card">
-            {payments.map((p, i) => (
-              <PaymentRow key={`${p.name}-${i}`} payment={p} today={today} accountName={accountName(p.accountKey)}>
-                <RemoveButton label={`Remove ${p.name}`} onClick={() => onRemove(i)} />
-              </PaymentRow>
-            ))}
-          </div>
-          <SummaryBox
-            title={`${payments.length} regular payment${payments.length === 1 ? '' : 's'}`}
-            sub="Roughly, per month"
-            value={formatCents(payments.reduce((t, p) => t + monthlyCents({ amount_cents: p.cents, frequency: p.frequency }), 0)).replace(/,\d\d$/, '')}
-          />
-        </>
-      )}
-      <p className={`${payments.length ? 'mt-5' : ''} mb-2 px-1 text-sm font-semibold text-muted`}>{payments.length ? 'Add more' : 'Popular. Tap to add.'}</p>
-      <div className="grid grid-cols-2 gap-2">
-        {ideas.map((idea) => (
-          <button key={idea[0]} onClick={() => onOpen(idea)} className="flex items-center gap-2.5 rounded-2xl bg-card p-2.5 text-left active:scale-[.98]">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-paper text-lg">{idea[1]}</span>
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold">{idea[0]}</span>
-              <span className="tabular block text-xs text-muted">
-                {formatCents(idea[2])}
-                {idea[5] === 'yearly' ? '/yr' : '/mo'}
-              </span>
-            </span>
+      <div className="grid grid-cols-2 gap-1 rounded-2xl bg-card p-1">
+        {[
+          ['expense', 'Payments'],
+          ['income', 'Income'],
+        ].map(([k, label]) => (
+          <button
+            key={k}
+            onClick={() => setKind(k)}
+            aria-pressed={kind === k}
+            className={`rounded-xl py-2.5 text-sm font-semibold transition ${kind === k ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'}`}
+          >
+            {label}
           </button>
         ))}
-        <button onClick={() => onOpen(null)} className="flex items-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-cobalt/35 p-2.5 text-left">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cobalt/10 text-cobalt">
-            <Glyph name="plus" width={2.4} />
-          </span>
-          <span className="text-sm font-semibold text-cobalt">Something else</span>
+      </div>
+
+      {shown.length > 0 && (
+        <div className="mt-3 overflow-hidden rounded-[20px] bg-card">
+          {shown.map(({ p, i }) => (
+            <PaymentRow key={`${p.name}-${i}`} payment={p} today={today}>
+              <RemoveButton label={`Remove ${p.name}`} onClick={() => onRemove(i)} />
+            </PaymentRow>
+          ))}
+        </div>
+      )}
+      {shown.length > 0 && <p className="mt-5 mb-2 px-1 text-sm text-muted">Add more</p>}
+
+      <div className={`grid grid-cols-4 gap-2 ${shown.length ? '' : 'mt-3'}`}>
+        {ideas.map((idea) => (
+          <button key={idea[0]} onClick={() => onOpen(idea, kind)} className="flex min-w-0 flex-col items-center gap-1.5 rounded-2xl bg-card px-1 pt-2.5 pb-2 active:scale-[.97]">
+            <MerchantIcon name={idea[0]} className="size-9 rounded-[10px] bg-paper text-xl">
+              {idea[1]}
+            </MerchantIcon>
+            <span className="line-clamp-2 w-full text-center text-[11px] leading-tight font-semibold">{idea[0]}</span>
+          </button>
+        ))}
+        <button onClick={() => onOpen(null, kind)} className="flex flex-col items-center justify-center gap-1.5 rounded-2xl border-[1.5px] border-dashed border-cobalt/40 px-1 py-2 text-cobalt">
+          <Glyph name="plus" className="size-6" width={2.4} />
+          <span className="text-[11px] font-semibold">Other</span>
         </button>
       </div>
     </div>
@@ -1019,7 +1040,7 @@ function Finish({ accounts, startDay, categories, payments, answers, saveState, 
   const income = categories.filter((c) => c.kind === 'income' && c.selected)
   const answered = Object.values(answers).filter((v) => v && v.length).length
   const period = budgetPeriod(todayISO(), startDay)
-  const perMonth = payments.reduce((t, p) => t + monthlyCents({ amount_cents: p.cents, frequency: p.frequency }), 0)
+  const perMonth = payments.filter((p) => p.type !== 'income').reduce((t, p) => t + monthlyCents({ amount_cents: p.cents, frequency: p.frequency }), 0)
   const lines = [
     [
       <span key="cards" className="relative block h-6 w-8">

@@ -11,7 +11,7 @@ import { formatDay, todayISO } from '../lib/dates'
 import { EMOJIS } from '../lib/emojis'
 import { fetchLookups } from '../lib/lookups'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
-import { daysUntil, fetchRecurring, FREQUENCIES, monthlyCents } from '../lib/recurring'
+import { daysUntil, fetchRecurring, FREQUENCIES, isIncome, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import RecurringDetails from './RecurringDetails'
 
@@ -90,7 +90,9 @@ export default function Recurring() {
 
   const active = payments.filter((p) => p.active)
   const paused = payments.filter((p) => !p.active)
-  const perMonth = active.reduce((s, p) => s + monthlyCents(p), 0)
+  // Costs and income are counted apart: income never lowers the costs
+  const perMonth = active.filter((p) => !isIncome(p)).reduce((s, p) => s + monthlyCents(p), 0)
+  const incomePerMonth = active.filter(isIncome).reduce((s, p) => s + monthlyCents(p), 0)
   const monthEnd = toISO(new Date().getFullYear(), new Date().getMonth(), new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate())
   const thisMonth = active.filter((p) => p.next_due <= monthEnd)
   const later = active.filter((p) => p.next_due > monthEnd)
@@ -102,11 +104,11 @@ export default function Recurring() {
         <button onClick={() => setEditing('new')} className="w-full rounded-[26px] bg-card px-5 py-8 text-center">
           <EmptyLynx />
           <p className="mt-2 font-display text-lg font-bold">Add your recurring payments</p>
-          <p className="mt-1 text-muted">Rent, subscriptions, the gym. See what's due and record each payment with one tap.</p>
+          <p className="mt-1 text-muted">Rent, subscriptions, your salary. See what's due and record each one with one tap.</p>
         </button>
       ) : (
         <>
-          <Summary perMonth={perMonth} count={active.length} />
+          <Summary perMonth={perMonth} incomePerMonth={incomePerMonth} count={active.length} />
           <MonthCalendar payments={active} onOpen={(p) => setOpenId(p.id)} onPay={setPaying} />
         </>
       )}
@@ -156,7 +158,7 @@ export default function Recurring() {
   )
 }
 
-function Summary({ perMonth, count }) {
+function Summary({ perMonth, incomePerMonth, count }) {
   const [whole] = formatCents(perMonth).split(',')
   return (
     <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
@@ -171,7 +173,11 @@ function Summary({ perMonth, count }) {
       </p>
       <div className="relative mt-3.5 grid grid-cols-2 rounded-2xl bg-white/[.12]">
         <SummaryFact icon="calendar" label="Per year" value={formatCents(perMonth * 12).split(',')[0]} />
-        <SummaryFact icon="check" label={count === 1 ? 'Active payment' : 'Active payments'} value={count} divider />
+        {incomePerMonth > 0 ? (
+          <SummaryFact icon="arrowDown" label="Income / month" value={`+${formatCents(incomePerMonth).split(',')[0]}`} divider />
+        ) : (
+          <SummaryFact icon="check" label={count === 1 ? 'Active payment' : 'Active payments'} value={count} divider />
+        )}
       </div>
     </section>
   )
@@ -201,7 +207,8 @@ function MonthCalendar({ payments, onOpen, onPay }) {
   for (const p of payments) {
     for (const iso of datesInMonth(p, view.y, view.m)) byDay.set(iso, [...(byDay.get(iso) ?? []), p])
   }
-  const monthTotal = [...byDay.values()].flat().reduce((s, p) => s + p.amount_cents, 0)
+  const costs = (list) => list.filter((p) => !isIncome(p)).reduce((s, p) => s + p.amount_cents, 0)
+  const monthTotal = costs([...byDay.values()].flat())
   const leading = (new Date(view.y, view.m, 1).getDay() + 6) % 7 // Monday = 0
   const days = new Date(view.y, view.m + 1, 0).getDate()
   const dayItems = selected ? (byDay.get(selected) ?? []) : []
@@ -269,7 +276,7 @@ function MonthCalendar({ payments, onOpen, onPay }) {
         <div className="mt-2.5 rounded-[18px] bg-paper px-3 py-2.5">
           <p className="flex justify-between text-xs font-bold text-muted">
             <span>{shortDay(selected)}</span>
-            {dayItems.length > 0 && <span className="tabular">{formatCents(dayItems.reduce((s, p) => s + p.amount_cents, 0))}</span>}
+            {costs(dayItems) > 0 && <span className="tabular">{formatCents(costs(dayItems))}</span>}
           </p>
           {dayItems.length === 0 ? (
             <p className="pt-1 text-sm text-muted">Nothing due this day.</p>
@@ -289,11 +296,12 @@ function MonthCalendar({ payments, onOpen, onPay }) {
 }
 
 function Group({ title, payments, onOpen, onPay }) {
+  const costs = payments.filter((p) => !isIncome(p)).reduce((s, p) => s + p.amount_cents, 0)
   return (
     <section>
       <p className="flex justify-between px-1.5 pb-1.5 text-xs font-bold tracking-wider text-muted uppercase">
         <span>{title}</span>
-        {onPay && <span className="tabular">{formatCents(payments.reduce((s, p) => s + p.amount_cents, 0))}</span>}
+        {onPay && costs > 0 && <span className="tabular">{formatCents(costs)}</span>}
       </p>
       <ul className="overflow-hidden rounded-[22px] bg-card">
         {payments.map((p) => {
@@ -319,6 +327,7 @@ export function dueText(p) {
 }
 
 // One payment: icon or shop logo, name, when it's due, amount (or a Paid button when due).
+// Income shows its amount in green with a plus, and "Received" instead of "Paid".
 // `home`: Home's "Coming up", sized exactly like the recent transaction rows below it.
 export function PaymentRow({ p, sub, due, late, onOpen, onPay, compact, home }) {
   const icon = compact ? 'size-9 rounded-[14px] bg-card text-lg' : home ? 'size-10 rounded-xl bg-paper text-lg' : 'size-11 rounded-[14px] bg-paper text-xl'
@@ -333,7 +342,8 @@ export function PaymentRow({ p, sub, due, late, onOpen, onPay, compact, home }) 
           <span className={`block truncate ${home ? 'text-sm' : 'text-xs'} ${late ? 'font-semibold text-loss' : due ? 'font-semibold text-cobalt' : 'text-muted'}`}>{sub}</span>
         </span>
         {!(due && onPay) && (
-          <span className={`tabular shrink-0 text-right ${home ? 'font-display text-base leading-5 font-semibold' : 'text-[15px] font-bold'}`}>
+          <span className={`tabular shrink-0 text-right ${home ? 'font-display text-base leading-5 font-semibold' : 'text-[15px] font-bold'} ${isIncome(p) ? 'text-gain' : ''}`}>
+            {isIncome(p) && '+'}
             {formatCents(p.amount_cents)}
             <span className="block text-[11px] font-semibold text-muted">/{perLabel(p.frequency)}</span>
           </span>
@@ -341,7 +351,7 @@ export function PaymentRow({ p, sub, due, late, onOpen, onPay, compact, home }) 
       </button>
       {due && onPay && (
         <button onClick={() => onPay(p)} className="shrink-0 rounded-full bg-cobalt px-3.5 py-1.5 text-sm font-semibold text-white active:bg-cobalt-deep">
-          Paid
+          {isIncome(p) ? 'Received' : 'Paid'}
         </button>
       )}
     </div>
@@ -350,7 +360,9 @@ export function PaymentRow({ p, sub, due, late, onOpen, onPay, compact, home }) 
 
 export function RecurringForm({ payment, lookups, onClose, onSaved }) {
   const isNew = !payment
-  const categories = lookups.categories.filter((c) => c.kind === 'expense' && (!c.archived || c.id === payment?.category_id))
+  const [type, setType] = useState(payment?.type ?? 'expense')
+  const income = type === 'income'
+  const categories = lookups.categories.filter((c) => c.kind === type && (!c.archived || c.id === payment?.category_id))
   const accounts = lookups.accounts.filter((a) => !a.archived || a.id === payment?.account_id)
 
   const [name, setName] = useState(payment?.name ?? '')
@@ -384,8 +396,9 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
     const cents = parseToCents(amount)
     if (!cents) return setError('Enter the amount, like 9,99 or 650.')
     if (!categoryId) return setError('Choose a category.')
-    if (!accountId) return setError('Choose the account it’s paid from.')
+    if (!accountId) return setError(income ? 'Choose the account it’s paid into.' : 'Choose the account it’s paid from.')
     const row = {
+      type,
       name: name.trim(),
       icon: icon.trim() || '🔁',
       amount_cents: cents,
@@ -423,8 +436,29 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
   }
 
   return (
-    <Sheet title={isNew ? 'New recurring payment' : 'Edit recurring payment'} onClose={onClose} tall>
+    <Sheet title={`${isNew ? 'New' : 'Edit'} recurring ${income ? 'income' : 'payment'}`} onClose={onClose} tall>
       <form onSubmit={save} className="space-y-5">
+        <div className="grid grid-cols-2 rounded-xl bg-line/60 p-1">
+          {[
+            ['expense', 'Payment'],
+            ['income', 'Income'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => {
+                if (value === type) return
+                setType(value)
+                setCategoryId(null) // categories belong to either expenses or income
+              }}
+              aria-pressed={type === value}
+              className={`rounded-lg py-2 text-sm font-semibold ${type === value ? 'bg-card text-ink shadow-sm' : 'text-muted'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex gap-2">
           <label className="w-20 shrink-0">
             <span className="mb-1.5 block text-sm font-medium text-muted">Emoji</span>
@@ -432,7 +466,7 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
           </label>
           <label className="flex-1">
             <span className="mb-1.5 block text-sm font-medium text-muted">Name</span>
-            <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Netflix" className={`${inputClass} py-3.5`} />
+            <input required value={name} onChange={(e) => setName(e.target.value)} placeholder={income ? 'e.g. Salary' : 'e.g. Netflix'} className={`${inputClass} py-3.5`} />
           </label>
         </div>
 
@@ -452,7 +486,7 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
             </div>
           </label>
           <div className="flex-1">
-            <span className="mb-1.5 block text-sm font-medium text-muted">{isNew ? 'First payment' : 'Next payment'}</span>
+            <span className="mb-1.5 block text-sm font-medium text-muted">{isNew ? 'First date' : 'Next date'}</span>
             <button type="button" onClick={() => setPickingDate(true)} className={`${inputClass} text-left`}>
               🗓️ {formatDay(nextDue)}
             </button>
@@ -495,7 +529,7 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
         </fieldset>
 
         <fieldset>
-          <legend className="mb-1.5 text-sm font-medium text-muted">Paid from</legend>
+          <legend className="mb-1.5 text-sm font-medium text-muted">{income ? 'Paid into' : 'Paid from'}</legend>
           <div className="flex flex-wrap gap-2">
             {accounts.map((a) => (
               <button
@@ -536,7 +570,7 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
           disabled={busy}
           className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
         >
-          {isNew ? 'Add recurring payment' : 'Save changes'}
+          {isNew ? `Add recurring ${income ? 'income' : 'payment'}` : 'Save changes'}
         </button>
 
         {!isNew && (

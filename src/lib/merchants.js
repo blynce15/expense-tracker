@@ -118,6 +118,10 @@ const MERCHANTS = [
   ['allianz.com', 'allianz'],
   ['revolut.com', 'revolut'],
   ['wise.com', '^wise'],
+  // Meal cards
+  ['coverflex.com', 'coverflex'],
+  ['edenred.pt', 'edenred'],
+  ['pluxee.pt', 'pluxee'],
   // Health and fitness
   ['solinca.pt', 'solinca'],
   ['holmesplace.pt', 'holmes place'],

@@ -1,5 +1,6 @@
 // Payment reminders, run by Vercel Cron every morning (vercel.json): for each recurring payment
-// due tomorrow, a notification goes to the phones of its owner that turned reminders on.
+// due tomorrow, a notification goes to the phones of its owner that turned reminders on
+// (recurring income gets its own "Payday tomorrow" note).
 // POST /api/remind?test=1 with the user's login token sends a test notification to that user only.
 //
 // Needs these Vercel settings: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (server only, never in the app),
@@ -79,7 +80,7 @@ export default async function handler(req, res) {
     if (token !== process.env.CRON_SECRET) return res.status(401).json({ error: 'Not allowed.' })
 
     const due = tomorrowISO()
-    const { data: payments, error } = await db.from('recurring_payments').select('user_id, name, icon, amount_cents, account_id').eq('active', true).eq('next_due', due)
+    const { data: payments, error } = await db.from('recurring_payments').select('user_id, name, icon, amount_cents, account_id, type').eq('active', true).eq('next_due', due)
     if (error) throw error
 
     // Card names ("Main card"). Needs migration 008; without it the reminder just leaves the card out.
@@ -93,21 +94,28 @@ export default async function handler(req, res) {
     const byUser = new Map()
     for (const p of payments) byUser.set(p.user_id, [...(byUser.get(p.user_id) ?? []), p])
 
+    // Calendar style: "Due tomorrow · 🎬 Netflix" / "€12,99 · Main card · Sat 10 Oct".
+    // Income gets its own note: "Payday tomorrow · 💼 Salary" / "+€1.500,00 · Main card · Sat 10 Oct".
+    const label = (p) => `${p.icon ? `${p.icon} ` : ''}${p.name}`
+    function message(list, income) {
+      const sign = income ? '+' : ''
+      const head = income ? 'Payday tomorrow' : 'Due tomorrow'
+      if (list.length === 1) {
+        const p = list[0]
+        return { title: `${head} · ${label(p)}`, body: [sign + euros(p.amount_cents), cardName.get(p.account_id), shortDay(due)].filter(Boolean).join(' · ') }
+      }
+      return {
+        title: `${head} · ${list.length} ${income ? 'incomes' : 'payments'}`,
+        body: list.map((p) => `${label(p)} ${sign}${euros(p.amount_cents)}`).join('\n'),
+      }
+    }
+
     let sent = 0
     for (const [userId, list] of byUser) {
-      // Calendar style: "Due tomorrow · 🎬 Netflix" / "€12,99 · Main card · Sat 10 Oct"
-      const label = (p) => `${p.icon ? `${p.icon} ` : ''}${p.name}`
-      const message =
-        list.length === 1
-          ? {
-              title: `Due tomorrow · ${label(list[0])}`,
-              body: [euros(list[0].amount_cents), cardName.get(list[0].account_id), shortDay(due)].filter(Boolean).join(' · '),
-            }
-          : {
-              title: `Due tomorrow · ${list.length} payments`,
-              body: list.map((p) => `${label(p)} ${euros(p.amount_cents)}`).join('\n'),
-            }
-      sent += await notify(userId, { ...message, tag: `due-${due}`, url: '/#/recurring' })
+      const costs = list.filter((p) => p.type !== 'income')
+      const income = list.filter((p) => p.type === 'income')
+      if (costs.length) sent += await notify(userId, { ...message(costs, false), tag: `due-${due}`, url: '/#/recurring' })
+      if (income.length) sent += await notify(userId, { ...message(income, true), tag: `pay-${due}`, url: '/#/recurring' })
     }
     return res.status(200).json({ due, payments: payments.length, sent })
   } catch (e) {

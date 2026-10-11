@@ -26,6 +26,9 @@ export function nextDueAfter(due, startDate, frequency) {
   return toISO(ny, nm, Math.min(anchorDay, daysIn(ny, nm)))
 }
 
+// A recurring entry is a payment (expense) or income (salary, meal card…), migration 012
+export const isIncome = (p) => p.type === 'income'
+
 // Cost per month in cents: weekly × 52 / 12, yearly / 12
 export function monthlyCents(p) {
   if (p.frequency === 'weekly') return Math.round((p.amount_cents * 52) / 12)
@@ -55,7 +58,7 @@ export async function fetchRecurring() {
   return data
 }
 
-// Records one payment as an expense and moves the due date forward, both in one step
+// Records one payment as an expense (income for income entries) and moves the due date forward, both in one step
 // (database function from migrations 010/011). The expense is dated on the due date, or today if paying early.
 // goalId: the savings goal it comes out of when paid from a savings account (null = General savings).
 export async function recordPayment(p, { amountCents, accountId, goalId = null }) {
@@ -76,7 +79,7 @@ export async function recordPayment(p, { amountCents, accountId, goalId = null }
   if (rpcError.code !== 'PGRST202') throw rpcError
 
   const { error } = await supabase.from('transactions').insert({
-    type: 'expense',
+    type: p.type ?? 'expense',
     amount_cents: amountCents,
     date,
     account_id: accountId,

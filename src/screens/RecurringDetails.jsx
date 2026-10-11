@@ -4,7 +4,7 @@ import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
 import { formatCents } from '../lib/money'
-import { daysUntil, dueLabel, FREQUENCIES } from '../lib/recurring'
+import { daysUntil, dueLabel, FREQUENCIES, isIncome } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 
 const parse = (iso) => {
@@ -31,14 +31,16 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
   const account = lookups.accounts.find((a) => a.id === p.account_id)
   const freq = FREQUENCIES.find((f) => f.value === p.frequency)
   const days = daysUntil(p.next_due)
+  const income = isIncome(p)
 
   // Payments recorded with "Paid" are expenses named after the payment, in its category
+  // (income recorded with "Received" is income named after it)
   useEffect(() => {
     let cancelled = false
     supabase
       .from('transactions')
       .select('amount_cents')
-      .eq('type', 'expense')
+      .eq('type', p.type ?? 'expense')
       .eq('note', p.name)
       .eq('category_id', p.category_id)
       .then(({ data, error }) => {
@@ -48,7 +50,7 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
     return () => {
       cancelled = true
     }
-  }, [p.name, p.category_id])
+  }, [p.name, p.category_id, p.type])
 
   async function run(action) {
     setBusy(true)
@@ -80,7 +82,7 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
 
   return (
     <Sheet
-      title="Recurring payment"
+      title={income ? 'Recurring income' : 'Recurring payment'}
       onClose={onClose}
       action={
         <button onClick={onEdit} className="grid size-11 place-items-center rounded-full text-muted" aria-label="Edit">
@@ -99,7 +101,7 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
                 className="flex items-center gap-1 rounded-full bg-cobalt px-3.5 py-1.5 text-sm font-semibold text-white shadow-[0_8px_16px_-8px_rgba(31,79,224,0.8)] active:bg-cobalt-deep"
               >
                 <Icon name="check" size={15} strokeWidth={2.6} />
-                Mark paid
+                {income ? 'Mark received' : 'Mark paid'}
               </button>
             )}
           </div>
@@ -114,8 +116,11 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
               </span>
             </span>
           </div>
-          <p className="tabular mt-3 font-display leading-none font-bold">
-            <span className="text-[34px] tracking-tight">{whole}</span>
+          <p className={`tabular mt-3 font-display leading-none font-bold ${income ? 'text-gain' : ''}`}>
+            <span className="text-[34px] tracking-tight">
+              {income && '+'}
+              {whole}
+            </span>
             <span className="text-lg text-muted/70">,{decimals}</span>
             <span className="ml-1 text-sm font-semibold text-muted">/ {freq?.per ?? 'time'}</span>
           </p>
@@ -123,15 +128,15 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
 
         {/* Four facts */}
         <div className="grid grid-cols-2 gap-2.5">
-          <Fact icon="calendar" label="Next payment" value={p.active ? nextDate : '—'} sub={p.active ? dueLabel(p.next_due) : 'Paused'} />
+          <Fact icon="calendar" label={income ? 'Next date' : 'Next payment'} value={p.active ? nextDate : '—'} sub={p.active ? dueLabel(p.next_due) : 'Paused'} />
           <Fact icon="repeat" label="Repeats" value={freq?.label ?? p.frequency} sub={cycleDetail(p)} />
           <Fact
             icon="coins"
-            label="Total paid"
+            label={income ? 'Total received' : 'Total paid'}
             value={paid ? formatCents(paid.cents) : '…'}
-            sub={paid ? (paid.count ? `Over ${paid.count} ${paid.count === 1 ? 'payment' : 'payments'}` : 'Nothing recorded yet') : ''}
+            sub={paid ? (paid.count ? `Over ${paid.count} ${paid.count === 1 ? 'time' : 'times'}` : 'Nothing recorded yet') : ''}
           />
-          <Fact emoji={category?.icon} icon="tag" label="Category" value={category?.name ?? 'None'} sub="Expense" />
+          <Fact emoji={category?.icon} icon="tag" label="Category" value={category?.name ?? 'None'} sub={income ? 'Income' : 'Expense'} />
         </div>
 
         {/* Paid from */}
@@ -142,7 +147,7 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
             <span className="h-8 w-11 rounded-lg bg-line" />
           )}
           <span className="min-w-0 flex-1">
-            <span className="block text-xs text-muted">Paid from</span>
+            <span className="block text-xs text-muted">{income ? 'Paid into' : 'Paid from'}</span>
             <span className="block truncate font-semibold">
               {account?.name ?? 'No account'}
               {account && <span className="font-normal text-muted"> · {TYPE_INFO[account.type]?.label}</span>}

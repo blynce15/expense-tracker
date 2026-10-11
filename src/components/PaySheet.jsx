@@ -3,12 +3,12 @@ import { checkOverdraft } from '../lib/balances'
 import { checkGoals, savingsEffect } from '../lib/goals'
 import { lookupCache } from '../lib/lookups'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
-import { dueLabel, recordPayment } from '../lib/recurring'
+import { dueLabel, isIncome, recordPayment } from '../lib/recurring'
 import { AccountMark } from './BankCard'
 import GoalPicker from './GoalPicker'
 import Sheet from './Sheet'
 
-// Confirms a recurring payment: the amount can be changed for bills that vary
+// Confirms a recurring payment (or income received): the amount can be changed for bills that vary
 export default function PaySheet({ payment, onClose, onPaid }) {
   const [amount, setAmount] = useState(centsToInput(payment.amount_cents))
   // Archived accounts can't be paid from; if the payment's own card was archived, start on the first active one
@@ -17,8 +17,10 @@ export default function PaySheet({ payment, onClose, onPaid }) {
     accounts.some((a) => a.id === payment.account_id) ? payment.account_id : (accounts[0]?.id ?? payment.account_id),
   )
   const [busy, setBusy] = useState(false)
-  const [goalId, setGoalId] = useState(null) // when paid from savings; null = General savings
-  const fromSavings = savingsEffect(accounts, { type: 'expense', amount_cents: 1, account_id: accountId }) !== 0
+  const [goalId, setGoalId] = useState(null) // when paid from / into savings; null = General savings
+  const income = isIncome(payment)
+  const type = income ? 'income' : 'expense'
+  const fromSavings = savingsEffect(accounts, { type, amount_cents: 1, account_id: accountId }) !== 0
   const [error, setError] = useState(null)
 
   async function confirm() {
@@ -27,7 +29,7 @@ export default function PaySheet({ payment, onClose, onPaid }) {
     setBusy(true)
     setError(null)
     try {
-      const expense = { type: 'expense', amount_cents: cents, account_id: accountId, goal_id: fromSavings ? goalId : null }
+      const expense = { type, amount_cents: cents, account_id: accountId, goal_id: fromSavings ? goalId : null }
       const problem = await checkOverdraft(null, expense)
       if (problem) {
         setError(problem)
@@ -53,11 +55,11 @@ export default function PaySheet({ payment, onClose, onPaid }) {
       <Sheet title={`${payment.icon ?? ''} ${payment.name}`.trim()} onClose={onClose}>
         <div className="space-y-5">
           <p className="text-muted">
-            {dueLabel(payment.next_due)}. This records it as an expense and moves the next payment forward.
+            {dueLabel(payment.next_due)}. This records it as {income ? 'income' : 'an expense'} and moves the next date forward.
           </p>
 
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium text-muted">Amount paid</span>
+            <span className="mb-1.5 block text-sm font-medium text-muted">{income ? 'Amount received' : 'Amount paid'}</span>
             <div className="relative">
               <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
               <input
@@ -71,7 +73,7 @@ export default function PaySheet({ payment, onClose, onPaid }) {
 
           {accounts.length > 1 && (
             <fieldset>
-              <legend className="mb-1.5 text-sm font-medium text-muted">Paid from</legend>
+              <legend className="mb-1.5 text-sm font-medium text-muted">{income ? 'Paid into' : 'Paid from'}</legend>
               <div className="flex flex-wrap gap-2">
                 {accounts.map((a) => (
                   <button
@@ -90,7 +92,7 @@ export default function PaySheet({ payment, onClose, onPaid }) {
             </fieldset>
           )}
 
-          {fromSavings && <GoalPicker goals={lookupCache.lookups?.goals ?? []} value={goalId} onChange={setGoalId} direction={-1} />}
+          {fromSavings && <GoalPicker goals={lookupCache.lookups?.goals ?? []} value={goalId} onChange={setGoalId} direction={income ? 1 : -1} />}
 
           {error && <p className="text-sm text-loss">{error}</p>}
 
@@ -99,7 +101,7 @@ export default function PaySheet({ payment, onClose, onPaid }) {
             disabled={busy}
             className="w-full rounded-2xl bg-cobalt py-4 text-lg font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
           >
-            Mark {formatCents(parseToCents(amount) ?? 0)} as paid
+            Mark {formatCents(parseToCents(amount) ?? 0)} as {income ? 'received' : 'paid'}
           </button>
         </div>
       </Sheet>

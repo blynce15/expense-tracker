@@ -21,7 +21,7 @@ export async function fetchExistingCategories() {
 // so pressing "Try again" after a dropped connection doesn't create duplicates.
 //   accounts:   [{ key, name, type, cents, color }]  (cents = amount owed for credit cards)
 //   categories: [{ id?, name, icon, color, kind, selected }]
-//   payments:   [{ name, icon, cents, frequency, nextDue, accountKey, categoryName }]
+//   payments:   [{ type, name, icon, cents, frequency, nextDue, accountKey, categoryName }]  (type: expense | income)
 export async function saveOnboarding({ accounts, categories, payments, startDay, answers }, done) {
   if (!done.accountIds) {
     const ids = {}
@@ -79,7 +79,8 @@ export async function saveOnboarding({ accounts, categories, payments, startDay,
         start_date: p.nextDue,
         next_due: p.nextDue,
         account_id: done.accountIds[p.accountKey],
-        category_id: done.categoryIds[`expense:${p.categoryName?.toLowerCase()}`] ?? null,
+        type: p.type ?? 'expense',
+        category_id: done.categoryIds[`${p.type ?? 'expense'}:${p.categoryName?.toLowerCase()}`] ?? null,
         active: true,
       })),
     )
