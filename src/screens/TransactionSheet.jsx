@@ -274,7 +274,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-11">
           <p
             className={`tabular text-center font-display text-[64px] leading-none font-extrabold tracking-tight ${amount ? 'text-ink' : 'text-muted/40'}`}
             aria-live="polite"
