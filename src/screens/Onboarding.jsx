@@ -19,7 +19,7 @@ const STEPS = [
   { key: 'welcome' },
   { key: 'accounts', title: 'Accounts' },
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
-  { key: 'cats', title: 'Your categories', sub: 'What your money goes on, and where it comes from. Add your own too.' },
+  { key: 'cats', title: 'Categories' },
   { key: 'payments', title: 'Regular payments', sub: 'Rent, subscriptions, bills. The app reminds you when they are due.' },
   { key: 'about', title: 'A bit about you', sub: 'So tips fit you later. Skip any you like.' },
   { key: 'done' },
@@ -684,11 +684,25 @@ function CategoriesStep({ categories, setCategories, kind, setKind, form, setFor
   if (form) return <CategoryCreator form={form} setForm={setForm} />
 
   const list = categories.filter((c) => c.kind === kind)
-  const selected = list.filter((c) => c.selected).length
-  const count = (k) => categories.filter((c) => c.kind === k && c.selected).length
+  // Ideas sit in the same grid as faded tiles; tapping one adds it
   const ideas = CATEGORY_IDEAS.filter(([name, , , k]) => k === kind && !categories.some((c) => c.kind === k && c.name === name))
   const toggle = (c) => setCategories((all) => all.map((x) => (x === c ? { ...x, selected: !x.selected } : x)))
-  const setAll = (value) => setCategories((all) => all.map((x) => (x.kind === kind ? { ...x, selected: value } : x)))
+  const addIdea = ([name, icon, color]) => setCategories((all) => [...all, { name, icon, color, kind, selected: true }])
+
+  const tile = (key, on, icon, name, color, onClick) => (
+    <button
+      key={key}
+      onClick={onClick}
+      aria-pressed={on}
+      className={`flex h-[84px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border-[1.5px] px-1 transition ${
+        on ? '' : 'border-transparent bg-card opacity-45'
+      }`}
+      style={on ? { backgroundColor: `${color}2e`, borderColor: color } : undefined}
+    >
+      <span className={`text-[26px] leading-none ${on ? '' : 'grayscale'}`}>{icon}</span>
+      <span className="w-full truncate text-center text-xs font-semibold">{name}</span>
+    </button>
+  )
 
   return (
     <div>
@@ -701,78 +715,26 @@ function CategoriesStep({ categories, setCategories, kind, setKind, form, setFor
             key={k}
             onClick={() => setKind(k)}
             aria-pressed={kind === k}
-            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition ${
+            className={`rounded-xl py-2.5 text-sm font-semibold transition ${
               kind === k ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'
             }`}
           >
             {label}
-            <span className={`tabular grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[11px] ${kind === k ? 'bg-white/25' : 'bg-paper'}`}>
-              {count(k)}
-            </span>
           </button>
         ))}
       </div>
 
-      <div className="mt-4 mb-2 flex items-center justify-between px-1">
-        <span className="text-sm text-muted">
-          {kind === 'income' ? 'Money coming in' : 'Money going out'} · <b className="text-ink">{selected}</b> of {list.length}
-        </span>
-        <SectionAction label={selected === list.length ? 'Clear all' : 'Select all'} onClick={() => setAll(selected !== list.length)} />
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        {list.map((c) => (
-          <button
-            key={`${c.kind}-${c.name}`}
-            onClick={() => toggle(c)}
-            aria-pressed={c.selected}
-            className={`flex items-center gap-2.5 rounded-2xl p-2.5 text-left transition ${
-              c.selected ? 'bg-card shadow-[0_6px_16px_-12px_rgba(11,27,69,0.5)]' : 'ring-1 ring-line'
-            }`}
-          >
-            <span
-              className="relative grid size-10 shrink-0 place-items-center rounded-xl text-lg"
-              style={{ backgroundColor: c.selected ? `${c.color ?? '#868e96'}1f` : 'var(--color-paper)' }}
-            >
-              <span className={c.selected ? '' : 'opacity-40 grayscale'}>{c.icon}</span>
-              {c.selected && (
-                <span className="absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full bg-cobalt text-white ring-2 ring-white">
-                  <Glyph name="check" className="size-2.5" width={3.4} />
-                </span>
-              )}
-            </span>
-            <span className={`min-w-0 flex-1 text-sm leading-tight font-semibold ${c.selected ? 'text-ink' : 'text-muted'}`}>{c.name}</span>
-          </button>
-        ))}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {list.map((c) => tile(`${c.kind}-${c.name}`, c.selected, c.icon, c.name, c.color ?? '#868e96', () => toggle(c)))}
+        {ideas.map((idea) => tile(`idea-${idea[0]}`, false, idea[1], idea[0], idea[2], () => addIdea(idea)))}
         <button
           onClick={() => setForm({ name: '', icon: kind === 'income' ? '💰' : '🛒', color: CATEGORY_COLORS[list.length % CATEGORY_COLORS.length], kind, error: null })}
-          className="flex items-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-cobalt/35 p-2.5 text-left"
+          className="flex h-[84px] flex-col items-center justify-center gap-1.5 rounded-[18px] border-[1.5px] border-dashed border-cobalt/40 text-cobalt"
         >
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cobalt/10 text-cobalt">
-            <Glyph name="plus" width={2.4} />
-          </span>
-          <span className="text-sm leading-tight font-semibold text-cobalt">New category</span>
+          <Glyph name="plus" className="size-6" width={2.4} />
+          <span className="text-xs font-semibold">New</span>
         </button>
       </div>
-
-      {ideas.length > 0 && (
-        <>
-          <p className="mt-5 mb-2 px-1 text-sm font-semibold text-muted">Ideas</p>
-          <div className="flex flex-wrap gap-2">
-            {ideas.map(([name, icon, color]) => (
-              <button
-                key={name}
-                onClick={() => setCategories((all) => [...all, { name, icon, color, kind, selected: true }])}
-                className="flex items-center gap-1.5 rounded-full bg-card py-1.5 pr-3 pl-1.5 text-sm font-semibold text-ink shadow-[0_4px_12px_-10px_rgba(11,27,69,0.6)]"
-              >
-                <span className="grid size-6 place-items-center rounded-full bg-paper text-sm">{icon}</span>
-                {name}
-                <Glyph name="plus" className="size-3.5 text-cobalt" width={2.6} />
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   )
 }
@@ -781,40 +743,23 @@ function CategoryCreator({ form, setForm }) {
   const [typed, setTyped] = useState('')
   const income = form.kind === 'income'
   const emojis = EMOJIS.includes(form.icon) ? EMOJIS : [form.icon, ...EMOJIS]
-  const label = form.name.trim() || 'Category name'
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between px-1">
+      <div className="mb-1 flex items-center justify-between px-1">
         <p className="text-sm font-semibold text-muted">New {form.kind} category</p>
         <SectionAction label="Cancel" onClick={() => setForm(null)} />
       </div>
 
-      <p className="mb-1.5 px-1 text-xs font-semibold tracking-wider text-muted uppercase">How it will look</p>
-      <div className="rounded-[20px] bg-card p-4 shadow-[0_10px_26px_-16px_rgba(11,27,69,0.45)] ring-1 ring-cobalt/15">
-        <div className="flex items-center gap-3">
-          <span className="grid size-14 shrink-0 place-items-center rounded-2xl text-3xl transition-colors" style={{ backgroundColor: `${form.color}22` }}>
-            {form.icon}
-          </span>
-          <span className="min-w-0 flex-1">
-            <b className={`block truncate font-display text-xl ${form.name.trim() ? '' : 'text-muted/50'}`}>{label}</b>
-            <span className="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold" style={{ backgroundColor: `${form.color}1a`, color: form.color }}>
-              {income ? 'Income' : 'Expense'}
-            </span>
-          </span>
-        </div>
-        <div className="mt-3 flex items-center gap-3 border-t border-line pt-3">
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl text-lg" style={{ backgroundColor: `${form.color}22` }}>
-            {form.icon}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium">{income ? 'Payment received' : 'Your next purchase'}</span>
-            <span className="block truncate text-xs text-muted">{form.name.trim() || 'Category'} · Today</span>
-          </span>
-          <b className={`tabular font-display ${income ? 'text-gain' : ''}`}>{income ? '+€250,00' : '−€12,50'}</b>
-        </div>
+      {/* How it will look: the icon tile and the name */}
+      <div className="flex flex-col items-center pt-3">
+        <span className="grid size-[84px] place-items-center rounded-[26px] text-[44px] transition-colors" style={{ backgroundColor: `${form.color}33` }}>
+          {form.icon}
+        </span>
+        <b className={`mt-3 max-w-full truncate font-display text-2xl ${form.name.trim() ? '' : 'text-muted/50'}`}>{form.name.trim() || 'Category name'}</b>
+        <span className="text-sm text-muted">{income ? 'Income' : 'Expense'}</span>
       </div>
 
-      <div className="mt-4 overflow-hidden rounded-2xl bg-card">
+      <div className="mt-5 overflow-hidden rounded-2xl bg-card">
         <Row label="Name">
           <input
             value={form.name}
@@ -824,31 +769,13 @@ function CategoryCreator({ form, setForm }) {
             className={`w-full ${plainInput}`}
           />
         </Row>
-        <Row label="Color">
-          <Swatches colors={CATEGORY_COLORS} value={form.color} onChange={(color) => setForm({ ...form, color })} />
-        </Row>
+      </div>
+
+      <div className="-mx-5 mt-4 overflow-x-auto px-4">
+        <Swatches big colors={CATEGORY_COLORS} value={form.color} onChange={(color) => setForm({ ...form, color })} />
       </div>
 
       <div className="mt-3 rounded-2xl bg-card p-3">
-        <div className="flex items-center justify-between gap-3 px-1 pb-2">
-          <span className="text-sm text-muted">Emoji</span>
-          <label className="flex items-center gap-2 rounded-full bg-paper py-1 pr-1 pl-3 text-xs text-muted">
-            Or type your own
-            <input
-              value={typed}
-              onChange={(e) => {
-                const emoji = firstEmoji(e.target.value)
-                if (emoji) {
-                  setForm({ ...form, icon: emoji })
-                  setTyped('')
-                } else setTyped(e.target.value)
-              }}
-              aria-label="Type an emoji"
-              placeholder="🙂"
-              className="size-8 rounded-full bg-card text-center text-lg outline-none"
-            />
-          </label>
-        </div>
         <div className="grid max-h-[190px] grid-cols-8 gap-1 overflow-y-auto [scrollbar-width:none]">
           {emojis.map((e) => (
             <button
@@ -862,6 +789,22 @@ function CategoryCreator({ form, setForm }) {
             </button>
           ))}
         </div>
+        <label className="mt-2 flex items-center justify-between gap-2 border-t border-line px-1 pt-2.5 text-sm text-muted">
+          Or type an emoji
+          <input
+            value={typed}
+            onChange={(e) => {
+              const emoji = firstEmoji(e.target.value)
+              if (emoji) {
+                setForm({ ...form, icon: emoji })
+                setTyped('')
+              } else setTyped(e.target.value)
+            }}
+            aria-label="Type an emoji"
+            placeholder="🙂"
+            className="size-9 rounded-full bg-paper text-center text-lg outline-none"
+          />
+        </label>
       </div>
       {form.error && <p className="mt-2 px-1 text-sm text-loss">{form.error}</p>}
     </div>
