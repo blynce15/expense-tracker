@@ -33,10 +33,10 @@ const NUMBERED = STEPS.length - 2
 
 const TYPES = {
   debit: { label: 'Bank', placeholder: 'e.g. Revolut', color: '#1f4fe0' },
+  meal: { label: 'Meal card', placeholder: 'e.g. Coverflex', color: '#f2705a' },
+  cash: { label: 'Cash', placeholder: 'e.g. Wallet', color: '#2b8a3e' },
   savings: { label: 'Savings', placeholder: 'e.g. Savings', color: '#7048e8' },
   credit: { label: 'Credit card', placeholder: 'e.g. Visa', color: '#e8590c' },
-  cash: { label: 'Cash', placeholder: 'e.g. Wallet', color: '#2b8a3e' },
-  meal: { label: 'Meal card', placeholder: 'e.g. Coverflex', color: '#f2705a' },
 }
 const ACCOUNT_COLORS = [
   '#1f4fe0', '#0b1b45', '#4dabf7', '#0c8599', '#12b886', '#2b8a3e', '#94d82d', '#fab005',
