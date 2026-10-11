@@ -38,8 +38,11 @@ const ACCOUNT_COLORS = [
 ]
 const CATEGORY_COLORS = ['#1f9d55', '#e8590c', '#1f4fe0', '#6741d9', '#d6336c', '#0c8599', '#f08c00', '#495057']
 const CATEGORY_IDEAS = [
-  ['Pets', '🐶', '#a0522d', 'expense'], ['Kids', '🧸', '#f06595', 'expense'], ['Gym', '🏋️', '#2b8a3e', 'expense'],
-  ['Gifts', '🎁', '#e64980', 'expense'], ['Coffee', '☕', '#8d6e63', 'expense'], ['Car', '🚗', '#1971c2', 'expense'],
+  ['Travel', '✈️', '#1c7ed6', 'expense'], ['Subscriptions', '📺', '#7048e8', 'expense'], ['Car', '🚗', '#1971c2', 'expense'],
+  ['Coffee', '☕', '#8d6e63', 'expense'], ['Going out', '🍻', '#f08c00', 'expense'], ['Personal care', '💇', '#d6336c', 'expense'],
+  ['Gym', '🏋️', '#2b8a3e', 'expense'], ['Education', '🎓', '#0c8599', 'expense'], ['Insurance', '🛡️', '#495057', 'expense'],
+  ['Gifts', '🎁', '#e64980', 'expense'], ['Pets', '🐶', '#a0522d', 'expense'], ['Kids', '🧸', '#f06595', 'expense'],
+  ['Donations', '❤️', '#e03131', 'expense'], ['Fees', '🏦', '#868e96', 'expense'],
   ['Bonus', '🎉', '#f08c00', 'income'], ['Freelance', '💻', '#0c8599', 'income'], ['Refunds', '↩️', '#495057', 'income'],
   ['Tax refund', '🧾', '#1f9d55', 'income'], ['Investments', '📈', '#1c7ed6', 'income'], ['Interest', '🏦', '#0f8a5f', 'income'],
   ['Sales', '🏷️', '#d6336c', 'income'], ['Gifts', '🎁', '#e64980', 'income'], ['Rent received', '🏠', '#6741d9', 'income'],
@@ -94,7 +97,7 @@ const primaryClass =
 
 const newAccountForm = (type) => ({ type, name: '', amount: '', color: TYPES[type].color, error: null })
 const defaultCategories = () =>
-  DEFAULT_CATEGORIES.map((c) => ({ name: c.name, icon: c.icon, color: c.color, kind: c.kind, selected: c.name !== 'Travel' }))
+  DEFAULT_CATEGORIES.map((c) => ({ name: c.name, icon: c.icon, color: c.color, kind: c.kind, selected: true }))
 
 export default function Onboarding({ onDone }) {
   const today = todayISO()
