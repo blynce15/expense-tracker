@@ -154,7 +154,7 @@ function screenFor(route, session, dataVersion, tx) {
       return { title: 'Categories', back: '/profile', body: <Categories /> }
     case '/recurring':
       return {
-        title: 'Recurring payments',
+        title: 'Recurring',
         back: '/profile',
         action: (
           <button

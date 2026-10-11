@@ -467,7 +467,7 @@ function SectionHead({ title, onSeeAll }) {
   )
 }
 
-// The next recurring payments, in the same rows as the Recurring payments page
+// The next recurring payments and income, in the same rows as the Recurring page
 function ComingUp({ payments, onPay, onOpen }) {
   return (
     <section>

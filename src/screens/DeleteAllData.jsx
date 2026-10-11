@@ -9,7 +9,7 @@ const WHAT_GOES = [
   ['card', 'Accounts & cards'],
   ['list', 'All transactions'],
   ['tag', 'Categories'],
-  ['repeat', 'Recurring payments and reminders'],
+  ['repeat', 'Recurring payments, income and reminders'],
   ['target', 'Savings goals'],
   ['user', 'Name, photo and settings'],
 ]

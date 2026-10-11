@@ -103,7 +103,7 @@ export default function Recurring() {
       {payments.length === 0 ? (
         <button onClick={() => setEditing('new')} className="w-full rounded-[26px] bg-card px-5 py-8 text-center">
           <EmptyLynx />
-          <p className="mt-2 font-display text-lg font-bold">Add your recurring payments</p>
+          <p className="mt-2 font-display text-lg font-bold">Add recurring payments and income</p>
           <p className="mt-1 text-muted">Rent, subscriptions, your salary. See what's due and record each one with one tap.</p>
         </button>
       ) : (
