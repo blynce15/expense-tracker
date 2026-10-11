@@ -137,6 +137,7 @@ Done:
 ### 2026-10-11
 Done:
 - Savings rebuilt so goals follow the real money (owner found it disconnected: €2.000 in a savings account showed as €0 on Savings). Chosen: goals tied to transactions; every euro in savings belongs to a goal, with a built-in General savings (see Rules). Savings page: top card shows the real total in savings, split In goals / General savings; General savings card above the goals. Migration 011 (transactions.goal_id, goal_moves table, record_recurring_payment with p_goal_id, delete_my_data clears goal_moves) (run by owner 2026-10-11). Published 2026-10-11. Old stored goal amounts are ignored; the owner plans to start fresh (Delete all data).
+- Onboarding welcome page redesigned (owner's mix of mockups C "Brand" + B "Checklist"; owner dislikes motivational/AI-sounding lines): centred logo, "LynxOS" wordmark, "Expense tracker", then "Setup · 5 steps, about 3 minutes" and a plain numbered list (no icons or captions); "Set up" button with "Sign out" under it. Tighter on short screens. Published.
 
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).

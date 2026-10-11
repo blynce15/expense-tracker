@@ -197,7 +197,15 @@ export default function Onboarding({ onDone }) {
 
   // ---------- Bottom button ----------
   let footer = null
-  if (key === 'welcome') footer = <button onClick={() => go(1)} className={primaryClass}>Get started</button>
+  if (key === 'welcome')
+    footer = (
+      <>
+        <button onClick={() => go(1)} className={primaryClass}>Set up</button>
+        <button onClick={() => supabase.auth.signOut()} className="mt-1 w-full py-2.5 text-sm font-medium text-muted">
+          Sign out
+        </button>
+      </>
+    )
   else if (key === 'accounts')
     footer = accountForm ? (
       <button onClick={addAccount} className={primaryClass}>{accounts.length ? 'Add account' : 'Add this account'}</button>
@@ -336,41 +344,32 @@ function Title({ text }) {
   )
 }
 
+// First page: the app's logo and name, then the setup steps as a plain numbered list.
+// Tighter on short screens (iPhone SE) so the list stays clear of the Set up button.
 function Welcome() {
-  const items = [
-    ['credit', 'Your accounts', 'and what is in each today'],
-    ['calendar', 'Your budget day', 'usually your payday'],
-    ['tag', 'Your categories', 'what you spend money on'],
-    ['repeat', 'Regular payments', 'rent, subscriptions, bills'],
-    ['chat', 'A bit about you', 'so tips fit you later'],
-  ]
+  const steps = ['Accounts and balances', 'Budget start day', 'Categories', 'Regular payments']
   return (
-    <div className="pt-8">
-      <img src="/logo.png" alt="" className="size-[88px]" />
-      <h1 className="mt-5 font-display text-[42px] leading-none font-extrabold tracking-tight">
-        Let’s set up your <span className="brand-text">money</span>
+    <div className="flex flex-col items-center pt-10 [@media(max-height:700px)]:pt-3">
+      <img src="/logo.png" alt="" className="size-[120px] [@media(max-height:700px)]:size-[84px]" />
+      <h1 className="mt-4 font-display text-[44px] leading-none font-extrabold tracking-tight">
+        Lynx<span className="brand-text">OS</span>
       </h1>
-      <p className="mt-3 text-lg text-muted">Five short steps. You can change everything later.</p>
-      <ul className="mt-6 overflow-hidden rounded-[22px] bg-card">
-        {items.map(([icon, title, sub], n) => (
-          <li key={title} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-cobalt/10 text-cobalt">
-              <Glyph name={icon} />
+      <p className="mt-2 text-muted">Expense tracker</p>
+      <p className="mt-10 w-full px-1 text-sm text-muted [@media(max-height:700px)]:mt-6">Setup · 5 steps, about 3 minutes</p>
+      <ol className="mt-2 w-full overflow-hidden rounded-[22px] bg-card">
+        {[...steps, null].map((title, n) => (
+          <li key={n} className="flex items-center gap-3.5 border-b border-line px-4 py-4 last:border-0 [@media(max-height:700px)]:py-3">
+            <span className="tabular w-3.5 text-sm font-bold text-muted">{n + 1}</span>
+            <span className="text-base font-semibold">
+              {title ?? (
+                <>
+                  A few questions <span className="font-normal text-muted">(optional)</span>
+                </>
+              )}
             </span>
-            <span className="flex-1">
-              <b className="block text-[15px]">{title}</b>
-              <span className="text-xs text-muted">{sub}</span>
-            </span>
-            <span className="tabular text-xs font-semibold text-muted/70">{n + 1}</span>
           </li>
         ))}
-      </ul>
-      <p className="mt-6 text-center text-sm text-muted">
-        Takes about 3 minutes ·{' '}
-        <button onClick={() => supabase.auth.signOut()} className="font-semibold text-cobalt">
-          Sign out
-        </button>
-      </p>
+      </ol>
     </div>
   )
 }
