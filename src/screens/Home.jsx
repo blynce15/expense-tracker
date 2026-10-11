@@ -293,7 +293,7 @@ function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
                   cents={a.balance_cents}
                   hidden={hidden}
                   onClick={() => pick(a.id)}
-                  swatch={<MiniCard color={a.color} type={a.type} className="h-8 w-11 shrink-0 rounded-lg shadow-sm" />}
+                  swatch={<MiniCard color={a.color} type={a.type} name={a.name} className="h-8 w-11 shrink-0 rounded-lg shadow-sm" />}
                   chevron
                 />
               ))}

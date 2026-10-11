@@ -4,6 +4,7 @@ import { checkGoals, savingsEffect } from '../lib/goals'
 import { lookupCache } from '../lib/lookups'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
 import { dueLabel, recordPayment } from '../lib/recurring'
+import { AccountMark } from './BankCard'
 import GoalPicker from './GoalPicker'
 import Sheet from './Sheet'
 
@@ -81,7 +82,7 @@ export default function PaySheet({ payment, onClose, onPaid }) {
                       accountId === a.id ? 'bg-cobalt text-white' : 'bg-card'
                     }`}
                   >
-                    <span className="size-3 rounded-sm ring-1 ring-white/40" style={{ backgroundColor: a.color }} />
+                    <AccountMark account={a} className="size-3 rounded-sm ring-1 ring-white/40" logoClass="size-5" />
                     {a.name}
                   </button>
                 ))}

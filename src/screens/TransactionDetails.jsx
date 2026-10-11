@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { AccountMark } from '../components/BankCard'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
@@ -125,7 +126,7 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
 
   const accountValue = (id) => (
     <>
-      <span className="h-2.5 w-3.5 shrink-0 rounded-sm" style={{ backgroundColor: account(id)?.color }} />
+      <AccountMark account={account(id)} className="h-2.5 w-3.5 rounded-sm" logoClass="size-5" />
       <span className="truncate">{account(id)?.name ?? 'Unknown account'}</span>
     </>
   )

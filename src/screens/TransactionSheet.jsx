@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AccountMark, MiniCard } from '../components/BankCard'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import GoalPicker from '../components/GoalPicker'
@@ -272,7 +273,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
           </p>
           <div className="flex items-center rounded-full bg-card text-sm text-muted">
             <button onClick={() => setPicking('account')} className="flex h-10 items-center gap-1.5 pr-1.5 pl-4">
-              <span className="size-2.5 rounded-sm" style={{ backgroundColor: account?.color }} />
+              <AccountMark account={account} className="size-2.5 rounded-sm" logoClass="size-[18px]" />
               From <span className="font-semibold text-ink">{account?.name ?? 'Account'}</span>
             </button>
             <span aria-hidden="true">·</span>
@@ -371,7 +372,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                             highlighted === a.id ? 'border-cobalt bg-cobalt/10' : 'border-transparent bg-card'
                           }`}
                         >
-                          <span className="h-5 w-7 shrink-0 rounded" style={{ backgroundColor: a.color }} />
+                          <MiniCard color={a.color} name={a.name} className="h-5 w-7 rounded" />
                           <span className="truncate text-sm font-semibold">{a.name}</span>
                         </button>
                       ))}
@@ -449,7 +450,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                   }}
                   className="flex w-full items-center gap-3 px-4 py-4 text-left"
                 >
-                  <span className="h-6 w-9 shrink-0 rounded" style={{ backgroundColor: a.color }} />
+                  <MiniCard color={a.color} name={a.name} className="h-6 w-9 rounded" />
                   <span className="flex-1 text-base font-medium">{a.name}</span>
                   {a.id === accountId && <span className="text-sm font-semibold text-cobalt">Selected</span>}
                 </button>

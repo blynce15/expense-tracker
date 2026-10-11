@@ -14,10 +14,11 @@ export const BANKS = [
   { name: 'N26', domain: 'n26.com', color: '#2e8b7a' },
 ]
 
-// The bank an account name stands for ("revolut" → Revolut), or null
+// The bank an account name stands for, or null: the bank's name as a whole word,
+// so "Revolut" and "Revolut Savings" both show the Revolut logo
 export function bankFor(name) {
-  const n = name.trim().toLowerCase()
-  return BANKS.find((b) => b.name.toLowerCase() === n) ?? null
+  const n = ` ${(name ?? '').trim().toLowerCase()} `
+  return BANKS.find((b) => n.includes(` ${b.name.toLowerCase()} `)) ?? null
 }
 
 export const bankLogo = (bank) => logoUrl(bank.domain)

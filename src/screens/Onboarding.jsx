@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon'
 import LynxWatermark from '../components/LynxWatermark'
+import { BankLogo } from '../components/BankCard'
 import { BANKS, bankFor, bankLogo } from '../lib/banks'
 import { budgetPeriod } from '../lib/budget'
 import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
@@ -410,12 +411,13 @@ function SectionAction({ label, onClick }) {
 }
 
 function MiniCard({ account, className = 'h-11 w-16 rounded-xl', iconClass = 'size-4' }) {
+  const bank = bankFor(account.name)
   return (
     <span
       className={`grid shrink-0 place-items-center text-white shadow-sm ring-1 ring-white/30 ${className}`}
       style={{ background: `linear-gradient(135deg, ${account.color}, ${shade(account.color, 0.7)})` }}
     >
-      <Glyph name={account.type} className={iconClass} />
+      {bank ? <BankLogo bank={bank} className="aspect-square h-[62%]" /> : <Glyph name={account.type} className={iconClass} />}
     </span>
   )
 }
@@ -581,7 +583,6 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
         </span>
         Add another account
       </button>
-      <SummaryBox title="Money to spend right now" sub="Bank and cash accounts" value={formatCents(budgetOf(accounts))} />
     </div>
   )
 }

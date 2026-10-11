@@ -130,7 +130,7 @@ function ActiveFilters({ filter, lookups, onChange }) {
     chips.push({
       key: id,
       label: a?.name ?? 'Account',
-      swatch: a && <MiniCard color={a.color} className="h-[15px] w-[22px] rounded-[4px]" />,
+      swatch: a && <MiniCard color={a.color} name={a.name} className="h-[15px] w-[22px] rounded-[4px]" />,
       remove: () => onChange({ ...filter, accountIds: filter.accountIds.filter((x) => x !== id) }),
     })
   }
@@ -350,7 +350,7 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
             <li key={a.id} className="border-b border-line last:border-0">
               <button onClick={() => toggle('accountIds', a.id)} aria-pressed={draft.accountIds.includes(a.id)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
                 <Check on={draft.accountIds.includes(a.id)} />
-                <MiniCard color={a.color} type={a.type} className="h-[30px] w-11 rounded-lg" />
+                <MiniCard color={a.color} type={a.type} name={a.name} className="h-[30px] w-11 rounded-lg" />
                 <span className="min-w-0 flex-1">
                   <span className={`block truncate text-base font-medium ${a.archived ? 'text-muted' : ''}`}>{a.name}</span>
                   <span className="block text-sm text-muted">{TYPE_INFO[a.type]?.label ?? a.type}</span>

@@ -167,7 +167,7 @@ export default function Settings({ session }) {
         />
         <QuickTile
           onClick={() => setPickingAccount(true)}
-          icon={pinned ? <MiniCard color={pinned.color} type={pinned.type} className="h-6 w-9 rounded-md" iconSize={12} /> : <Icon name="card" size={19} />}
+          icon={pinned ? <MiniCard color={pinned.color} type={pinned.type} name={pinned.name} className="h-6 w-9 rounded-md" iconSize={12} /> : <Icon name="card" size={19} />}
           color={pinned ? null : '#2b8ef7'}
           iconClass={pinned ? 'bg-paper' : ''}
           title="Default account"
@@ -531,7 +531,7 @@ function DefaultAccountSheet({ accounts, pinnedId, onPick, onClose }) {
           'Whichever account you used most recently',
         )}
         {accounts.map((a) =>
-          option(a.id, <MiniCard color={a.color} type={a.type} className="h-8 w-11 rounded-lg" />, a.name, TYPE_INFO[a.type]?.label ?? a.type),
+          option(a.id, <MiniCard color={a.color} type={a.type} name={a.name} className="h-8 w-11 rounded-lg" />, a.name, TYPE_INFO[a.type]?.label ?? a.type),
         )}
       </ul>
     </Sheet>

@@ -4,7 +4,7 @@ import EmptyLynx from '../components/EmptyLynx'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
-import { cardBackground } from '../components/BankCard'
+import { MiniCard } from '../components/BankCard'
 import { checkOverdraft } from '../lib/balances'
 import { todayISO } from '../lib/dates'
 import { fetchGoalsState, goalProblem, moveBetweenGoals, savingsAccounts, transactionGoalProblem } from '../lib/goals'
@@ -495,7 +495,7 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
   }
 
   const chips = [
-    ...cards.map((a) => ({ kind: 'card', id: a.id, label: a.name, cents: a.balance_cents, swatch: a.color })),
+    ...cards.map((a) => ({ kind: 'card', id: a.id, label: a.name, cents: a.balance_cents, account: a })),
     ...others.map((g) => ({ kind: 'goal', id: g.id, label: g.name, cents: g.saved_cents, icon: g.icon || DEFAULT_ICON })),
   ]
 
@@ -567,7 +567,7 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
                   sub={formatCents(Math.max(c.cents, 0))}
                 >
                   {c.kind === 'card' ? (
-                    <span className="h-3.5 w-5 shrink-0 rounded-[4px]" style={{ background: cardBackground(c.swatch) }} />
+                    <MiniCard color={c.account.color} name={c.account.name} className="h-3.5 w-5 rounded-[4px] ring-0" />
                   ) : (
                     <span className="text-base leading-none">{c.icon}</span>
                   )}

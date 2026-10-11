@@ -137,7 +137,7 @@ export default function RecurringDetails({ payment: p, lookups, onClose, onPay, 
         {/* Paid from */}
         <button onClick={onEdit} className="flex w-full items-center gap-3 rounded-[20px] bg-card px-4 py-3 text-left">
           {account ? (
-            <MiniCard color={account.color} type={account.type} className="h-8 w-11 rounded-lg" />
+            <MiniCard color={account.color} type={account.type} name={account.name} className="h-8 w-11 rounded-lg" />
           ) : (
             <span className="h-8 w-11 rounded-lg bg-line" />
           )}

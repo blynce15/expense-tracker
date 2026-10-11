@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import LynxWatermark from '../components/LynxWatermark'
 import EmptyLynx from '../components/EmptyLynx'
+import { AccountMark } from '../components/BankCard'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
@@ -504,7 +505,7 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
                 aria-pressed={accountId === a.id}
                 className={`flex h-10 items-center gap-1.5 rounded-full px-3.5 text-sm font-medium ${accountId === a.id ? 'bg-cobalt text-white' : 'bg-card'}`}
               >
-                <span className="size-3 rounded-sm ring-1 ring-white/40" style={{ backgroundColor: a.color }} />
+                <AccountMark account={a} className="size-3 rounded-sm ring-1 ring-white/40" logoClass="size-5" />
                 {a.name}
               </button>
             ))}
