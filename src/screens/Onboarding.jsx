@@ -86,10 +86,6 @@ const shade = (hex, f) =>
   '#' + hex.slice(1).match(/../g).map((h) => Math.round(parseInt(h, 16) * f).toString(16).padStart(2, '0')).join('')
 const ordinal = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th')
 const budgetOf = (accounts) => accounts.filter((a) => a.type === 'debit' || a.type === 'cash').reduce((s, a) => s + a.cents, 0)
-const firstEmoji = (text) => {
-  const parts = [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text.trim())].map((x) => x.segment)
-  return parts.find((x) => /\p{Extended_Pictographic}/u.test(x)) ?? null
-}
 const amountWidth = (text) => ({ width: `${Math.max(4, text.length) + 0.5}ch` })
 const primaryClass =
   'w-full rounded-2xl bg-cobalt py-4 text-lg font-semibold text-white shadow-[0_10px_24px_-10px_rgba(31,79,224,0.8)] active:bg-cobalt-deep disabled:opacity-40'
@@ -740,7 +736,6 @@ function CategoriesStep({ categories, setCategories, kind, setKind, form, setFor
 }
 
 function CategoryCreator({ form, setForm }) {
-  const [typed, setTyped] = useState('')
   const income = form.kind === 'income'
   const emojis = EMOJIS.includes(form.icon) ? EMOJIS : [form.icon, ...EMOJIS]
   return (
@@ -789,22 +784,6 @@ function CategoryCreator({ form, setForm }) {
             </button>
           ))}
         </div>
-        <label className="mt-2 flex items-center justify-between gap-2 border-t border-line px-1 pt-2.5 text-sm text-muted">
-          Or type an emoji
-          <input
-            value={typed}
-            onChange={(e) => {
-              const emoji = firstEmoji(e.target.value)
-              if (emoji) {
-                setForm({ ...form, icon: emoji })
-                setTyped('')
-              } else setTyped(e.target.value)
-            }}
-            aria-label="Type an emoji"
-            placeholder="🙂"
-            className="size-9 rounded-full bg-paper text-center text-lg outline-none"
-          />
-        </label>
       </div>
       {form.error && <p className="mt-2 px-1 text-sm text-loss">{form.error}</p>}
     </div>
