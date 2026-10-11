@@ -130,6 +130,9 @@ Done:
 
 - Money rules audit + fixes (see Rules → Money rules). Recurring "Paid" now saves the expense and the new due date in one step via rpc record_recurring_payment (migration 010, run by owner 2026-10-10, confirmed: exists and is closed to signed-out callers; refuses a second payment for the same due date). The app still falls back to the old two-step save if the function is ever missing (PGRST202).
 
+- Text boxes: the global keyboard focus ring (:focus-visible in src/index.css) now skips input/textarea/select, so no rectangle appears inside a box while typing; buttons keep it. Every text box was checked.
+- Add transaction: 44px (gap-11) between the amount and the "From card · date" pill instead of 20px (owner chose "more space" over moving the pill above the keys). Checked on a normal and a small iPhone. Published 2026-10-11.
+
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).
