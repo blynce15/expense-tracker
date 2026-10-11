@@ -40,8 +40,10 @@ const CATEGORY_COLORS = ['#1f9d55', '#e8590c', '#1f4fe0', '#6741d9', '#d6336c', 
 const CATEGORY_IDEAS = [
   ['Pets', '🐶', '#a0522d', 'expense'], ['Kids', '🧸', '#f06595', 'expense'], ['Gym', '🏋️', '#2b8a3e', 'expense'],
   ['Gifts', '🎁', '#e64980', 'expense'], ['Coffee', '☕', '#8d6e63', 'expense'], ['Car', '🚗', '#1971c2', 'expense'],
-  ['Freelance', '💻', '#0c8599', 'income'], ['Refunds', '↩️', '#495057', 'income'], ['Investments', '📈', '#1c7ed6', 'income'],
-  ['Gifts received', '🎁', '#e64980', 'income'], ['Rent received', '🏠', '#6741d9', 'income'],
+  ['Bonus', '🎉', '#f08c00', 'income'], ['Freelance', '💻', '#0c8599', 'income'], ['Refunds', '↩️', '#495057', 'income'],
+  ['Tax refund', '🧾', '#1f9d55', 'income'], ['Investments', '📈', '#1c7ed6', 'income'], ['Interest', '🏦', '#0f8a5f', 'income'],
+  ['Sales', '🏷️', '#d6336c', 'income'], ['Gifts', '🎁', '#e64980', 'income'], ['Rent received', '🏠', '#6741d9', 'income'],
+  ['Cashback', '🪙', '#e8a400', 'income'],
 ]
 // name, icon, typical cents, category, days until due, frequency
 const PAYMENT_IDEAS = [
