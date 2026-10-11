@@ -9,6 +9,7 @@ export const DEFAULT_CATEGORIES = [
   { name: 'Shopping', icon: '🛍️', color: '#d6336c', kind: 'expense' },
   { name: 'Health', icon: '🩺', color: '#0c8599', kind: 'expense' },
   { name: 'Entertainment', icon: '🎬', color: '#f08c00', kind: 'expense' },
+  { name: 'Sports', icon: '⚽', color: '#2b8a3e', kind: 'expense' },
   { name: 'Other', icon: '📦', color: '#868e96', kind: 'expense' },
   { name: 'Salary', icon: '💼', color: '#0f8a5f', kind: 'income' },
   { name: 'Other income', icon: '💶', color: '#2b8a3e', kind: 'income' },
