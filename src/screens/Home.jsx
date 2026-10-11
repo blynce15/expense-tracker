@@ -198,8 +198,11 @@ function BigAmount({ cents, hidden }) {
 // Picking an account in the list opens its own page.
 function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
   const [open, setOpen] = useState(false)
-  const total = accounts.reduce((s, a) => s + a.balance_cents, 0)
-  const fan = accounts.slice(0, 3)
+  // Investment accounts hold money that's been invested: listed, but not part of the total
+  const counted = accounts.filter((a) => a.type !== 'investment')
+  const invested = accounts.length - counted.length
+  const total = counted.reduce((s, a) => s + a.balance_cents, 0)
+  const fan = (counted.length ? counted : accounts).slice(0, 3)
   const offset = 3 - fan.length
 
   function pick(id) {
@@ -268,14 +271,14 @@ function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
             <ul className="px-1.5 pb-1.5">
               <AccountOption
                 label="All accounts"
-                sub={`${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
+                sub={invested ? 'Investments not included' : `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
                 cents={total}
                 hidden={hidden}
                 selected
                 onClick={() => pick(null)}
                 swatch={
                   <span className="relative h-8 w-11 shrink-0">
-                    {accounts.slice(0, 3).map((a, i) => (
+                    {fan.map((a, i) => (
                       <span
                         key={a.id}
                         className="absolute h-7 w-9 rounded-md ring-1 ring-white"

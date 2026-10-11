@@ -38,6 +38,7 @@ const TYPES = {
   cash: { label: 'Cash', placeholder: 'e.g. Wallet', color: '#2b8a3e' },
   savings: { label: 'Savings', placeholder: 'e.g. Savings', color: '#7048e8' },
   credit: { label: 'Credit card', placeholder: 'e.g. Visa', color: '#e8590c' },
+  investment: { label: 'Investment', placeholder: 'e.g. Trade Republic', color: '#0c8599' },
 }
 const ACCOUNT_COLORS = [
   '#1f4fe0', '#0b1b45', '#4dabf7', '#0c8599', '#12b886', '#2b8a3e', '#94d82d', '#fab005',
@@ -79,6 +80,7 @@ const GLYPHS = {
   savings: 'M5 6.5a7 3 0 1 0 14 0a7 3 0 1 0-14 0M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5',
   credit: 'M5 5h14a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 19 19H5a2.5 2.5 0 0 1-2.5-2.5v-9A2.5 2.5 0 0 1 5 5zM2.5 10h19M6.5 15h4',
   meal: 'M6 3v6a3 3 0 0 0 6 0V3M9 3v18M17 21V3c-2 1.5-3 4-3 7s1 3.5 3 3.5',
+  investment: 'M3 17l6-6 4 4 8-8M15 7h6v6',
   cash: 'M4.5 6h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0M6 12h.01M18 12h.01',
   calendar: 'M6 4.5h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-10a3 3 0 0 1 3-3zM3 9.5h18M8 2.5v4M16 2.5v4',
   tag: 'M3 12.2V4.5A1.5 1.5 0 0 1 4.5 3h7.7l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0zM6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0-2.6 0',
@@ -190,7 +192,7 @@ export default function Onboarding({ email, onDone }) {
   function openPaymentForm(idea, type = 'expense') {
     const income = type === 'income'
     // Money comes in to a spending account; payments go out of spending accounts and credit cards
-    const spendable = accounts.filter((a) => a.type !== 'savings')
+    const spendable = accounts.filter((a) => a.type !== 'savings' && a.type !== 'investment')
     const names = categories.filter((c) => c.kind === type && c.selected).map((c) => c.name)
     setPaymentForm({
       type,
@@ -540,14 +542,14 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
               <span className="block text-xs text-white/70">{t.label}</span>
             </span>
           </div>
-          <p className="relative mt-6 text-xs text-white/70">{owed ? 'Owed today' : 'Balance today'}</p>
+          <p className="relative mt-6 text-xs text-white/70">{owed ? 'Owed today' : form.type === 'investment' ? 'Invested so far' : 'Balance today'}</p>
           <button onClick={() => setPadOpen(true)} className={`tabular relative font-display leading-tight font-bold ${owed && cents ? 'text-[#ffb4a8]' : ''}`}>
             <span className="text-[30px]">{whole}</span>
             <span className="text-lg opacity-60">,{decimals}</span>
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-5 gap-1 rounded-2xl bg-card p-1">
+        <div className="mt-4 grid grid-cols-3 gap-1 rounded-2xl bg-card p-1">
           {Object.entries(TYPES).map(([type, info]) => (
             <button
               key={type}
@@ -565,7 +567,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
 
         {form.type !== 'cash' && (
           <>
-            <p className="mt-4 mb-1.5 px-1 text-sm text-muted">{form.type === 'meal' ? 'Your meal card' : 'Your bank'}</p>
+            <p className="mt-4 mb-1.5 px-1 text-sm text-muted">{form.type === 'meal' ? 'Your meal card' : form.type === 'investment' ? 'Your broker' : 'Your bank'}</p>
             <div className="grid grid-cols-4 gap-2">
               {(form.type === 'meal' ? MEAL_CARDS : BANKS).map((b) => (
                 <button
@@ -594,7 +596,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
               className={`w-full ${plainInput}`}
             />
           </Row>
-          <Row label={owed ? 'Owed' : 'Balance'}>
+          <Row label={owed ? 'Owed' : form.type === 'investment' ? 'Invested' : 'Balance'}>
             <button onClick={() => setPadOpen(true)} className={`tabular text-base font-semibold ${!cents ? 'text-muted/60' : owed ? 'text-loss' : 'text-ink'}`}>
               {formatCents(cents)}
             </button>
@@ -609,7 +611,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
 
         {padOpen && (
           <AmountPad
-            label={owed ? 'Owed today' : 'Balance today'}
+            label={owed ? 'Owed today' : form.type === 'investment' ? 'Invested so far' : 'Balance today'}
             amount={form.amount}
             onChange={(amount) => setForm({ ...form, amount, error: null })}
             onDone={() => setPadOpen(false)}
@@ -859,7 +861,7 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
   if (form) {
     const income = form.type === 'income'
     // Money comes in to any account; payments go out of spending accounts and credit cards
-    const choices = income ? accounts : accounts.filter((a) => a.type !== 'savings')
+    const choices = accounts.filter((a) => a.type !== 'investment' && (income || a.type !== 'savings'))
     const cats = categories.filter((c) => c.kind === form.type && c.selected)
     const cents = parseToCents(form.amount) ?? 0
     const per = FREQUENCIES.find((f) => f[0] === form.frequency)[3]

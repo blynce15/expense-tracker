@@ -4,7 +4,7 @@ import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import GoalPicker from '../components/GoalPicker'
 import Sheet from '../components/Sheet'
-import { checkOverdraft } from '../lib/balances'
+import { canPayFrom, checkOverdraft } from '../lib/balances'
 import { formatDay, todayISO } from '../lib/dates'
 import { checkGoals, savingsEffect } from '../lib/goals'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
@@ -205,11 +205,13 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
 
   // Keep showing an archived account/category if an existing transaction uses it
   const accounts = lookups.accounts.filter((a) => !a.archived || a.id === accountId || a.id === toAccountId)
+  // Money can't come out of an investment account (it can only be a transfer's "to")
+  const fromAccounts = accounts.filter((a) => canPayFrom(a) || a.id === accountId)
   const categories = lookups.categories.filter((c) => c.kind === type && (!c.archived || c.id === categoryId))
   const accountById = (id) => lookups.accounts.find((a) => a.id === id)
   const account = accountById(accountId)
 
-  if (accounts.length === 0) {
+  if (fromAccounts.length === 0) {
     return (
       <Sheet title={title} onClose={onClose} tall>
         <p className="py-6 text-center text-muted">
@@ -441,7 +443,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
       {picking === 'account' && (
         <Sheet title={type === 'transfer' ? 'From account' : 'Account'} onClose={() => setPicking(null)} tall>
           <ul className="overflow-hidden rounded-2xl bg-card">
-            {accounts.map((a) => (
+            {fromAccounts.map((a) => (
               <li key={a.id} className="border-b border-line last:border-0">
                 <button
                   onClick={() => {

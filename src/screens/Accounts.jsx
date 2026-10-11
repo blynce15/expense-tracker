@@ -14,6 +14,7 @@ const ACCOUNT_TYPES = [
   { value: 'cash', label: 'Cash' },
   { value: 'savings', label: 'Savings' },
   { value: 'meal', label: 'Meal card' },
+  { value: 'investment', label: 'Investment' },
 ]
 
 const ACCOUNT_COLORS = ['#1f4fe0', '#0b1b45', '#0f8a5f', '#c23b22', '#e8590c', '#6741d9', '#d6336c', '#0c8599']
@@ -23,7 +24,7 @@ function AccountCard({ account, cents, className = '', corner }) {
   const [whole, decimals] = formatCents(cents).split(',')
   return (
     <BankCard account={account} named className={`text-sm ${className}`} corner={corner}>
-      <p className="mt-5 text-xs text-white/70">{account.type === 'credit' ? 'Owed today' : 'Balance today'}</p>
+      <p className="mt-5 text-xs text-white/70">{account.type === 'credit' ? 'Owed today' : account.type === 'investment' ? 'Invested' : 'Balance today'}</p>
       <p className="tabular font-display leading-tight font-bold">
         <span className="text-[26px]">{whole}</span>
         <span className="text-base text-white/60">,{decimals}</span>
@@ -180,8 +181,9 @@ function AccountForm({ account, onClose, onSaved }) {
   }
 
   async function setArchived(archived) {
-    // Money rule: an archived account drops out of your totals, so it has to be empty first
-    if (archived && account.balance_cents !== 0) {
+    // Money rule: an archived account drops out of your totals, so it has to be empty first.
+    // Investment accounts never empty (money only goes in), so they can be archived as they are.
+    if (archived && account.type !== 'investment' && account.balance_cents !== 0) {
       return setError(
         account.balance_cents < 0
           ? `${account.name} still owes ${formatCents(-account.balance_cents)}. Pay it off first, then archive it.`

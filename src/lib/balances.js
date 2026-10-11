@@ -34,7 +34,11 @@ export async function fetchAccountsWithBalances() {
 }
 
 // Accounts that can't go below €0. Credit cards can: a negative balance is what you owe.
-export const NO_OVERDRAFT_TYPES = ['debit', 'cash', 'savings', 'meal']
+export const NO_OVERDRAFT_TYPES = ['debit', 'cash', 'savings', 'meal', 'investment']
+
+// Investment accounts only receive money (as a transfer's "to" account): never paid from, no income,
+// no transfers out. Their balance is how much has been invested; it isn't part of the total balance.
+export const canPayFrom = (account) => account?.type !== 'investment'
 
 // How a transaction moves each account's balance: Map account id → cents
 function effect(t, sign = 1) {
@@ -61,6 +65,10 @@ export function balanceChanges(before, after) {
 // Returns a message saying why the change isn't allowed, or null if it's fine.
 // A change that doesn't lower an account is always allowed, even if that account is already below €0.
 export function overdraftProblem(accounts, before, after) {
+  const source = after && accounts.find((x) => x.id === after.account_id)
+  if (source && !canPayFrom(source)) {
+    return `${source.name} is an investment account: money only goes into it. Pick it as the "To" account of a transfer.`
+  }
   for (const [id, cents] of balanceChanges(before, after)) {
     const a = accounts.find((x) => x.id === id)
     if (!a || cents >= 0 || !NO_OVERDRAFT_TYPES.includes(a.type)) continue
