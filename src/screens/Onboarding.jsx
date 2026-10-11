@@ -344,10 +344,16 @@ function Title({ text }) {
   )
 }
 
-// First page: the app's logo and name, then the setup steps as a plain numbered list.
+// First page: the app's logo and name, then the setup steps as a coloured timeline.
 // Tighter on short screens (iPhone SE) so the list stays clear of the Set up button.
 function Welcome() {
-  const steps = ['Accounts and balances', 'Budget start day', 'Categories', 'Regular payments']
+  const steps = [
+    ['credit', 'Accounts and balances', '#2f6bff'],
+    ['calendar', 'Budget start day', '#f08c00'],
+    ['tag', 'Categories', '#7048e8'],
+    ['repeat', 'Regular payments', '#0f9d6b'],
+    ['chat', 'A few questions', '#8892a6'],
+  ]
   return (
     <div className="flex flex-col items-center pt-10 [@media(max-height:700px)]:pt-3">
       <img src="/logo.png" alt="" className="size-[120px] [@media(max-height:700px)]:size-[84px]" />
@@ -355,16 +361,17 @@ function Welcome() {
         Lynx<span className="brand-text">OS</span>
       </h1>
       <p className="mt-2 text-muted">Expense tracker</p>
-      <ol className="mt-10 w-full overflow-hidden rounded-[22px] bg-card [@media(max-height:700px)]:mt-6">
-        {[...steps, null].map((title, n) => (
-          <li key={n} className="flex items-center gap-3.5 border-b border-line px-4 py-4 last:border-0 [@media(max-height:700px)]:py-3">
-            <span className="tabular w-3.5 text-sm font-bold text-muted">{n + 1}</span>
+      <ol className="relative mt-10 w-full px-2 [@media(max-height:700px)]:mt-6">
+        {/* The line joining the steps, behind the circles */}
+        <span className="absolute top-7 bottom-7 left-[29px] w-0.5 bg-line [@media(max-height:700px)]:left-[27px]" aria-hidden="true" />
+        {steps.map(([icon, title, color], n) => (
+          <li key={title} className="relative flex h-[58px] items-center gap-4 [@media(max-height:700px)]:h-[50px]">
+            <span className="grid size-11 shrink-0 place-items-center rounded-full text-white [@media(max-height:700px)]:size-10" style={{ backgroundColor: color }}>
+              <Glyph name={icon} />
+            </span>
             <span className="text-base font-semibold">
-              {title ?? (
-                <>
-                  A few questions <span className="font-normal text-muted">(optional)</span>
-                </>
-              )}
+              {title}
+              {n === steps.length - 1 && <span className="font-normal text-muted"> (optional)</span>}
             </span>
           </li>
         ))}
