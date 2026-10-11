@@ -51,8 +51,9 @@ export function MiniCard({ color, type, name, className = '', iconSize = 15, sty
 }
 
 // An account drawn as a bank card, in the onboarding style: color gradient, soft circles,
-// type label at the top. `children` fills the card body; `corner` replaces the two dots.
-export default function BankCard({ account, className = '', style, corner, children }) {
+// type label at the top. `named`: the top shows the logo (or type icon) with the account's name and
+// the type under it (big cards). `children` fills the card body; `corner` replaces the two dots.
+export default function BankCard({ account, className = '', style, corner, named = false, children }) {
   const info = TYPE_INFO[account.type] ?? TYPE_INFO.debit
   const bank = bankFor(account.name)
   return (
@@ -63,6 +64,21 @@ export default function BankCard({ account, className = '', style, corner, child
       <span className="pointer-events-none absolute -top-[35%] -right-[12%] aspect-square w-[60%] rounded-full bg-white/10" />
       <span className="pointer-events-none absolute -right-[18%] -bottom-[55%] aspect-square w-[70%] rounded-full bg-white/[.06]" />
       <div className="relative flex items-center justify-between gap-2">
+        {named ? (
+          <span className="flex min-w-0 items-center gap-3">
+            {bank ? (
+              <BankLogo bank={bank} className="size-11" />
+            ) : (
+              <span className="grid size-11 shrink-0 place-items-center rounded-[24%] bg-white/15">
+                <Icon name={info.icon} size={22} strokeWidth={2} />
+              </span>
+            )}
+            <span className="min-w-0">
+              <span className="block truncate text-base leading-tight font-semibold">{account.name.trim() || 'New account'}</span>
+              <span className="block truncate text-xs text-white/70">{info.label}</span>
+            </span>
+          </span>
+        ) : (
         <span className="flex min-w-0 items-center gap-1.5 font-semibold text-white/85">
           {bank ? (
             <BankLogo bank={bank} className="size-[1.9em]" />
@@ -71,6 +87,7 @@ export default function BankCard({ account, className = '', style, corner, child
           )}
           <span className="truncate">{info.label}</span>
         </span>
+        )}
         {corner ?? (
           <span className="flex shrink-0">
             <span className="size-[1.5em] rounded-full bg-white/35" />

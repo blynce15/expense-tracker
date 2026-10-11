@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import Icon from '../components/Icon'
 import LynxWatermark from '../components/LynxWatermark'
 import { BankLogo } from '../components/BankCard'
-import { BANKS, bankFor, bankLogo } from '../lib/banks'
+import { BANKS, bankFor } from '../lib/banks'
 import { budgetPeriod } from '../lib/budget'
 import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
 import { DEFAULT_CATEGORIES } from '../lib/defaults'
@@ -470,18 +470,23 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
         >
           <span className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-white/10" />
           <span className="pointer-events-none absolute -right-16 -bottom-24 size-56 rounded-full bg-white/[.06]" />
-          <div className="relative flex h-9 items-center gap-2 text-sm font-semibold text-white/85">
+          {/* Logo (or type icon) with the name beside it and the type under the name */}
+          <div className="relative flex items-center gap-3">
             {bank ? (
-              <span className="grid size-9 place-items-center rounded-[10px] bg-white">
-                <img src={bankLogo(bank)} alt="" className="size-6 rounded-md" />
-              </span>
+              <BankLogo bank={bank} className="size-11" />
             ) : (
-              <Glyph name={form.type} className="size-[18px]" />
+              <span className="grid size-11 shrink-0 place-items-center rounded-[24%] bg-white/15">
+                <Glyph name={form.type} className="size-[22px]" />
+              </span>
             )}
-            {t.label}
+            <span className="min-w-0">
+              <span className={`block truncate text-base leading-tight font-semibold ${form.name.trim() ? '' : 'text-white/55'}`}>
+                {form.name.trim() || t.placeholder}
+              </span>
+              <span className="block text-xs text-white/70">{t.label}</span>
+            </span>
           </div>
-          <p className={`relative mt-4 truncate text-base font-semibold ${form.name.trim() ? '' : 'text-white/55'}`}>{form.name.trim() || t.placeholder}</p>
-          <p className="relative text-xs text-white/70">{owed ? 'Owed today' : 'Balance today'}</p>
+          <p className="relative mt-6 text-xs text-white/70">{owed ? 'Owed today' : 'Balance today'}</p>
           <button onClick={() => setPadOpen(true)} className={`tabular relative font-display leading-tight font-bold ${owed && cents ? 'text-[#ffb4a8]' : ''}`}>
             <span className="text-[30px]">{whole}</span>
             <span className="text-lg opacity-60">,{decimals}</span>

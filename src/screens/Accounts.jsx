@@ -17,13 +17,12 @@ const ACCOUNT_TYPES = [
 
 const ACCOUNT_COLORS = ['#1f4fe0', '#0b1b45', '#0f8a5f', '#c23b22', '#e8590c', '#6741d9', '#d6336c', '#0c8599']
 
-// The account as a card: type, name and balance ("Owed today" for credit cards)
+// The account as a card: logo, name and type at the top, then the balance ("Owed today" for credit cards)
 function AccountCard({ account, cents, className = '', corner }) {
   const [whole, decimals] = formatCents(cents).split(',')
   return (
-    <BankCard account={account} className={`text-sm ${className}`} corner={corner}>
-      <p className="mt-6 truncate text-base font-semibold">{account.name.trim() || 'New account'}</p>
-      <p className="text-xs text-white/70">{account.type === 'credit' ? 'Owed today' : 'Balance today'}</p>
+    <BankCard account={account} named className={`text-sm ${className}`} corner={corner}>
+      <p className="mt-5 text-xs text-white/70">{account.type === 'credit' ? 'Owed today' : 'Balance today'}</p>
       <p className="tabular font-display leading-tight font-bold">
         <span className="text-[26px]">{whole}</span>
         <span className="text-base text-white/60">,{decimals}</span>

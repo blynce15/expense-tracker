@@ -67,6 +67,7 @@ export default function AccountPage({ account, monthFlow, lookups, hidden, onTog
         <div className="px-5 pt-1">
           <BankCard
             account={account}
+            named
             className="h-[200px] rounded-[26px] p-5 text-sm shadow-[0_26px_40px_-22px_rgba(0,0,0,0.9)]"
             corner={
               <button
@@ -78,8 +79,7 @@ export default function AccountPage({ account, monthFlow, lookups, hidden, onTog
               </button>
             }
           >
-            <p className="mt-9 truncate text-lg font-semibold">{account.name}</p>
-            <p className="text-xs text-white/70">{owed ? 'Owed today' : 'Balance today'}</p>
+            <p className="mt-12 text-xs text-white/70">{owed ? 'Owed today' : 'Balance today'}</p>
             <p className="tabular font-display leading-tight font-bold">
               {hidden ? (
                 <span className="text-[32px]">{HIDDEN}</span>
