@@ -355,8 +355,7 @@ function Welcome() {
         Lynx<span className="brand-text">OS</span>
       </h1>
       <p className="mt-2 text-muted">Expense tracker</p>
-      <p className="mt-10 w-full px-1 text-sm text-muted [@media(max-height:700px)]:mt-6">Setup · 5 steps, about 3 minutes</p>
-      <ol className="mt-2 w-full overflow-hidden rounded-[22px] bg-card">
+      <ol className="mt-10 w-full overflow-hidden rounded-[22px] bg-card [@media(max-height:700px)]:mt-6">
         {[...steps, null].map((title, n) => (
           <li key={n} className="flex items-center gap-3.5 border-b border-line px-4 py-4 last:border-0 [@media(max-height:700px)]:py-3">
             <span className="tabular w-3.5 text-sm font-bold text-muted">{n + 1}</span>
