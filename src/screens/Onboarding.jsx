@@ -452,8 +452,8 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
     const cents = parseToCents(form.amount) ?? 0
     const [whole, decimals] = formatCents(owed && cents ? -cents : cents).split(',')
     const bank = bankFor(form.name)
-    // A bank's own colour may not be in the list: show it first so it can stay selected
-    const colors = ACCOUNT_COLORS.includes(form.color) ? ACCOUNT_COLORS : [form.color, ...ACCOUNT_COLORS]
+    // A picked bank's colour (or one not in the list) goes first, so the selected colour is in view
+    const colors = bank || !ACCOUNT_COLORS.includes(form.color) ? [form.color, ...ACCOUNT_COLORS.filter((c) => c !== form.color)] : ACCOUNT_COLORS
     const pickBank = (b) => setForm({ ...form, name: b.name, color: b.color })
     return (
       <div>
@@ -507,18 +507,18 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
         {form.type !== 'cash' && (
           <>
             <p className="mt-4 mb-1.5 px-1 text-sm text-muted">Your bank</p>
-            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
+            <div className="grid grid-cols-4 gap-2">
               {BANKS.map((b) => (
                 <button
                   key={b.name}
                   onClick={() => pickBank(b)}
                   aria-pressed={bank === b}
-                  className={`flex h-10 shrink-0 items-center gap-2 rounded-full border-[1.5px] pr-3.5 pl-2 text-sm font-semibold ${
+                  className={`flex min-w-0 flex-col items-center justify-start gap-1.5 rounded-2xl border-[1.5px] px-1 pt-2.5 pb-2 ${
                     bank === b ? 'border-cobalt bg-cobalt/15' : 'border-transparent bg-card'
                   }`}
                 >
-                  <img src={bankLogo(b)} alt="" className="size-6 rounded-md bg-white" />
-                  {b.name}
+                  <BankLogo bank={b} className="size-9" />
+                  <span className="line-clamp-2 w-full text-center text-[11px] leading-tight font-semibold">{b.name}</span>
                 </button>
               ))}
             </div>
