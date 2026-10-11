@@ -73,6 +73,7 @@ function App() {
   if (onboarding) {
     return (
       <Onboarding
+        email={session.user.email}
         onDone={() => {
           setOnboarding(false)
           setDataVersion((v) => v + 1)

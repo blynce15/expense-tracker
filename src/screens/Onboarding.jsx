@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import DatePicker from '../components/DatePicker'
+import Avatar from '../components/Avatar'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
 import LynxWatermark from '../components/LynxWatermark'
@@ -10,15 +11,18 @@ import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
 import { DEFAULT_CATEGORIES } from '../lib/defaults'
 import { EMOJIS } from '../lib/emojis'
 import { formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
+import { allowLeavingOnce } from '../lib/applock'
 import { fetchExistingCategories, saveOnboarding } from '../lib/onboarding'
+import { squareJpeg } from '../lib/profile'
 import { monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 
-// First-run setup for new users: accounts, budget day, categories,
+// First-run setup for new users: profile (name, photo), accounts, budget day, categories,
 // and regular payments. Nothing is saved until the end.
 
 const STEPS = [
   { key: 'welcome' },
+  { key: 'profile', title: 'Profile' },
   { key: 'accounts', title: 'Accounts' },
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
   { key: 'cats', title: 'Categories' },
@@ -69,6 +73,7 @@ const PAYMENT_IDEAS = [
 const FREQUENCIES = [['weekly', 'Weekly', 'Every week', 'week'], ['monthly', 'Monthly', 'Every month', 'month'], ['yearly', 'Yearly', 'Every year', 'year']]
 
 const GLYPHS = {
+  user: 'M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
   debit: 'M3 10h18M5 10v7M9.5 10v7M14.5 10v7M19 10v7M3 20h18M12 3.5 21 8H3z',
   savings: 'M5 6.5a7 3 0 1 0 14 0a7 3 0 1 0-14 0M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5',
   credit: 'M5 5h14a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 19 19H5a2.5 2.5 0 0 1-2.5-2.5v-9A2.5 2.5 0 0 1 5 5zM2.5 10h19M6.5 15h4',
@@ -104,7 +109,7 @@ const newAccountForm = (type) => ({ type, name: '', amount: '', color: TYPES[typ
 const defaultCategories = () =>
   DEFAULT_CATEGORIES.map((c) => ({ name: c.name, icon: c.icon, color: c.color, kind: c.kind, selected: true }))
 
-export default function Onboarding({ onDone }) {
+export default function Onboarding({ email, onDone }) {
   const today = todayISO()
   const [step, setStep] = useState(0)
   const [accounts, setAccounts] = useState([])
@@ -113,6 +118,7 @@ export default function Onboarding({ onDone }) {
   const [categories, setCategories] = useState(defaultCategories)
   const [categoryKind, setCategoryKind] = useState('expense')
   const [categoryForm, setCategoryForm] = useState(null)
+  const [profile, setProfile] = useState({ name: '', photo: null })
   const [payments, setPayments] = useState([])
   const [paymentForm, setPaymentForm] = useState(null)
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | failed
@@ -135,7 +141,7 @@ export default function Onboarding({ onDone }) {
     setSaveState('saving')
     setSaveError(null)
     try {
-      await saveOnboarding({ accounts, categories, payments, startDay }, saved.current)
+      await saveOnboarding({ profile, accounts, categories, payments, startDay }, saved.current)
       setSaveState('saved')
     } catch (e) {
       setSaveError(e.message)
@@ -217,6 +223,12 @@ export default function Onboarding({ onDone }) {
         </button>
       </>
     )
+  else if (key === 'profile')
+    footer = (
+      <button onClick={() => go(1)} disabled={!profile.name.trim()} className={primaryClass}>
+        {profile.name.trim() ? 'Continue' : 'Enter your name'}
+      </button>
+    )
   else if (key === 'accounts')
     footer = accountForm ? (
       <button onClick={addAccount} className={primaryClass}>{accounts.length ? 'Add account' : 'Add this account'}</button>
@@ -271,6 +283,7 @@ export default function Onboarding({ onDone }) {
             <h1 className="mt-6 font-display text-[34px] leading-[1.02] font-extrabold tracking-tight">{STEPS[step].title}</h1>
             {STEPS[step].sub ? <p className="mt-2 mb-5 text-muted">{STEPS[step].sub}</p> : <div className="mb-5" />}
 
+            {key === 'profile' && <ProfileStep email={email} profile={profile} setProfile={setProfile} />}
             {key === 'accounts' && (
               <AccountsStep
                 accounts={accounts}
@@ -323,6 +336,7 @@ export default function Onboarding({ onDone }) {
 // Tighter on short screens (iPhone SE) so the list stays clear of the Set up button.
 function Welcome() {
   const steps = [
+    ['user', 'Your profile', '#d6336c'],
     ['credit', 'Accounts and balances', '#2f6bff'],
     ['calendar', 'Budget start day', '#f08c00'],
     ['tag', 'Categories', '#7048e8'],
@@ -413,7 +427,75 @@ function RemoveButton({ label, onClick }) {
   )
 }
 
-// ---------- Step 1: accounts ----------
+// ---------- Step 1: profile ----------
+// Name and photo, shown in Profile and as the round avatar at the top of every tab.
+// The photo is cropped to a square and shrunk on the phone; nothing is saved until the end.
+function ProfileStep({ email, profile, setProfile }) {
+  const input = useRef(null)
+  const [error, setError] = useState(null)
+
+  async function picked(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      setProfile({ ...profile, photo: await squareJpeg(file) })
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+  function choosePhoto() {
+    allowLeavingOnce() // the photo library hides the app; don't lock it for that
+    input.current.click()
+  }
+
+  return (
+    <div>
+      <div className="flex flex-col items-center pt-2">
+        <button type="button" onClick={choosePhoto} className="relative rounded-full" aria-label={profile.photo ? 'Change photo' : 'Add photo'}>
+          <Avatar name={profile.name} email={email} photo={profile.photo} size={116} className="shadow-[0_18px_34px_-16px_rgba(31,79,224,0.75)]" />
+          <span className="absolute right-0.5 bottom-0.5 grid size-9 place-items-center rounded-full bg-cobalt text-white ring-4 ring-paper">
+            <Icon name="camera" size={17} strokeWidth={2.2} />
+          </span>
+        </button>
+        <input ref={input} type="file" accept="image/*" onChange={picked} className="hidden" />
+        <p className={`mt-4 max-w-full truncate font-display text-2xl leading-tight font-bold ${profile.name.trim() ? '' : 'text-muted/50'}`}>
+          {profile.name.trim() || 'Your name'}
+        </p>
+        <p className="max-w-full truncate text-sm text-muted">{email}</p>
+        <div className="mt-3 flex gap-2">
+          <button type="button" onClick={choosePhoto} className="rounded-full bg-cobalt/10 px-4 py-1.5 text-sm font-semibold text-cobalt">
+            {profile.photo ? 'Change photo' : 'Add photo'}
+          </button>
+          {profile.photo && (
+            <button type="button" onClick={() => setProfile({ ...profile, photo: null })} className="rounded-full bg-card px-4 py-1.5 text-sm font-semibold text-muted">
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 overflow-hidden rounded-2xl bg-card">
+        <Row label="Name">
+          <input
+            value={profile.name}
+            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+            placeholder="Your name"
+            maxLength={40}
+            autoComplete="given-name"
+            enterKeyHint="done"
+            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            className={`w-full ${plainInput}`}
+          />
+        </Row>
+      </div>
+      {error && <p className="mt-2 px-1 text-sm text-loss">{error}</p>}
+    </div>
+  )
+}
+
+// ---------- Step 2: accounts ----------
 function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
   const [padOpen, setPadOpen] = useState(false)
 
@@ -593,7 +675,7 @@ function AmountPad({ label, amount, onChange, onDone }) {
   )
 }
 
-// ---------- Step 2: budget day ----------
+// ---------- Step 3: budget day ----------
 function DayStep({ today, startDay, setStartDay }) {
   const p = budgetPeriod(today, startDay)
   const pct = ((p.dayNumber - 0.5) / p.days) * 100
@@ -650,7 +732,7 @@ function DayStep({ today, startDay, setStartDay }) {
   )
 }
 
-// ---------- Step 3: categories ----------
+// ---------- Step 4: categories ----------
 function CategoriesStep({ categories, setCategories, kind, setKind, form, setForm }) {
   if (form) return <CategoryCreator form={form} setForm={setForm} />
 
@@ -765,7 +847,7 @@ function CategoryCreator({ form, setForm }) {
   )
 }
 
-// ---------- Step 4: regular payments ----------
+// ---------- Step 5: regular payments ----------
 // "In 5 days · Thu 16 Oct" / "Today" / "Tomorrow · Fri 17 Oct"
 function whenText(iso, today) {
   const [y, m, d] = iso.split('-').map(Number)
