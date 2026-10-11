@@ -34,7 +34,7 @@ export async function fetchAccountsWithBalances() {
 }
 
 // Accounts that can't go below €0. Credit cards can: a negative balance is what you owe.
-export const NO_OVERDRAFT_TYPES = ['debit', 'cash', 'savings']
+export const NO_OVERDRAFT_TYPES = ['debit', 'cash', 'savings', 'meal']
 
 // How a transaction moves each account's balance: Map account id → cents
 function effect(t, sign = 1) {

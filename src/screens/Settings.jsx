@@ -206,7 +206,7 @@ export default function Settings({ session }) {
           </select>
         </div>
         <p className="px-2 pt-1.5 text-xs text-muted">
-          Your payday. The budget is the money in bank and cash accounts.
+          Your payday. The budget is the money in bank, cash and meal card accounts.
           {startDay > 28 && ' Short months start on their last day.'}
         </p>
         {error && <p className="px-2 pt-1.5 text-sm text-loss">{error}</p>}

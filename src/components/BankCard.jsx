@@ -7,6 +7,7 @@ export const TYPE_INFO = {
   savings: { label: 'Savings', icon: 'coins' },
   credit: { label: 'Credit card', icon: 'card' },
   cash: { label: 'Cash', icon: 'cash' },
+  meal: { label: 'Meal card', icon: 'meal' },
 }
 
 // Darker version of a #rrggbb color, for card gradients

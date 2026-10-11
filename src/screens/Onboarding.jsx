@@ -4,7 +4,7 @@ import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
 import LynxWatermark from '../components/LynxWatermark'
 import { BankLogo } from '../components/BankCard'
-import { BANKS, bankFor } from '../lib/banks'
+import { BANKS, bankFor, MEAL_CARDS } from '../lib/banks'
 import { budgetPeriod } from '../lib/budget'
 import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
 import { DEFAULT_CATEGORIES } from '../lib/defaults'
@@ -33,6 +33,7 @@ const TYPES = {
   savings: { label: 'Savings', placeholder: 'e.g. Savings', color: '#7048e8' },
   credit: { label: 'Credit card', placeholder: 'e.g. Visa', color: '#e8590c' },
   cash: { label: 'Cash', placeholder: 'e.g. Wallet', color: '#2b8a3e' },
+  meal: { label: 'Meal card', placeholder: 'e.g. Coverflex', color: '#f2705a' },
 }
 const ACCOUNT_COLORS = [
   '#1f4fe0', '#0b1b45', '#4dabf7', '#0c8599', '#12b886', '#2b8a3e', '#94d82d', '#fab005',
@@ -79,6 +80,7 @@ const GLYPHS = {
   debit: 'M3 10h18M5 10v7M9.5 10v7M14.5 10v7M19 10v7M3 20h18M12 3.5 21 8H3z',
   savings: 'M5 6.5a7 3 0 1 0 14 0a7 3 0 1 0-14 0M5 6.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5M5 11.5v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5',
   credit: 'M5 5h14a2.5 2.5 0 0 1 2.5 2.5v9A2.5 2.5 0 0 1 19 19H5a2.5 2.5 0 0 1-2.5-2.5v-9A2.5 2.5 0 0 1 5 5zM2.5 10h19M6.5 15h4',
+  meal: 'M6 3v6a3 3 0 0 0 6 0V3M9 3v18M17 21V3c-2 1.5-3 4-3 7s1 3.5 3 3.5',
   cash: 'M4.5 6h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0M6 12h.01M18 12h.01',
   calendar: 'M6 4.5h12a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3v-10a3 3 0 0 1 3-3zM3 9.5h18M8 2.5v4M16 2.5v4',
   tag: 'M3 12.2V4.5A1.5 1.5 0 0 1 4.5 3h7.7l8.3 8.3a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0zM6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0-2.6 0',
@@ -101,7 +103,7 @@ function Glyph({ name, className = 'size-5', width = 1.9 }) {
 const shade = (hex, f) =>
   '#' + hex.slice(1).match(/../g).map((h) => Math.round(parseInt(h, 16) * f).toString(16).padStart(2, '0')).join('')
 const ordinal = (n) => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th')
-const budgetOf = (accounts) => accounts.filter((a) => a.type === 'debit' || a.type === 'cash').reduce((s, a) => s + a.cents, 0)
+const budgetOf = (accounts) => accounts.filter((a) => ['debit', 'cash', 'meal'].includes(a.type)).reduce((s, a) => s + a.cents, 0)
 const amountWidth = (text) => ({ width: `${Math.max(4, text.length) + 0.5}ch` })
 const primaryClass =
   'w-full rounded-2xl bg-cobalt py-4 text-lg font-semibold text-white shadow-[0_10px_24px_-10px_rgba(31,79,224,0.8)] active:bg-cobalt-deep disabled:opacity-40'
@@ -495,7 +497,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-4 gap-1 rounded-2xl bg-card p-1">
+        <div className="mt-4 grid grid-cols-5 gap-1 rounded-2xl bg-card p-1">
           {Object.entries(TYPES).map(([type, info]) => (
             <button
               key={type}
@@ -513,9 +515,9 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
 
         {form.type !== 'cash' && (
           <>
-            <p className="mt-4 mb-1.5 px-1 text-sm text-muted">Your bank</p>
+            <p className="mt-4 mb-1.5 px-1 text-sm text-muted">{form.type === 'meal' ? 'Your meal card' : 'Your bank'}</p>
             <div className="grid grid-cols-4 gap-2">
-              {BANKS.map((b) => (
+              {(form.type === 'meal' ? MEAL_CARDS : BANKS).map((b) => (
                 <button
                   key={b.name}
                   onClick={() => pickBank(b)}
@@ -1053,7 +1055,7 @@ function Finish({ accounts, startDay, categories, payments, answers, saveState, 
         ))}
       </span>,
       `${accounts.length} account${accounts.length === 1 ? '' : 's'}`,
-      'Bank and cash count toward your budget',
+      'Bank, cash and meal cards count toward your budget',
       <b key="v" className="tabular font-display text-cobalt">{formatCents(budgetOf(accounts)).replace(/,\d\d$/, '')}</b>,
     ],
     [<Glyph key="i" name="calendar" />, 'Budget period', `Starts on the ${ordinal(startDay)} of each month`, <b key="v" className="text-sm">{formatDayMonth(period.start)} – {formatDayMonth(period.end)}</b>],

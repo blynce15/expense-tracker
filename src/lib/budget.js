@@ -1,10 +1,10 @@
 import { shiftDays } from './dates'
 
-// The budget is the money you can spend: the balance of debit and cash accounts
+// The budget is the money you can spend: the balance of debit, cash and meal card accounts
 // (savings and credit cards are left out). Nothing is stored except the day
 // the budget period starts, which lives in the user's profile.
 
-export const BUDGET_ACCOUNT_TYPES = ['debit', 'cash']
+export const BUDGET_ACCOUNT_TYPES = ['debit', 'cash', 'meal']
 
 // Before user_settings existed the start day was kept on the device; still used until settings have one
 const LEGACY_START_DAY_KEY = 'budgetStartDay'

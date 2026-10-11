@@ -17,11 +17,18 @@ export const BANKS = [
   { name: 'Bleap', domain: 'bleap.finance', color: '#2b2f38' },
 ]
 
+// Meal card providers: the shortcuts shown when the account type is Meal card
+export const MEAL_CARDS = [
+  { name: 'Coverflex', domain: 'coverflex.com', color: '#f2705a' },
+  { name: 'Edenred', domain: 'edenred.pt', color: '#e4002b' },
+  { name: 'Pluxee', domain: 'pluxee.pt', color: '#1f1d4a' },
+]
+
 // The bank an account name stands for, or null: the bank's name as a whole word,
 // so "Revolut" and "Revolut Savings" both show the Revolut logo
 export function bankFor(name) {
   const n = ` ${(name ?? '').trim().toLowerCase()} `
-  return BANKS.find((b) => n.includes(` ${b.name.toLowerCase()} `)) ?? null
+  return [...BANKS, ...MEAL_CARDS].find((b) => n.includes(` ${b.name.toLowerCase()} `)) ?? null
 }
 
 export const bankLogo = (bank) => logoUrl(bank.domain)
