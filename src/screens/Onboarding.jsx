@@ -15,7 +15,7 @@ import { monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 
 // First-run setup for new users: accounts, budget day, categories,
-// regular payments and a few questions. Nothing is saved until the end.
+// and regular payments. Nothing is saved until the end.
 
 const STEPS = [
   { key: 'welcome' },
@@ -23,7 +23,6 @@ const STEPS = [
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
   { key: 'cats', title: 'Categories' },
   { key: 'payments', title: 'Regular payments' },
-  { key: 'about', title: 'A bit about you', sub: 'So tips fit you later. Skip any you like.' },
   { key: 'done' },
 ]
 const NUMBERED = STEPS.length - 2
@@ -68,13 +67,6 @@ const PAYMENT_IDEAS = [
 ]
 // value, label, "Every …", the period's name ("€13,99 a month")
 const FREQUENCIES = [['weekly', 'Weekly', 'Every week', 'week'], ['monthly', 'Monthly', 'Every month', 'month'], ['yearly', 'Yearly', 'Every year', 'year']]
-const QUESTIONS = [
-  { id: 'goal', q: "What's your main goal right now?", opts: [['💰', 'Save more'], ['✂️', 'Spend less'], ['💳', 'Pay off debt'], ['👀', 'See where my money goes']] },
-  { id: 'pay', q: 'How do you get paid?', opts: [['📅', 'Monthly salary'], ['🔁', 'Every two weeks'], ['🎲', 'Irregular / freelance'], ['🤷', 'Other']] },
-  { id: 'saving', q: 'What are you saving for?', multi: true, opts: [['🛟', 'Emergency fund'], ['✈️', 'Travel'], ['🏡', 'A home'], ['🚗', 'A car'], ['🤷', 'Nothing specific']] },
-  { id: 'tough', q: 'Where is it hardest to hold back?', multi: true, opts: [['🍽️', 'Eating out'], ['🛍️', 'Shopping'], ['🎬', 'Entertainment'], ['🛒', 'Groceries'], ['✈️', 'Travel']] },
-  { id: 'tone', q: 'If the app gives you tips, how should they sound?', opts: [['🤗', 'Gentle and encouraging'], ['🎯', 'Straight to the point'], ['🙅', 'No tips, thanks']] },
-]
 
 const GLYPHS = {
   debit: 'M3 10h18M5 10v7M9.5 10v7M14.5 10v7M19 10v7M3 20h18M12 3.5 21 8H3z',
@@ -123,8 +115,6 @@ export default function Onboarding({ onDone }) {
   const [categoryForm, setCategoryForm] = useState(null)
   const [payments, setPayments] = useState([])
   const [paymentForm, setPaymentForm] = useState(null)
-  const [question, setQuestion] = useState(0)
-  const [answers, setAnswers] = useState({})
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | failed
   const [saveError, setSaveError] = useState(null)
   const saved = useRef({})
@@ -145,7 +135,7 @@ export default function Onboarding({ onDone }) {
     setSaveState('saving')
     setSaveError(null)
     try {
-      await saveOnboarding({ accounts, categories, payments, startDay, answers }, saved.current)
+      await saveOnboarding({ accounts, categories, payments, startDay }, saved.current)
       setSaveState('saved')
     } catch (e) {
       setSaveError(e.message)
@@ -164,7 +154,6 @@ export default function Onboarding({ onDone }) {
     if (key === 'accounts' && accountForm && accounts.length) return setAccountForm(null)
     if (key === 'cats' && categoryForm) return setCategoryForm(null)
     if (key === 'payments' && paymentForm) return setPaymentForm(null)
-    if (key === 'about' && question > 0) return setQuestion((q) => q - 1)
     go(-1)
   }
 
@@ -250,27 +239,7 @@ export default function Onboarding({ onDone }) {
     ) : (
       <button onClick={() => go(1)} className="w-full rounded-2xl bg-card py-4 text-lg font-semibold text-ink ring-1 ring-line">Skip for now</button>
     )
-  else if (key === 'about') {
-    const Q = QUESTIONS[question]
-    const answered = Q.multi ? answers[Q.id]?.length : answers[Q.id]
-    const next = () => (question < QUESTIONS.length - 1 ? setQuestion((q) => q + 1) : go(1))
-    footer = (
-      <div className="flex gap-2">
-        <button
-          onClick={() => {
-            setAnswers(({ [Q.id]: _, ...rest }) => rest)
-            next()
-          }}
-          className="rounded-2xl bg-card px-5 font-semibold text-muted ring-1 ring-line"
-        >
-          Skip
-        </button>
-        <button onClick={next} disabled={!answered} className={`${primaryClass} flex-1`}>
-          {question === QUESTIONS.length - 1 ? 'Finish' : 'Next'}
-        </button>
-      </div>
-    )
-  } else if (key === 'done')
+  else if (key === 'done')
     footer =
       saveState === 'failed' ? (
         <button onClick={save} className={primaryClass}>Try again</button>
@@ -285,7 +254,7 @@ export default function Onboarding({ onDone }) {
       <div className="mx-auto max-w-lg px-5 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+7.5rem)]">
         {key === 'welcome' && <Welcome />}
         {key === 'done' && (
-          <Finish accounts={accounts} startDay={startDay} categories={categories} payments={payments} answers={answers} saveState={saveState} saveError={saveError} />
+          <Finish accounts={accounts} startDay={startDay} categories={categories} payments={payments} saveState={saveState} saveError={saveError} />
         )}
         {key !== 'welcome' && key !== 'done' && (
           <>
@@ -339,7 +308,6 @@ export default function Onboarding({ onDone }) {
                 onRemove={(i) => setPayments((list) => list.filter((_, j) => j !== i))}
               />
             )}
-            {key === 'about' && <AboutStep question={question} answers={answers} setAnswers={setAnswers} />}
           </>
         )}
       </div>
@@ -359,7 +327,6 @@ function Welcome() {
     ['calendar', 'Budget start day', '#f08c00'],
     ['tag', 'Categories', '#7048e8'],
     ['repeat', 'Regular payments', '#0f9d6b'],
-    ['chat', 'A few questions', '#8892a6'],
   ]
   return (
     <div className="flex flex-col items-center pt-10 [@media(max-height:700px)]:pt-3">
@@ -984,63 +951,10 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
   )
 }
 
-// ---------- Step 5: questions ----------
-function AboutStep({ question, answers, setAnswers }) {
-  const Q = QUESTIONS[question]
-  const current = answers[Q.id] ?? (Q.multi ? [] : null)
-  function pick(text) {
-    setAnswers((a) => {
-      if (!Q.multi) return { ...a, [Q.id]: text }
-      const list = a[Q.id] ?? []
-      return { ...a, [Q.id]: list.includes(text) ? list.filter((x) => x !== text) : [...list, text] }
-    })
-  }
-  return (
-    <div>
-      <div className="rounded-[22px] bg-card p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold tracking-wider text-muted uppercase">
-            Question {question + 1} of {QUESTIONS.length}
-          </span>
-          <span className="flex gap-1">
-            {QUESTIONS.map((q, i) => (
-              <span key={q.id} className={`h-1.5 rounded-full transition-all ${i === question ? 'w-5 bg-cobalt' : i < question ? 'w-1.5 bg-cobalt/40' : 'w-1.5 bg-line'}`} />
-            ))}
-          </span>
-        </div>
-        <h2 className="mt-3 font-display text-[22px] leading-tight font-bold">{Q.q}</h2>
-        <p className="mt-1 text-sm text-muted">{Q.multi ? 'Pick as many as you like.' : 'Pick one.'}</p>
-      </div>
-      <div className="mt-3 space-y-2">
-        {Q.opts.map(([emoji, text]) => {
-          const on = Q.multi ? current.includes(text) : current === text
-          return (
-            <button
-              key={text}
-              onClick={() => pick(text)}
-              aria-pressed={on}
-              className={`flex w-full items-center gap-3 rounded-2xl bg-card p-2.5 pr-3.5 text-left transition ${
-                on ? 'shadow-[0_6px_16px_-12px_rgba(11,27,69,0.5)] ring-2 ring-cobalt' : ''
-              }`}
-            >
-              <span className={`grid size-10 shrink-0 place-items-center rounded-xl text-lg ${on ? 'bg-cobalt/10' : 'bg-paper'}`}>{emoji}</span>
-              <span className="flex-1 font-semibold">{text}</span>
-              <span className={`grid size-6 shrink-0 place-items-center ${Q.multi ? 'rounded-lg' : 'rounded-full'} ${on ? 'bg-cobalt text-white' : 'ring-[1.5px] ring-line'}`}>
-                {on && <Glyph name="check" className="size-3.5" width={3} />}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 // ---------- Finish ----------
-function Finish({ accounts, startDay, categories, payments, answers, saveState, saveError }) {
+function Finish({ accounts, startDay, categories, payments, saveState, saveError }) {
   const expenses = categories.filter((c) => c.kind === 'expense' && c.selected)
   const income = categories.filter((c) => c.kind === 'income' && c.selected)
-  const answered = Object.values(answers).filter((v) => v && v.length).length
   const period = budgetPeriod(todayISO(), startDay)
   const perMonth = payments.filter((p) => p.type !== 'income').reduce((t, p) => t + monthlyCents({ amount_cents: p.cents, frequency: p.frequency }), 0)
   const lines = [
@@ -1066,7 +980,7 @@ function Finish({ accounts, startDay, categories, payments, answers, saveState, 
       payments.length ? payments.map((p) => p.name).join(', ') : 'You can add them later',
       payments.length ? <b key="v" className="tabular text-sm">{formatCents(perMonth).replace(/,\d\d$/, '')}/mo</b> : null,
     ],
-    [<Glyph key="i" name="chat" />, 'About you', answered ? `${answered} of ${QUESTIONS.length} answered${answers.goal ? ` · ${answers.goal}` : ''}` : 'Skipped. You can answer later.'],
+
   ]
   return (
     <div className="pt-8">

@@ -22,7 +22,7 @@ export async function fetchExistingCategories() {
 //   accounts:   [{ key, name, type, cents, color }]  (cents = amount owed for credit cards)
 //   categories: [{ id?, name, icon, color, kind, selected }]
 //   payments:   [{ type, name, icon, cents, frequency, nextDue, accountKey, categoryName }]  (type: expense | income)
-export async function saveOnboarding({ accounts, categories, payments, startDay, answers }, done) {
+export async function saveOnboarding({ accounts, categories, payments, startDay }, done) {
   if (!done.accountIds) {
     const ids = {}
     for (const a of accounts) {
@@ -88,7 +88,7 @@ export async function saveOnboarding({ accounts, categories, payments, startDay,
   }
   done.payments = true
 
-  await saveProfile({ budget_start_day: startDay, answers, onboarded_at: new Date().toISOString() })
+  await saveProfile({ budget_start_day: startDay, onboarded_at: new Date().toISOString() })
 
   // Refresh what the Add screen uses, so it opens with the new accounts and categories
   await Promise.all([fetchLookups(), fetchLastUsedAccountId()])
