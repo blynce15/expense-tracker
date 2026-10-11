@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { checkOverdraft } from '../lib/balances'
-import { takeFromGoals } from '../lib/goals'
+import { checkGoals, savingsEffect } from '../lib/goals'
 import { lookupCache } from '../lib/lookups'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
 import { dueLabel, recordPayment } from '../lib/recurring'
-import { useGoalGuard } from './GoalPicker'
+import GoalPicker from './GoalPicker'
 import Sheet from './Sheet'
 
 // Confirms a recurring payment: the amount can be changed for bills that vary
@@ -16,7 +16,8 @@ export default function PaySheet({ payment, onClose, onPaid }) {
     accounts.some((a) => a.id === payment.account_id) ? payment.account_id : (accounts[0]?.id ?? payment.account_id),
   )
   const [busy, setBusy] = useState(false)
-  const { guard, picker } = useGoalGuard()
+  const [goalId, setGoalId] = useState(null) // when paid from savings; null = General savings
+  const fromSavings = savingsEffect(accounts, { type: 'expense', amount_cents: 1, account_id: accountId }) !== 0
   const [error, setError] = useState(null)
 
   async function confirm() {
@@ -25,17 +26,20 @@ export default function PaySheet({ payment, onClose, onPaid }) {
     setBusy(true)
     setError(null)
     try {
-      const expense = { type: 'expense', amount_cents: cents, account_id: accountId }
+      const expense = { type: 'expense', amount_cents: cents, account_id: accountId, goal_id: fromSavings ? goalId : null }
       const problem = await checkOverdraft(null, expense)
       if (problem) {
         setError(problem)
         setBusy(false)
         return
       }
-      const picks = await guard(null, expense)
-      if (!picks) return setBusy(false)
-      await takeFromGoals(picks)
-      await recordPayment(payment, { amountCents: cents, accountId })
+      const goalIssue = await checkGoals(null, expense)
+      if (goalIssue) {
+        setError(goalIssue)
+        setBusy(false)
+        return
+      }
+      await recordPayment(payment, { amountCents: cents, accountId, goalId: expense.goal_id })
       onPaid()
     } catch (e) {
       setError(e.message)
@@ -85,6 +89,8 @@ export default function PaySheet({ payment, onClose, onPaid }) {
             </fieldset>
           )}
 
+          {fromSavings && <GoalPicker goals={lookupCache.lookups?.goals ?? []} value={goalId} onChange={setGoalId} direction={-1} />}
+
           {error && <p className="text-sm text-loss">{error}</p>}
 
           <button
@@ -96,7 +102,6 @@ export default function PaySheet({ payment, onClose, onPaid }) {
           </button>
         </div>
       </Sheet>
-      {picker}
     </>
   )
 }

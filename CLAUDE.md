@@ -26,8 +26,9 @@ Bottom tab bar: Home · Transactions · [+] · Analytics · Savings
 Every table has `user_id uuid default auth.uid()` and `created_at`.
 - accounts: name, type (debit | credit | cash | savings), starting_balance_cents, color, archived
 - categories: name, icon, color, kind (expense | income), archived, sort_order (owner-chosen order)
-- transactions: type (expense | income | transfer), amount_cents (always positive), date, account_id, to_account_id (transfers only), category_id (null for transfers), note
-- savings_goals: name, target_cents, saved_cents, deadline (optional)
+- transactions: type (expense | income | transfer), amount_cents (always positive), date, account_id, to_account_id (transfers only), category_id (null for transfers), note, goal_id (savings goal, only when it moves savings money; null = General savings)
+- savings_goals: name, icon, target_cents, deadline (optional). saved_cents is no longer used (migration 011): a goal's money is calculated.
+- goal_moves: from_goal_id, to_goal_id (null = General savings), amount_cents, date. Money moved between goals inside savings.
 - recurring_payments: name, icon, amount_cents, frequency (weekly | monthly | yearly), start_date (sets day of month), next_due, account_id, category_id, active. "Paid" creates an expense and moves next_due forward; nothing is created automatically.
 - user_settings (one row per user, primary key user_id): budget_start_day (1–31), answers (jsonb, the onboarding "About you" answers, for future AI tips), onboarded_at.
 
@@ -36,7 +37,7 @@ Every table has `user_id uuid default auth.uid()` and `created_at`.
 - Account balance = starting balance + income − expenses − transfers out + transfers in. Always calculated, never stored.
 - Transfers (e.g. paying a credit card, moving money to savings) are NOT spending or income. Exclude them from analytics totals.
 - Money rules (enforced in the app): debit, cash and savings accounts can't go below €0. Every add/edit/delete of a transaction and every recurring "Paid" is checked against today's balances (overdraftProblem/checkOverdraft in src/lib/balances.js); a change that doesn't lower an account is always allowed. Only credit cards can have a negative (owed) starting balance; an account can only be archived at exactly €0; archived accounts can't be paid from; amounts are capped at €9.999.999,99 (MAX_CENTS in src/lib/money.js). Not enforced (owner's choice for later): credit cards can be overpaid, no credit limit.
-- Savings goals share one pot: the balance of the (non-archived) savings-type accounts. Money in all goals together can't be more than the pot; the rest is "not in a goal" (src/lib/goals.js, calculated, no schema change). Goal Add money: from a debit/cash card (records a transfer card → first savings account, note = goal name) or "Already in savings" (only money not in a goal). Take out: back to "not in a goal", money stays in savings. When a transaction add/edit/delete or a recurring Paid would take the pot below what goals hold, the "Take it from a goal" sheet (src/components/GoalPicker.jsx, useGoalGuard) asks which goal(s) the money comes out of (owner's choice); only the part this change causes is asked for. Account edits/deletes that would leave goals short are blocked. The goal form's "Already saved" can only use money not in a goal.
+- Savings goals follow the real money (migration 011, src/lib/goals.js): every euro in savings belongs to a goal. A goal's money = how much its tagged transactions (transactions.goal_id) move the savings accounts + goal_moves in − out. General savings is the built-in goal for everything untagged (goal_id null): savings accounts' starting balances, untagged transactions, moves to/from null. It has no row, no target and can't be deleted. So goals + General always equal the savings accounts' balance. Any transaction that moves money into or out of savings shows a goal choice (src/components/GoalPicker.jsx; default General savings): Add transaction, Paid. No goal (General included) can go below €0: checked on transaction add/edit/delete, Paid, goal moves and account edits/deletes (goalProblem; only goals the change lowers). Goal sheet: Add money / Take out, the other side is a card (a real transfer card ↔ savings account tagged with the goal; in = first savings account, out = the one with most money) or another goal (a goal_move, no money moves). New goal can start with money from General savings. Deleting a goal hands its money to General savings (on delete set null).
 - New users (no accounts and no user_settings.onboarded_at) go through onboarding (src/screens/Onboarding.jsx): accounts, budget day, categories (defaults below, pick/add own), recurring payments, About-you questions. Everything is saved at the end (src/lib/onboarding.js). Existing users never see it.
 - Default categories: Groceries, Eating out, Transport, Housing, Bills, Shopping, Health, Entertainment, Travel, Other (expense); Salary, Other income (income). Onboarding offers these; ensureDefaultCategories still runs for non-new users with no categories.
 
@@ -132,6 +133,10 @@ Done:
 
 - Text boxes: the global keyboard focus ring (:focus-visible in src/index.css) now skips input/textarea/select, so no rectangle appears inside a box while typing; buttons keep it. Every text box was checked.
 - Add transaction: 44px (gap-11) between the amount and the "From card · date" pill instead of 20px (owner chose "more space" over moving the pill above the keys). Checked on a normal and a small iPhone. Published 2026-10-11.
+
+### 2026-10-11
+Done:
+- Savings rebuilt so goals follow the real money (owner found it disconnected: €2.000 in a savings account showed as €0 on Savings). Chosen: goals tied to transactions; every euro in savings belongs to a goal, with a built-in General savings (see Rules). Savings page: top card shows the real total in savings, split In goals / General savings; General savings card above the goals. Migration 011 (transactions.goal_id, goal_moves table, record_recurring_payment with p_goal_id, delete_my_data clears goal_moves) — MUST be run by the owner before publishing. Old stored goal amounts are ignored; the owner plans to start fresh (Delete all data).
 
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).

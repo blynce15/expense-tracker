@@ -5,19 +5,21 @@ import { supabase } from './supabase'
 // while a fresh copy loads in the background.
 export const lookupCache = { lookups: null, lastUsedAccountId: null, pinnedAccountId: null }
 
-// Accounts and categories, used to fill pickers and label transactions.
+// Accounts, categories and savings goals, used to fill pickers and label transactions.
 export async function fetchLookups() {
-  const [accounts, categories] = await Promise.all([
+  const [accounts, categories, goals] = await Promise.all([
     supabase.from('accounts').select('id, name, type, color, archived').order('created_at'),
     supabase
       .from('categories')
       .select('id, name, icon, color, kind, archived, sort_order')
       .order('sort_order')
       .order('created_at'),
+    supabase.from('savings_goals').select('id, name, icon').order('created_at'),
   ])
   if (accounts.error) throw accounts.error
   if (categories.error) throw categories.error
-  lookupCache.lookups = { accounts: accounts.data, categories: categories.data }
+  if (goals.error) throw goals.error
+  lookupCache.lookups = { accounts: accounts.data, categories: categories.data, goals: goals.data }
   return lookupCache.lookups
 }
 

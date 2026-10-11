@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
-import { useGoalGuard } from '../components/GoalPicker'
+import GoalPicker from '../components/GoalPicker'
 import Sheet from '../components/Sheet'
 import { checkOverdraft } from '../lib/balances'
 import { formatDay, todayISO } from '../lib/dates'
-import { takeFromGoals } from '../lib/goals'
+import { checkGoals, savingsEffect } from '../lib/goals'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents, formatTyping, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
@@ -85,10 +85,10 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const [toAccountId, setToAccountId] = useState(transaction?.to_account_id ?? null)
   const [date, setDate] = useState(transaction?.date ?? todayISO())
   const [name, setName] = useState(transaction?.note ?? '')
+  const [goalId, setGoalId] = useState(transaction?.goal_id ?? null) // null = General savings
   const [picking, setPicking] = useState(null) // null | 'account' | 'date'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const { guard, picker } = useGoalGuard()
 
   useEffect(() => {
     Promise.all([fetchLookups(), isNew ? fetchLastUsedAccountId() : null])
@@ -163,16 +163,19 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
       category_id: type === 'transfer' ? null : pick,
       note: name.trim() || null,
     }
+    // Money into or out of savings belongs to a goal (General savings when none is picked)
+    row.goal_id = savingsEffect(lookups.accounts, row) ? goalId : null
     try {
       const problem = await checkOverdraft(transaction, row)
       if (problem) {
         setBusy(false)
         return setError(problem)
       }
-      // Money leaving savings that's set aside in goals: ask which goal it comes out of
-      const picks = await guard(transaction, row)
-      if (!picks) return setBusy(false)
-      await takeFromGoals(picks)
+      const goalIssue = await checkGoals(transaction, row)
+      if (goalIssue) {
+        setBusy(false)
+        return setError(goalIssue)
+      }
     } catch (e) {
       setBusy(false)
       return setError(e.message)
@@ -195,9 +198,11 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         setBusy(false)
         return setError(problem)
       }
-      const picks = await guard(transaction, null)
-      if (!picks) return setBusy(false)
-      await takeFromGoals(picks)
+      const goalIssue = await checkGoals(transaction, null)
+      if (goalIssue) {
+        setBusy(false)
+        return setError(goalIssue)
+      }
     } catch (e) {
       setBusy(false)
       return setError(e.message)
@@ -238,6 +243,10 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const sign = type === 'expense' ? '−' : type === 'income' ? '+' : ''
   // The selected choice in step 2: what was tapped, else the suggestion
   const highlighted = type === 'transfer' ? toAccountId : (categoryId ?? suggested)
+  // Into savings (+) or out of it (−): then the money belongs to a goal
+  const goalDirection = Math.sign(
+    savingsEffect(lookups.accounts, { type, amount_cents: 1, account_id: accountId, to_account_id: type === 'transfer' ? toAccountId : null }),
+  )
 
   return (
     <div
@@ -411,6 +420,10 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                   </div>
                 )}
 
+                {goalDirection !== 0 && (
+                  <GoalPicker goals={lookups.goals ?? []} value={goalId} onChange={setGoalId} direction={goalDirection} />
+                )}
+
                 {error && <p className="text-center text-sm text-loss">{error}</p>}
 
                 <button
@@ -467,7 +480,6 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         </Sheet>
       )}
 
-      {picker}
     </div>
   )
 }

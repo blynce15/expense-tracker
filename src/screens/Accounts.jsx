@@ -4,7 +4,7 @@ import BankCard from '../components/BankCard'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { fetchAccountsWithBalances } from '../lib/balances'
-import { fetchGoalsState } from '../lib/goals'
+import { fetchGoalsState, goalProblem } from '../lib/goals'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
@@ -113,14 +113,15 @@ function AccountList({ accounts, onSelect }) {
   )
 }
 
-// Money in savings goals has to stay in the savings accounts. Changing what this account adds to the
-// savings pot (from `oldCents` to `newCents`) is refused if the goals would then hold more than the pot.
-async function goalsProblem(oldCents, newCents) {
-  if (newCents >= oldCents) return null
-  const { pot, inGoals } = await fetchGoalsState()
-  const potAfter = pot - oldCents + newCents
-  if (potAfter >= inGoals) return null
-  return `Your savings goals hold ${formatCents(inGoals)}, so your savings accounts need at least that much. Take ${formatCents(Math.min(inGoals - potAfter, oldCents - newCents))} out of your goals first.`
+// Savings goals are made of the savings accounts' money: a savings account's starting balance belongs to
+// General savings, and its transactions to their goals. Changing or removing an account (`next`: the
+// account as it will be, or null when deleting) is refused if it would leave a goal below €0.
+async function goalsProblem(account, next) {
+  const state = await fetchGoalsState()
+  const accounts = state.accounts.filter((a) => a.id !== account?.id)
+  if (next) accounts.push({ ...account, ...next })
+  const problem = goalProblem(state, { accounts })
+  return problem && `${problem} Move money into it first (Savings → the goal).`
 }
 
 function AccountForm({ account, onClose, onSaved }) {
@@ -155,10 +156,7 @@ function AccountForm({ account, onClose, onSaved }) {
     setError(null)
     try {
       // Savings goals are backed by the savings accounts: this change can't leave them short
-      const problem = await goalsProblem(
-        account?.type === 'savings' && !account.archived ? account.balance_cents : 0,
-        type === 'savings' && !account?.archived ? previewCents : 0,
-      )
+      const problem = await goalsProblem(account, { type, starting_balance_cents: negative ? -cents : cents })
       if (problem) {
         setBusy(false)
         return setError(problem)
@@ -201,7 +199,7 @@ function AccountForm({ account, onClose, onSaved }) {
     if (!window.confirm(`Delete "${account.name}"? This can't be undone.`)) return
     setBusy(true)
     try {
-      const problem = account.type === 'savings' && !account.archived ? await goalsProblem(account.balance_cents, 0) : null
+      const problem = await goalsProblem(account, null)
       if (problem) {
         setBusy(false)
         return setError(problem)

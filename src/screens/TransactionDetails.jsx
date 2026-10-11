@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import Icon from '../components/Icon'
-import { useGoalGuard } from '../components/GoalPicker'
 import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
 import { checkOverdraft, fetchAccountsWithBalances, overdraftProblem } from '../lib/balances'
 import { todayISO, shiftDays } from '../lib/dates'
-import { takeFromGoals } from '../lib/goals'
+import { checkGoals, GENERAL, savingsEffect } from '../lib/goals'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
@@ -57,7 +56,6 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
   const [mode, setMode] = useState('view') // 'view' | 'menu' | 'confirm' | 'edit'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const { guard, picker } = useGoalGuard()
 
   const loadBalances = useCallback(async () => {
     try {
@@ -93,9 +91,11 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
         setBusy(false)
         return setError(problem)
       }
-      const picks = await guard(tx, null)
-      if (!picks) return setBusy(false)
-      await takeFromGoals(picks)
+      const goalIssue = await checkGoals(tx, null)
+      if (goalIssue) {
+        setBusy(false)
+        return setError(goalIssue)
+      }
     } catch (e) {
       setBusy(false)
       return setError(e.message)
@@ -118,6 +118,9 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
   const amountText =
     tx.type === 'expense' ? formatCents(-tx.amount_cents) : tx.type === 'income' ? `+${formatCents(tx.amount_cents)}` : formatCents(tx.amount_cents)
   const amountColor = tx.type === 'income' ? 'text-gain' : isTransfer ? 'text-muted' : 'text-ink'
+  // Money into or out of savings belongs to a goal (General savings when untagged)
+  const goal =
+    lookups && savingsEffect(lookups.accounts, tx) !== 0 ? (tx.goal_id ? lookups.goals?.find((g) => g.id === tx.goal_id) : null) ?? GENERAL : null
   const iconBg = isTransfer ? 'var(--color-line)' : `${category?.color ?? '#868e96'}22`
 
   const accountValue = (id) => (
@@ -132,9 +135,10 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
       ? ['From', accountValue(tx.account_id)]
       : ['Category', <span key="c" className="truncate">{category ? `${category.icon} ${category.name}` : 'No category'}</span>],
     isTransfer ? ['To', accountValue(tx.to_account_id)] : ['Account', accountValue(tx.account_id)],
+    goal && ['Goal', <span key="g" className="truncate">{`${goal.icon || '🐷'} ${goal.name}`}</span>],
     ['Date', <span key="d" className="truncate">{longDate(tx.date)}</span>],
     ['Added', <span key="a" className="font-normal text-muted">{addedAt(tx.created_at)}</span>],
-  ]
+  ].filter(Boolean)
   const impact = balances ? balanceImpact(tx, balances) : []
   // Deleting isn't allowed if it would take a debit, cash or savings account below €0
   const blocked = balances ? overdraftProblem([...balances.values()], tx, null) : null
@@ -206,7 +210,6 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
             </div>
           </div>
         </Sheet>
-        {picker}
       </>
     )
   }

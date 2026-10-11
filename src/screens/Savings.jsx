@@ -7,7 +7,7 @@ import Sheet from '../components/Sheet'
 import { cardBackground } from '../components/BankCard'
 import { checkOverdraft } from '../lib/balances'
 import { todayISO } from '../lib/dates'
-import { fetchGoalsState, savingsAccounts } from '../lib/goals'
+import { fetchGoalsState, goalProblem, moveBetweenGoals, savingsAccounts, transactionGoalProblem } from '../lib/goals'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
@@ -99,18 +99,15 @@ async function fetchSavingsFlow() {
 }
 
 export default function Savings() {
-  const [state, setState] = useState(null) // goals + accounts + the savings pot (src/lib/goals.js)
+  const [state, setState] = useState(null) // accounts, goals with their money, General savings (src/lib/goals.js)
   const [flow, setFlow] = useState(undefined) // undefined = loading, null = no savings account
   const [error, setError] = useState(null)
-  const [openGoal, setOpenGoal] = useState(null)
+  const [openId, setOpenId] = useState(undefined) // undefined = closed, null = General savings, else a goal id
   const [editing, setEditing] = useState(null) // null | 'new' | goal
 
   const load = useCallback(async () => {
     try {
-      const next = await fetchGoalsState()
-      setState(next)
-      // Keep an open goal in sync after changes
-      setOpenGoal((g) => (g ? (next.goals.find((x) => x.id === g.id) ?? null) : null))
+      setState(await fetchGoalsState())
     } catch (e) {
       setError(e.message)
     }
@@ -125,17 +122,18 @@ export default function Savings() {
 
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your goals: {error}</p>
   if (!state) return null
-  const { goals } = state
+  const { goals, general } = state
+  const hasSavings = savingsAccounts(state.accounts).length > 0
 
-  const saved = goals.reduce((s, g) => s + g.saved_cents, 0)
-  const target = goals.reduce((s, g) => s + g.target_cents, 0)
-  // Reached goals are hidden from the list but still count in the total
+  // Reached goals are listed small at the end
   const active = goals.filter((g) => g.saved_cents < g.target_cents)
   const reachedGoals = goals.filter((g) => g.saved_cents >= g.target_cents)
+  // Always the fresh copy after a change
+  const openGoal = openId === undefined ? null : openId === null ? general : goals.find((g) => g.id === openId)
 
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
-      {goals.length > 0 && <TotalRing saved={saved} target={target} count={goals.length} reached={goals.length - active.length} state={state} />}
+      <TotalCard state={state} />
 
       {flow !== undefined && <SavingsChart flow={flow} />}
 
@@ -149,11 +147,13 @@ export default function Savings() {
         </button>
       </div>
 
+      {(hasSavings || general.saved_cents !== 0) && <GeneralCard general={general} onOpen={() => setOpenId(null)} />}
+
       {goals.length === 0 ? (
         <div className="rounded-[22px] bg-card px-5 py-8 text-center">
           <EmptyLynx />
           <p className="mt-2 font-display text-lg font-bold">Start your first savings goal</p>
-          <p className="mt-1 text-muted">A trip, an emergency fund, a new laptop. Set a target and track your progress.</p>
+          <p className="mt-1 text-muted">A trip, an emergency fund, a new laptop. Set a target and move money into it.</p>
         </div>
       ) : active.length === 0 ? (
         <p className="rounded-[22px] bg-card px-5 py-6 text-center text-muted">Every goal is reached. Tap New goal to start another.</p>
@@ -161,7 +161,7 @@ export default function Savings() {
         <ul className="space-y-2.5">
           {active.map((g) => (
             <li key={g.id}>
-              <GoalCard goal={g} onOpen={() => setOpenGoal(g)} />
+              <GoalCard goal={g} onOpen={() => setOpenId(g.id)} />
             </li>
           ))}
         </ul>
@@ -171,10 +171,10 @@ export default function Savings() {
         <ul className="space-y-2">
           {reachedGoals.map((g) => (
             <li key={g.id}>
-              <button onClick={() => setOpenGoal(g)} className="flex w-full items-center gap-3 rounded-[18px] bg-card px-3.5 py-2.5 text-left text-sm text-muted">
+              <button onClick={() => setOpenId(g.id)} className="flex w-full items-center gap-3 rounded-[18px] bg-card px-3.5 py-2.5 text-left text-sm text-muted">
                 <span className="text-lg">{g.icon || DEFAULT_ICON}</span>
                 <span className="min-w-0 flex-1 truncate">
-                  <span className="font-semibold text-ink">{g.name}</span> reached · <span className="tabular">{formatCents(g.target_cents).replace(/,\d\d$/, '')}</span>
+                  <span className="font-semibold text-ink">{g.name}</span> reached · <span className="tabular">{whole(g.saved_cents)}</span>
                 </span>
                 <span>🎉</span>
               </button>
@@ -184,23 +184,17 @@ export default function Savings() {
       )}
 
       {openGoal && !editing && (
-        <GoalSheet
-          goal={openGoal}
-          state={state}
-          onClose={() => setOpenGoal(null)}
-          onChanged={load}
-          onEdit={() => setEditing(openGoal)}
-        />
+        <GoalSheet goal={openGoal} state={state} onClose={() => setOpenId(undefined)} onChanged={load} onEdit={() => setEditing(openGoal)} />
       )}
 
       {editing && (
         <GoalForm
           goal={editing === 'new' ? null : editing}
-          free={state.free}
+          general={general}
           onClose={() => setEditing(null)}
           onSaved={(deleted) => {
             setEditing(null)
-            if (deleted) setOpenGoal(null)
+            if (deleted) setOpenId(undefined)
             load()
           }}
         />
@@ -209,44 +203,43 @@ export default function Savings() {
   )
 }
 
-// Total saved across goals, in the blue of the app's summary cards, with a progress ring
-function TotalRing({ saved, target, count, reached, state }) {
-  const ratio = Math.min(1, saved / target)
+// The real money in the savings accounts, split into goals and General savings.
+// The ring shows progress towards all goal targets together.
+function TotalCard({ state }) {
+  const { goals, general, pot } = state
+  const inGoals = goals.reduce((s, g) => s + g.saved_cents, 0)
+  const target = goals.reduce((s, g) => s + g.target_cents, 0)
+  const ratio = target ? Math.min(1, Math.max(0, inGoals / target)) : 0
   const r = 30
   const c = 2 * Math.PI * r
-  const [whole, decimals] = formatCents(saved).split(',')
+  const [euros, decimals] = formatCents(pot).split(',')
   return (
     <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
       <LynxWatermark className="-bottom-14 -left-10" />
       <div className="relative flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white/80">Total saved</p>
+          <p className="text-sm font-semibold text-white/80">In savings</p>
           <p className="tabular mt-0.5 truncate font-display leading-none font-bold">
-            <span className="text-[38px] tracking-tight">{whole}</span>
+            <span className="text-[38px] tracking-tight">{euros}</span>
             <span className="text-lg text-white/55">,{decimals}</span>
           </p>
         </div>
-        <div className="relative grid size-[74px] shrink-0 place-items-center">
-          <svg width="74" height="74" viewBox="0 0 74 74" className="absolute inset-0 -rotate-90" aria-hidden="true">
-            <circle cx="37" cy="37" r={r} fill="none" strokeWidth="8" stroke="rgba(255,255,255,0.18)" />
-            {saved > 0 && (
-              <circle cx="37" cy="37" r={r} fill="none" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - ratio)} stroke="#fff" />
-            )}
-          </svg>
-          <span className="tabular relative font-display text-[15px] font-extrabold">{Math.floor(ratio * 100)}%</span>
-        </div>
+        {goals.length > 0 && (
+          <div className="relative grid size-[74px] shrink-0 place-items-center" aria-label={`Goals ${Math.floor(ratio * 100)}% of their targets`}>
+            <svg width="74" height="74" viewBox="0 0 74 74" className="absolute inset-0 -rotate-90" aria-hidden="true">
+              <circle cx="37" cy="37" r={r} fill="none" strokeWidth="8" stroke="rgba(255,255,255,0.18)" />
+              {ratio > 0 && (
+                <circle cx="37" cy="37" r={r} fill="none" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - ratio)} stroke="#fff" />
+              )}
+            </svg>
+            <span className="tabular relative font-display text-[15px] font-extrabold">{Math.floor(ratio * 100)}%</span>
+          </div>
+        )}
       </div>
       <div className="relative mt-3.5 grid grid-cols-2 rounded-2xl bg-white/[.12]">
-        <HeroFact icon="target" label="Target" value={formatCents(target).replace(/,\d\d$/, '')} />
-        <HeroFact icon="check" label={reached ? `Goals · ${reached} reached` : 'Goals'} value={count} divider />
+        <HeroFact icon="target" label={goals.length ? `In goals · ${goals.length}` : 'In goals'} value={whole(inGoals)} />
+        <HeroFact icon="bank" label="General savings" value={whole(general.saved_cents)} divider />
       </div>
-      {savingsAccounts(state.accounts).length > 0 && (
-        <p className="tabular relative mt-2.5 text-center text-xs font-semibold text-white/80">
-          {state.free >= 0
-            ? `${formatCents(state.pot)} in savings · ${formatCents(state.free)} not in a goal`
-            : `Your goals hold ${formatCents(-state.free)} more than your savings accounts`}
-        </p>
-      )}
     </section>
   )
 }
@@ -410,34 +403,65 @@ function GoalCard({ goal, onOpen }) {
   )
 }
 
-// Goal details: add or take out money.
-// Adding comes from a card (recorded as a transfer into the savings account) or from savings money
-// that isn't in a goal yet. Taking out leaves the money in the savings account, just not in this goal.
+// Savings money that isn't set aside for a goal. No target; tap to move it into a goal.
+function GeneralCard({ general, onOpen }) {
+  return (
+    <button onClick={onOpen} className="flex w-full items-center gap-3 rounded-[22px] bg-card p-4 text-left">
+      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cobalt/10 text-2xl">{general.icon}</span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-display text-base font-bold">{general.name}</span>
+        <span className="block truncate text-xs text-muted">Not set aside for a goal</span>
+      </span>
+      <span className="tabular font-display text-lg font-bold">{whole(general.saved_cents)}</span>
+    </button>
+  )
+}
+
+// Goal details: add money to it or take money out.
+// A card as the other side records a real transfer between the card and a savings account (tagged with
+// this goal); another goal (or General savings) as the other side only moves money between goals.
 function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
-  const cards = state.accounts.filter((a) => !a.archived && (a.type === 'debit' || a.type === 'cash'))
+  const isGeneral = goal.id === null
   const savings = savingsAccounts(state.accounts)
+  const cards = savings.length ? state.accounts.filter((a) => !a.archived && (a.type === 'debit' || a.type === 'cash')) : []
+  const others = [state.general, ...state.goals].filter((g) => g.id !== goal.id)
+  const [mode, setMode] = useState('add') // 'add' | 'out'
+  const [pick, setPick] = useState(() => defaultPick('add'))
   const [amount, setAmount] = useState('')
-  const [source, setSource] = useState(state.free > 0 || cards.length === 0 ? 'savings' : cards[0].id)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
-  const done = goal.saved_cents >= goal.target_cents
-  const p = pace(goal)
+  const done = !isGeneral && goal.saved_cents >= goal.target_cents
+  const p = isGeneral ? null : pace(goal)
 
-  async function setSaved(cents) {
-    const { error } = await supabase.from('savings_goals').update({ saved_cents: cents }).eq('id', goal.id)
-    if (error) throw error
+  // Adding: from the first card; taking out: back to General savings (or to a card from General)
+  function defaultPick(m) {
+    if (m === 'add' && cards.length) return { kind: 'card', id: cards[0].id }
+    if (!isGeneral) return { kind: 'goal', id: null }
+    if (m === 'out' && cards.length) return { kind: 'card', id: cards[0].id }
+    return others.length ? { kind: 'goal', id: others[0].id } : null
   }
 
-  async function run(action) {
+  function switchMode(m) {
+    setMode(m)
+    setPick(defaultPick(m))
+    setError(null)
+    setMessage(null)
+  }
+
+  async function submit() {
+    const cents = parseToCents(amount)
+    if (!cents) return setError('Enter an amount, like 50 or 12,50.')
+    if (!pick) return setError(mode === 'add' ? 'Choose where the money comes from.' : 'Choose where the money goes.')
     setBusy(true)
     setError(null)
     try {
-      const text = await action()
-      if (text === undefined) return
-      setAmount('')
-      setMessage(text)
-      onChanged()
+      const text = pick.kind === 'goal' ? await moveGoals(cents) : await moveCard(cents)
+      if (text) {
+        setAmount('')
+        setMessage(text)
+        onChanged()
+      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -445,49 +469,35 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
     }
   }
 
-  function add() {
-    const cents = parseToCents(amount)
-    if (!cents) return setError('Enter an amount, like 50 or 12,50.')
-    run(async () => {
-      if (source === 'savings') {
-        if (cents > state.free) {
-          setError(
-            state.free > 0
-              ? `Only ${formatCents(state.free)} of your savings isn't in a goal yet. Add the rest from a card.`
-              : 'All of your savings is already in goals. Add it from a card instead.',
-          )
-          return undefined
-        }
-        await setSaved(goal.saved_cents + cents)
-        return `Added ${formatCents(cents)} from your savings`
-      }
-      if (savings.length === 0) {
-        setError('Add a savings account first (Profile → Accounts & cards), so the money has somewhere to go.')
-        return undefined
-      }
-      const card = cards.find((a) => a.id === source)
-      const transfer = { type: 'transfer', amount_cents: cents, date: todayISO(), account_id: source, to_account_id: savings[0].id, category_id: null, note: goal.name }
-      const problem = await checkOverdraft(null, transfer)
-      if (problem) {
-        setError(problem)
-        return undefined
-      }
-      const { error } = await supabase.from('transactions').insert(transfer)
-      if (error) throw error
-      await setSaved(goal.saved_cents + cents)
-      return `Moved ${formatCents(cents)} from ${card.name} to ${savings[0].name}`
-    })
+  // Between this goal and another one: no money leaves the savings accounts
+  async function moveGoals(cents) {
+    const other = others.find((g) => g.id === pick.id)
+    const [from, to] = mode === 'add' ? [other, goal] : [goal, other]
+    const move = { from_goal_id: from.id, to_goal_id: to.id, amount_cents: cents }
+    const problem = goalProblem(state, { moves: [...state.moves, move] })
+    if (problem) return void setError(problem)
+    await moveBetweenGoals(from.id, to.id, cents)
+    return `Moved ${formatCents(cents)} from ${from.name} to ${to.name}`
   }
 
-  function takeOut() {
-    const cents = parseToCents(amount)
-    if (!cents) return setError('Enter an amount, like 50 or 12,50.')
-    if (cents > goal.saved_cents) return setError(`You can take out at most ${formatCents(goal.saved_cents)}.`)
-    run(async () => {
-      await setSaved(goal.saved_cents - cents)
-      return `Took out ${formatCents(cents)}. It stays in your savings, not in a goal.`
-    })
+  // Between this goal and a card: a transfer to or from a savings account, tagged with this goal
+  async function moveCard(cents) {
+    const card = cards.find((a) => a.id === pick.id)
+    // Taking out comes from the savings account with the most money
+    const account = mode === 'add' ? savings[0] : [...savings].sort((a, b) => b.balance_cents - a.balance_cents)[0]
+    const [from, to] = mode === 'add' ? [card, account] : [account, card]
+    const transfer = { type: 'transfer', amount_cents: cents, date: todayISO(), account_id: from.id, to_account_id: to.id, category_id: null, note: goal.name, goal_id: goal.id }
+    const problem = (await checkOverdraft(null, transfer)) ?? transactionGoalProblem(state, null, transfer)
+    if (problem) return void setError(problem)
+    const { error } = await supabase.from('transactions').insert(transfer)
+    if (error) throw error
+    return `Moved ${formatCents(cents)} from ${from.name} to ${to.name}`
   }
+
+  const chips = [
+    ...cards.map((a) => ({ kind: 'card', id: a.id, label: a.name, cents: a.balance_cents, swatch: a.color })),
+    ...others.map((g) => ({ kind: 'goal', id: g.id, label: g.name, cents: g.saved_cents, icon: g.icon || DEFAULT_ICON })),
+  ]
 
   return (
     <Sheet title={`${goal.icon || DEFAULT_ICON} ${goal.name}`} onClose={onClose}>
@@ -495,81 +505,104 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
         <div>
           <p className="tabular font-display text-4xl font-bold tracking-tight">
             {formatCents(goal.saved_cents)}
-            <span className="ml-2 text-lg font-semibold text-muted">of {formatCents(goal.target_cents)}</span>
+            {!isGeneral && <span className="ml-2 text-lg font-semibold text-muted">of {formatCents(goal.target_cents)}</span>}
           </p>
-          <div className="mt-3">
-            <ProgressBar goal={goal} thick />
-          </div>
-          <p className={`mt-2 text-sm ${p?.overdue ? 'text-loss' : 'text-muted'}`}>
-            {done
-              ? '🎉 Goal reached!'
-              : p
-                ? p.text
-                : `${formatCents(goal.target_cents - goal.saved_cents)} to go`}
-          </p>
+          {isGeneral ? (
+            <p className="mt-2 text-sm text-muted">Savings money that isn&apos;t set aside for a goal. Move it into a goal whenever you like.</p>
+          ) : (
+            <>
+              <div className="mt-3">
+                <ProgressBar goal={goal} thick />
+              </div>
+              <p className={`mt-2 text-sm ${p?.overdue ? 'text-loss' : 'text-muted'}`}>
+                {done ? '🎉 Goal reached!' : p ? p.text : `${formatCents(goal.target_cents - goal.saved_cents)} to go`}
+              </p>
+            </>
+          )}
         </div>
 
-        <div className="space-y-2">
-          <div className="relative">
-            <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
-            <input
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => {
-                setAmount(e.target.value)
-                setMessage(null)
-              }}
-              placeholder="0,00"
-              aria-label="Amount"
-              className={`${inputClass} tabular pl-9 text-lg`}
-            />
-          </div>
-          <p className="pt-1 text-sm font-medium text-muted">Add from</p>
-          <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
-            {cards.map((a) => (
-              <SourceChip key={a.id} on={source === a.id} onClick={() => setSource(a.id)} label={a.name} sub={formatCents(Math.max(a.balance_cents, 0))}>
-                <span className="h-3.5 w-5 shrink-0 rounded-[4px]" style={{ background: cardBackground(a.color) }} />
-              </SourceChip>
-            ))}
-            <SourceChip on={source === 'savings'} onClick={() => setSource('savings')} label="Already in savings" sub={`${formatCents(Math.max(state.free, 0))} not in a goal`}>
-              <span className="text-base leading-none">🐷</span>
-            </SourceChip>
-          </div>
-          <div className="flex gap-2">
+        {savings.length === 0 && others.length === 0 ? (
+          <p className="rounded-2xl bg-card px-4 py-4 text-sm text-muted">
+            Add a savings account first (Profile → Accounts & cards), so the money has somewhere to go.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 rounded-full bg-line/70 p-1">
+              {[
+                ['add', 'Add money'],
+                ['out', 'Take out'],
+              ].map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => switchMode(m)}
+                  aria-pressed={mode === m}
+                  className={`rounded-full py-2 text-sm font-semibold ${mode === m ? 'bg-ink text-paper' : 'text-muted'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="relative">
+              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
+              <input
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value)
+                  setMessage(null)
+                }}
+                placeholder="0,00"
+                aria-label="Amount"
+                className={`${inputClass} tabular pl-9 text-lg`}
+              />
+            </div>
+            <p className="text-sm font-medium text-muted">{mode === 'add' ? 'From' : 'To'}</p>
+            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
+              {chips.map((c) => (
+                <SourceChip
+                  key={`${c.kind}-${c.id}`}
+                  on={pick?.kind === c.kind && pick?.id === c.id}
+                  onClick={() => setPick({ kind: c.kind, id: c.id })}
+                  label={c.label}
+                  sub={formatCents(Math.max(c.cents, 0))}
+                >
+                  {c.kind === 'card' ? (
+                    <span className="h-3.5 w-5 shrink-0 rounded-[4px]" style={{ background: cardBackground(c.swatch) }} />
+                  ) : (
+                    <span className="text-base leading-none">{c.icon}</span>
+                  )}
+                </SourceChip>
+              ))}
+            </div>
             <button
-              onClick={takeOut}
-              disabled={busy || goal.saved_cents === 0}
-              className="flex-1 rounded-2xl bg-card py-3.5 text-base font-medium disabled:text-muted"
-            >
-              Take out
-            </button>
-            <button
-              onClick={add}
+              onClick={submit}
               disabled={busy}
-              className="flex-[2] rounded-2xl bg-cobalt py-3.5 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
+              className="w-full rounded-2xl bg-cobalt py-3.5 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
             >
-              Add money
+              {mode === 'add' ? 'Add money' : 'Take out'}
             </button>
+            {error && <p className="text-sm text-loss">{error}</p>}
+            {message && <p className="text-sm font-medium text-gain">{message}</p>}
           </div>
-          {error && <p className="text-sm text-loss">{error}</p>}
-          {message && <p className="text-sm font-medium text-gain">{message}</p>}
-        </div>
+        )}
 
-        <button onClick={onEdit} className="flex w-full items-center justify-center gap-1 py-2 text-base font-medium text-cobalt">
-          Edit goal
-          <Icon name="chevronRight" size={18} />
-        </button>
+        {!isGeneral && (
+          <button onClick={onEdit} className="flex w-full items-center justify-center gap-1 py-2 text-base font-medium text-cobalt">
+            Edit goal
+            <Icon name="chevronRight" size={18} />
+          </button>
+        )}
       </div>
     </Sheet>
   )
 }
 
-function GoalForm({ goal, free, onClose, onSaved }) {
+function GoalForm({ goal, general, onClose, onSaved }) {
   const isNew = !goal
   const [name, setName] = useState(goal?.name ?? '')
   const [icon, setIcon] = useState(goal?.icon ?? DEFAULT_ICON)
   const [target, setTarget] = useState(goal ? centsToInput(goal.target_cents) : '')
-  const [saved, setSaved] = useState(goal ? centsToInput(goal.saved_cents) : '')
+  const [start, setStart] = useState('') // new goals: money moved in from General savings
   const [deadline, setDeadline] = useState(goal?.deadline ?? null)
   const [pickingDate, setPickingDate] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -578,33 +611,42 @@ function GoalForm({ goal, free, onClose, onSaved }) {
   async function save(e) {
     e.preventDefault()
     const targetCents = parseToCents(target)
-    const savedCents = saved.trim() === '' ? 0 : parseToCents(saved)
+    const startCents = start.trim() === '' ? 0 : parseToCents(start)
     if (!targetCents) return setError('Enter a target amount, like 1000 or 1500,50.')
-    if (savedCents === null) return setError('Enter the amount already saved as a number, or leave it empty.')
-    // Goal money is money in the savings accounts that isn't in another goal
-    const extra = savedCents - (goal?.saved_cents ?? 0)
-    if (extra > 0 && extra > free) {
+    if (startCents === null) return setError('Enter the starting amount as a number, or leave it empty.')
+    if (startCents > Math.max(general.saved_cents, 0)) {
       return setError(
-        free > 0
-          ? `Only ${formatCents(free)} of your savings isn't in a goal yet. Save with less, then use Add money in the goal to move the rest from a card.`
-          : 'All of your savings is already in goals. Leave this at 0, then use Add money in the goal to move money from a card.',
+        general.saved_cents > 0
+          ? `General savings has ${formatCents(general.saved_cents)}. Start with less, then use Add money in the goal to move more from a card.`
+          : 'General savings is empty. Leave this empty, then use Add money in the goal to move money from a card.',
       )
     }
 
     setBusy(true)
     setError(null)
-    const row = { name: name.trim(), icon: icon.trim() || DEFAULT_ICON, target_cents: targetCents, saved_cents: savedCents, deadline }
-    const { error } = isNew
-      ? await supabase.from('savings_goals').insert(row)
-      : await supabase.from('savings_goals').update(row).eq('id', goal.id)
+    const row = { name: name.trim(), icon: icon.trim() || DEFAULT_ICON, target_cents: targetCents, deadline }
+    try {
+      if (isNew) {
+        const { data, error } = await supabase.from('savings_goals').insert(row).select('id').single()
+        if (error) throw error
+        if (startCents) await moveBetweenGoals(null, data.id, startCents)
+      } else {
+        const { error } = await supabase.from('savings_goals').update(row).eq('id', goal.id)
+        if (error) throw error
+      }
+    } catch (e) {
+      setBusy(false)
+      return setError(e.message)
+    }
     setBusy(false)
-    if (error) return setError(error.message)
     onSaved(false)
   }
 
   async function remove() {
-    if (!window.confirm(`Delete the goal "${goal.name}"? This can't be undone.`)) return
+    const money = goal.saved_cents > 0 ? ` Its ${formatCents(goal.saved_cents)} goes back to General savings.` : ''
+    if (!window.confirm(`Delete the goal "${goal.name}"?${money}`)) return
     setBusy(true)
+    // The database hands the goal's transactions and moves to General savings
     const { error } = await supabase.from('savings_goals').delete().eq('id', goal.id)
     setBusy(false)
     if (error) return setError(error.message)
@@ -670,19 +712,21 @@ function GoalForm({ goal, free, onClose, onSaved }) {
               />
             </div>
           </label>
-          <label className="flex-1">
-            <span className="mb-1.5 block text-sm font-medium text-muted">Already saved</span>
-            <div className="relative">
-              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
-              <input
-                inputMode="decimal"
-                value={saved}
-                onChange={(e) => setSaved(e.target.value)}
-                placeholder="0,00"
-                className={`${inputClass} tabular pl-9`}
-              />
-            </div>
-          </label>
+          {isNew && general.saved_cents > 0 && (
+            <label className="min-w-0 flex-1">
+              <span className="mb-1.5 block truncate text-sm font-medium text-muted">From General savings</span>
+              <div className="relative">
+                <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
+                <input
+                  inputMode="decimal"
+                  value={start}
+                  onChange={(e) => setStart(e.target.value)}
+                  placeholder="0,00"
+                  className={`${inputClass} tabular pl-9`}
+                />
+              </div>
+            </label>
+          )}
         </div>
 
         <div>
@@ -719,7 +763,7 @@ function GoalForm({ goal, free, onClose, onSaved }) {
   )
 }
 
-// One "Add from" choice: a card or the savings money that isn't in a goal
+// One "From" / "To" choice in a goal: a card or another goal
 function SourceChip({ on, onClick, label, sub, children }) {
   return (
     <button
