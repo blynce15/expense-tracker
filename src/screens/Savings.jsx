@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import LynxWatermark from '../components/LynxWatermark'
 import EmptyLynx from '../components/EmptyLynx'
+import AmountPad from '../components/AmountPad'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
@@ -8,12 +9,12 @@ import { MiniCard } from '../components/BankCard'
 import { checkOverdraft } from '../lib/balances'
 import { todayISO } from '../lib/dates'
 import { fetchGoalsState, goalProblem, moveBetweenGoals, savingsAccounts, transactionGoalProblem } from '../lib/goals'
-import { centsToInput, formatCents, parseToCents } from '../lib/money'
+import { centsToPad, formatCents, parseToCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
 const DEFAULT_ICON = '🐷'
 
-// Quick picks for goals; any emoji can also be typed in the box
+// Emojis to choose from for a goal
 const GOAL_EMOJIS = [
   '🐷', '💰', '🛡️', '✈️', '🏖️', '🌍', '🏠', '🛋️', '🚗', '🚲', '💻', '📱',
   '🎓', '💍', '👶', '🐶', '🎁', '🎸', '📷', '⛷️', '🏕️', '🎮', '🩺', '📈',
@@ -600,31 +601,30 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
 function GoalForm({ goal, general, onClose, onSaved }) {
   const isNew = !goal
   const [name, setName] = useState(goal?.name ?? '')
-  const [icon, setIcon] = useState(goal?.icon ?? DEFAULT_ICON)
-  const [target, setTarget] = useState(goal ? centsToInput(goal.target_cents) : '')
+  const [icon, setIcon] = useState(goal?.icon || DEFAULT_ICON)
+  const [target, setTarget] = useState(goal ? centsToPad(goal.target_cents) : '') // number-pad text
   const [start, setStart] = useState('') // new goals: money moved in from General savings
   const [deadline, setDeadline] = useState(goal?.deadline ?? null)
-  const [pickingDate, setPickingDate] = useState(false)
+  const [picking, setPicking] = useState(null) // 'target' | 'start' | 'date'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
+  const targetCents = parseToCents(target) ?? 0
+  const startCents = parseToCents(start) ?? 0
+  const canStart = isNew && general.saved_cents > 0
+  const emojis = GOAL_EMOJIS.includes(icon) ? GOAL_EMOJIS : [icon, ...GOAL_EMOJIS]
+
   async function save(e) {
     e.preventDefault()
-    const targetCents = parseToCents(target)
-    const startCents = start.trim() === '' ? 0 : parseToCents(start)
-    if (!targetCents) return setError('Enter a target amount, like 1000 or 1500,50.')
-    if (startCents === null) return setError('Enter the starting amount as a number, or leave it empty.')
+    if (!name.trim()) return setError('Give the goal a name.')
+    if (!targetCents) return setError('Set a target amount.')
     if (startCents > Math.max(general.saved_cents, 0)) {
-      return setError(
-        general.saved_cents > 0
-          ? `General savings has ${formatCents(general.saved_cents)}. Start with less, then use Add money in the goal to move more from a card.`
-          : 'General savings is empty. Leave this empty, then use Add money in the goal to move money from a card.',
-      )
+      return setError(`General savings has ${formatCents(general.saved_cents)}. Start with less, then use Add money in the goal to move more from a card.`)
     }
 
     setBusy(true)
     setError(null)
-    const row = { name: name.trim(), icon: icon.trim() || DEFAULT_ICON, target_cents: targetCents, deadline }
+    const row = { name: name.trim(), icon, target_cents: targetCents, deadline }
     try {
       if (isNew) {
         const { data, error } = await supabase.from('savings_goals').insert(row).select('id').single()
@@ -653,113 +653,166 @@ function GoalForm({ goal, general, onClose, onSaved }) {
     onSaved(true)
   }
 
-  if (pickingDate) {
+  if (picking === 'date') {
     return (
-      <Sheet title="Deadline" onClose={() => setPickingDate(false)}>
+      <Sheet
+        title="Deadline"
+        onClose={() => setPicking(null)}
+        onBack={() => setPicking(null)}
+        action={
+          deadline && (
+            <button
+              type="button"
+              onClick={() => {
+                setDeadline(null)
+                setPicking(null)
+              }}
+              className="px-2 text-base font-medium text-loss"
+            >
+              Remove
+            </button>
+          )
+        }
+      >
         <DatePicker
           value={deadline ?? todayISO()}
           dimFuture={false}
           quickPicks={false}
           onChange={(iso) => {
             setDeadline(iso)
-            setPickingDate(false)
+            setPicking(null)
           }}
         />
       </Sheet>
     )
   }
 
+  // Under the preview: "€1.500 target · by Dec 2026"
+  const summary = [targetCents ? `${whole(targetCents)} target` : null, deadline ? `by ${formatMonthYear(deadline)}` : null]
+    .filter(Boolean)
+    .join(' · ')
+  const pct = targetCents ? Math.min(100, (startCents / targetCents) * 100) : 0
+
   return (
     <Sheet title={isNew ? 'New goal' : 'Edit goal'} onClose={onClose}>
-      <form onSubmit={save} className="space-y-5">
-        <div className="flex gap-2">
-          <label className="w-20 shrink-0">
-            <span className="mb-1.5 block text-sm font-medium text-muted">Emoji</span>
-            <input value={icon} onChange={(e) => setIcon(e.target.value)} className={`${inputClass} px-0 text-center text-2xl`} aria-label="Emoji" />
-          </label>
-          <label className="flex-1">
-            <span className="mb-1.5 block text-sm font-medium text-muted">Name</span>
-            <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Trip to Japan" className={`${inputClass} py-3.5`} />
-          </label>
-        </div>
-
-        <div className="grid grid-cols-8 gap-1 rounded-xl bg-card p-2">
-          {GOAL_EMOJIS.map((em) => (
-            <button
-              key={em}
-              type="button"
-              onClick={() => setIcon(em)}
-              aria-pressed={icon === em}
-              className={`grid aspect-square place-items-center rounded-lg text-xl ${icon === em ? 'bg-cobalt/15 ring-2 ring-cobalt' : ''}`}
-            >
-              {em}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-2">
-          <label className="flex-1">
-            <span className="mb-1.5 block text-sm font-medium text-muted">Target</span>
-            <div className="relative">
-              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
-              <input
-                required
-                inputMode="decimal"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                placeholder="0,00"
-                className={`${inputClass} tabular pl-9`}
-              />
-            </div>
-          </label>
-          {isNew && general.saved_cents > 0 && (
-            <label className="min-w-0 flex-1">
-              <span className="mb-1.5 block truncate text-sm font-medium text-muted">From General savings</span>
-              <div className="relative">
-                <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
-                <input
-                  inputMode="decimal"
-                  value={start}
-                  onChange={(e) => setStart(e.target.value)}
-                  placeholder="0,00"
-                  className={`${inputClass} tabular pl-9`}
-                />
-              </div>
-            </label>
+      <form onSubmit={save}>
+        {/* How it will look: the icon tile, the name and the target */}
+        <div className="flex flex-col items-center pt-1">
+          <span className="grid size-[84px] place-items-center rounded-[26px] bg-cobalt/10 text-[44px]">{icon}</span>
+          <b className={`mt-3 max-w-full truncate font-display text-2xl ${name.trim() ? '' : 'text-muted/50'}`}>{name.trim() || 'Goal name'}</b>
+          <span className="tabular text-sm text-muted">{summary || 'No target yet'}</span>
+          {isNew && startCents > 0 && targetCents > 0 && (
+            <span className="mt-3 block h-2 w-40 overflow-hidden rounded-full bg-card">
+              <span className="block h-full rounded-full bg-gradient-to-r from-[#2b8ef7] to-cobalt" style={{ width: `${Math.max(pct, 2)}%` }} />
+            </span>
           )}
         </div>
 
-        <div>
-          <span className="mb-1.5 block text-sm font-medium text-muted">Deadline (optional)</span>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setPickingDate(true)} className={`${inputClass} flex-1 text-left`}>
-              🗓️ {deadline ? formatDeadline(deadline) : <span className="text-muted">No deadline</span>}
-            </button>
-            {deadline && (
-              <button type="button" onClick={() => setDeadline(null)} className="rounded-xl bg-card px-4 text-base font-medium text-muted">
-                Remove
+        <div className="mt-5 overflow-hidden rounded-2xl bg-card">
+          <FormRow label="Name">
+            <input
+              value={name}
+              onChange={(e) => {
+                setName(e.target.value)
+                setError(null)
+              }}
+              placeholder="e.g. Trip to Japan"
+              maxLength={30}
+              className="w-full bg-transparent text-right text-base font-semibold text-ink outline-none placeholder:font-normal placeholder:text-muted/60"
+            />
+          </FormRow>
+          <FormRow label="Target" onClick={() => setPicking('target')}>
+            <RowValue value={targetCents ? formatCents(targetCents) : null} placeholder="€0,00" />
+          </FormRow>
+          {canStart && (
+            <FormRow label="Start with" onClick={() => setPicking('start')}>
+              <span className="min-w-0 text-right">
+                <RowValue value={startCents ? formatCents(startCents) : null} placeholder="€0,00" />
+                <span className="tabular block truncate text-xs text-muted">{whole(general.saved_cents)} in General savings</span>
+              </span>
+            </FormRow>
+          )}
+          <FormRow label="Deadline" onClick={() => setPicking('date')}>
+            <RowValue value={deadline ? formatDeadline(deadline) : null} placeholder="None" />
+          </FormRow>
+        </div>
+
+        <div className="mt-3 rounded-2xl bg-card p-3">
+          <div className="grid max-h-[136px] grid-cols-8 gap-1 overflow-y-auto [scrollbar-width:none]">
+            {emojis.map((em) => (
+              <button
+                key={em}
+                type="button"
+                onClick={() => setIcon(em)}
+                aria-label={em}
+                aria-pressed={icon === em}
+                className={`grid aspect-square place-items-center rounded-xl text-xl transition ${icon === em ? 'bg-cobalt/10 ring-2 ring-cobalt' : ''}`}
+              >
+                {em}
               </button>
-            )}
+            ))}
           </div>
         </div>
 
-        {error && <p className="text-sm text-loss">{error}</p>}
+        {error && <p className="mt-3 px-1 text-sm text-loss">{error}</p>}
 
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
+          className="mt-5 w-full rounded-2xl bg-cobalt py-4 text-lg font-semibold text-white shadow-[0_10px_24px_-10px_rgba(31,79,224,0.8)] active:bg-cobalt-deep disabled:opacity-50"
         >
           {isNew ? 'Create goal' : 'Save changes'}
         </button>
 
         {!isNew && (
-          <button type="button" onClick={remove} disabled={busy} className="w-full py-2 text-base font-medium text-loss">
+          <button type="button" onClick={remove} disabled={busy} className="mt-2 w-full py-2 text-base font-medium text-loss">
             Delete goal
           </button>
         )}
       </form>
+
+      {(picking === 'target' || picking === 'start') && (
+        <AmountPad
+          label={picking === 'target' ? 'Target' : 'Start with'}
+          amount={picking === 'target' ? target : start}
+          onChange={(v) => {
+            if (picking === 'target') setTarget(v)
+            else setStart(v)
+            setError(null)
+          }}
+          onDone={() => setPicking(null)}
+        />
+      )}
     </Sheet>
+  )
+}
+
+// A row in the goal form: label on the left, value on the right (a button when onClick is set)
+function FormRow({ label, onClick, children }) {
+  const cls = 'flex min-h-[52px] w-full items-center gap-3 border-b border-line px-4 py-2 text-left last:border-0'
+  const inner = (
+    <>
+      <span className="w-24 shrink-0 text-sm text-muted">{label}</span>
+      <span className="flex min-w-0 flex-1 items-center justify-end gap-1">
+        {children}
+        {onClick && <Icon name="chevronRight" size={16} className="shrink-0 text-muted" />}
+      </span>
+    </>
+  )
+  return onClick ? (
+    <button type="button" onClick={onClick} className={cls}>
+      {inner}
+    </button>
+  ) : (
+    <div className={cls}>{inner}</div>
+  )
+}
+
+function RowValue({ value, placeholder }) {
+  return value ? (
+    <b className="tabular block truncate text-base font-semibold">{value}</b>
+  ) : (
+    <span className="block text-base text-muted/60">{placeholder}</span>
   )
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import DatePicker from '../components/DatePicker'
 import Avatar from '../components/Avatar'
+import AmountPad from '../components/AmountPad'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
 import LynxWatermark from '../components/LynxWatermark'
@@ -10,7 +11,7 @@ import { budgetPeriod } from '../lib/budget'
 import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
 import { DEFAULT_CATEGORIES } from '../lib/defaults'
 import { EMOJIS } from '../lib/emojis'
-import { formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
+import { formatCents, parseToCents } from '../lib/money'
 import { allowLeavingOnce } from '../lib/applock'
 import { fetchExistingCategories, saveOnboarding } from '../lib/onboarding'
 import { squareJpeg } from '../lib/profile'
@@ -642,36 +643,6 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
         Add another account
       </button>
     </div>
-  )
-}
-
-// The same number pad as Add transaction, in a sheet over the bottom of the screen
-function AmountPad({ label, amount, onChange, onDone }) {
-  return (
-    <>
-      <div className="fixed inset-0 z-30 bg-navy/50" onClick={onDone} />
-      <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg rounded-t-[28px] bg-card px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] motion-safe:animate-[sheet-up_200ms_ease-out]">
-        <div className="flex items-baseline justify-between gap-3">
-          <span className="text-muted">{label}</span>
-          <span className="tabular truncate font-display text-[32px] font-extrabold">€{formatTyping(amount)}</span>
-        </div>
-        <div className="mt-3 grid grid-cols-3 gap-1.5">
-          {PAD_KEYS.map((k) => (
-            <button
-              key={k}
-              onClick={() => onChange(pressKey(amount, k))}
-              className={`grid h-13 place-items-center rounded-2xl font-display text-[24px] font-semibold active:bg-line ${k === '.' || k === 'back' ? '' : 'bg-paper'}`}
-              aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
-            >
-              {k === 'back' ? <Icon name="backspace" size={24} /> : k === '.' ? ',' : k}
-            </button>
-          ))}
-        </div>
-        <button onClick={onDone} className={`${primaryClass} mt-3`}>
-          Done
-        </button>
-      </div>
-    </>
   )
 }
 
