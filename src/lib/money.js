@@ -42,3 +42,25 @@ export function formatTyping(amount) {
   const [whole, decimals] = amount.split('.')
   return decimals === undefined ? groupThousands(whole) : `${groupThousands(whole)},${decimals}`
 }
+
+// The number pad's keys, in order ('.' shows as a comma)
+export const PAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back']
+
+// Applies one number-pad key to the amount text, e.g. "12.5" + "0" → "12.50"
+export function pressKey(amount, key) {
+  if (key === 'back') return amount.slice(0, -1)
+  if (key === '.') return amount.includes('.') ? amount : (amount || '0') + '.'
+  const [whole, decimals] = amount.split('.')
+  if (decimals !== undefined && decimals.length >= 2) return amount
+  if (decimals === undefined && whole.length >= 7) return amount
+  if (amount === '0') return key
+  return amount + key
+}
+
+// 1250 → "12.5" (number-pad text; dot is the decimal point internally)
+export function centsToPad(cents) {
+  const euros = Math.trunc(cents / 100)
+  const rest = cents % 100
+  if (rest === 0) return String(euros)
+  return `${euros}.${String(rest).padStart(2, '0').replace(/0$/, '')}`
+}

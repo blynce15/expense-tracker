@@ -7,7 +7,7 @@ import { checkOverdraft } from '../lib/balances'
 import { formatDay, todayISO } from '../lib/dates'
 import { checkGoals, savingsEffect } from '../lib/goals'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
-import { formatCents, formatTyping, parseToCents } from '../lib/money'
+import { centsToPad, formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
 const TYPES = [
@@ -15,27 +15,6 @@ const TYPES = [
   { value: 'income', label: 'Income' },
   { value: 'transfer', label: 'Transfer' },
 ]
-
-const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'back']
-
-// Applies one number-pad key to the amount text, e.g. "12.5" + "0" → "12.50"
-function pressKey(amount, key) {
-  if (key === 'back') return amount.slice(0, -1)
-  if (key === '.') return amount.includes('.') ? amount : (amount || '0') + '.'
-  const [whole, decimals] = amount.split('.')
-  if (decimals !== undefined && decimals.length >= 2) return amount
-  if (decimals === undefined && whole.length >= 7) return amount
-  if (amount === '0') return key
-  return amount + key
-}
-
-// 1250 → "12.5" (number-pad text; dot is the decimal point internally)
-function centsToPad(cents) {
-  const euros = Math.trunc(cents / 100)
-  const rest = cents % 100
-  if (rest === 0) return String(euros)
-  return `${euros}.${String(rest).padStart(2, '0').replace(/0$/, '')}`
-}
 
 // Past names → the category last used with them, to suggest a category while typing a name.
 // The name is stored in the transaction's note.
@@ -305,7 +284,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
         </div>
 
         <div className="grid shrink-0 grid-cols-3 gap-1.5">
-          {KEYS.map((k) => (
+          {PAD_KEYS.map((k) => (
             <button
               key={k}
               onClick={() => setAmount((a) => pressKey(a, k))}

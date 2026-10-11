@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import Icon from '../components/Icon'
 import LynxWatermark from '../components/LynxWatermark'
+import { BANKS, bankFor, bankLogo } from '../lib/banks'
 import { budgetPeriod } from '../lib/budget'
 import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
 import { DEFAULT_CATEGORIES } from '../lib/defaults'
 import { EMOJIS } from '../lib/emojis'
-import { formatCents, parseToCents } from '../lib/money'
+import { formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
 import { fetchExistingCategories, saveOnboarding } from '../lib/onboarding'
 import { monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
@@ -14,7 +16,7 @@ import { supabase } from '../lib/supabase'
 
 const STEPS = [
   { key: 'welcome' },
-  { key: 'accounts', title: 'Your accounts', sub: "Add each account with what's in it today." },
+  { key: 'accounts', title: 'Accounts' },
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
   { key: 'cats', title: 'Your categories', sub: 'What your money goes on, and where it comes from. Add your own too.' },
   { key: 'payments', title: 'Regular payments', sub: 'Rent, subscriptions, bills. The app reminds you when they are due.' },
@@ -24,12 +26,15 @@ const STEPS = [
 const NUMBERED = STEPS.length - 2
 
 const TYPES = {
-  debit: { label: 'Bank', name: 'Everyday', color: '#1f4fe0' },
-  savings: { label: 'Savings', name: 'Savings', color: '#7048e8' },
-  credit: { label: 'Credit card', name: 'Credit card', color: '#e8590c' },
-  cash: { label: 'Cash', name: 'Cash', color: '#2b8a3e' },
+  debit: { label: 'Bank', placeholder: 'e.g. Revolut', color: '#1f4fe0' },
+  savings: { label: 'Savings', placeholder: 'e.g. Savings', color: '#7048e8' },
+  credit: { label: 'Credit card', placeholder: 'e.g. Visa', color: '#e8590c' },
+  cash: { label: 'Cash', placeholder: 'e.g. Wallet', color: '#2b8a3e' },
 }
-const ACCOUNT_COLORS = ['#1f4fe0', '#7048e8', '#e8590c', '#2b8a3e', '#d6336c', '#0c8599', '#0b1b45']
+const ACCOUNT_COLORS = [
+  '#1f4fe0', '#0b1b45', '#4dabf7', '#0c8599', '#12b886', '#2b8a3e', '#94d82d', '#fab005',
+  '#f08c00', '#e8590c', '#e03131', '#d6336c', '#ae3ec9', '#7048e8', '#495057', '#111111',
+]
 const CATEGORY_COLORS = ['#1f9d55', '#e8590c', '#1f4fe0', '#6741d9', '#d6336c', '#0c8599', '#f08c00', '#495057']
 const CATEGORY_IDEAS = [
   ['Pets', '🐶', '#a0522d', 'expense'], ['Kids', '🧸', '#f06595', 'expense'], ['Gym', '🏋️', '#2b8a3e', 'expense'],
@@ -153,7 +158,7 @@ export default function Onboarding({ onDone }) {
     const f = accountForm
     const cents = f.amount.trim() === '' ? 0 : parseToCents(f.amount)
     if (cents == null) return setAccountForm({ ...f, error: 'Enter an amount like 1.250 or 1250,50.' })
-    setAccounts((list) => [...list, { key: nextKey.current++, type: f.type, name: f.name.trim() || TYPES[f.type].name, cents, color: f.color }])
+    setAccounts((list) => [...list, { key: nextKey.current++, type: f.type, name: f.name.trim() || TYPES[f.type].label, cents, color: f.color }])
     setAccountForm(null)
   }
   function openAccountForm() {
@@ -276,13 +281,9 @@ export default function Onboarding({ onDone }) {
                   <span key={i} className={`h-2 flex-1 rounded-full ${i < step - 1 ? 'bg-cobalt' : i === step - 1 ? 'bg-ink' : 'bg-line'}`} />
                 ))}
               </div>
-              <img src="/logo.png" alt="" className="size-[34px] shrink-0" />
             </div>
-            <p className="mt-5 text-xs font-semibold tracking-wider text-cobalt uppercase">
-              Step {step} of {NUMBERED}
-            </p>
-            <Title text={STEPS[step].title} />
-            <p className="mt-2 mb-5 text-muted">{STEPS[step].sub}</p>
+            <h1 className="mt-6 font-display text-[34px] leading-[1.02] font-extrabold tracking-tight">{STEPS[step].title}</h1>
+            {STEPS[step].sub ? <p className="mt-2 mb-5 text-muted">{STEPS[step].sub}</p> : <div className="mb-5" />}
 
             {key === 'accounts' && (
               <AccountsStep
@@ -333,17 +334,6 @@ export default function Onboarding({ onDone }) {
   )
 }
 
-// Big title with the last word in the logo's blue
-function Title({ text }) {
-  const words = text.split(' ')
-  const last = words.pop()
-  return (
-    <h1 className="mt-1 font-display text-[34px] leading-[1.02] font-extrabold tracking-tight">
-      {words.join(' ')} <span className="brand-text">{last}</span>
-    </h1>
-  )
-}
-
 // First page: the app's logo and name, then the setup steps as a coloured timeline.
 // Tighter on short screens (iPhone SE) so the list stays clear of the Set up button.
 function Welcome() {
@@ -391,16 +381,17 @@ function Row({ label, children }) {
 }
 const plainInput = 'bg-transparent text-right text-base font-semibold text-ink outline-none placeholder:font-normal placeholder:text-muted/60'
 
-function Swatches({ colors, value, onChange }) {
+// big: the account colours, a longer row that scrolls sideways on the page background
+function Swatches({ colors, value, onChange, big = false }) {
   return (
-    <span className="flex gap-1.5">
+    <span className={`flex w-max ${big ? 'gap-2.5 p-1' : 'gap-1.5'}`}>
       {colors.map((c) => (
         <button
           key={c}
           onClick={() => onChange(c)}
           aria-label="Color"
           aria-pressed={value === c}
-          className={`grid size-[26px] place-items-center rounded-full ${value === c ? 'ring-2 ring-offset-2' : ''}`}
+          className={`grid shrink-0 place-items-center rounded-full ${big ? 'size-8 ring-offset-paper' : 'size-[26px]'} ${value === c ? 'ring-2 ring-offset-2' : ''}`}
           style={{ backgroundColor: c, '--tw-ring-color': c }}
         >
           {value === c && <Glyph name="check" className="size-3.5 text-white" width={3.2} />}
@@ -451,11 +442,17 @@ function SummaryBox({ title, sub, value }) {
 
 // ---------- Step 1: accounts ----------
 function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
+  const [padOpen, setPadOpen] = useState(false)
+
   if (form) {
     const t = TYPES[form.type]
     const owed = form.type === 'credit'
     const cents = parseToCents(form.amount) ?? 0
     const [whole, decimals] = formatCents(owed && cents ? -cents : cents).split(',')
+    const bank = bankFor(form.name)
+    // A bank's own colour may not be in the list: show it first so it can stay selected
+    const colors = ACCOUNT_COLORS.includes(form.color) ? ACCOUNT_COLORS : [form.color, ...ACCOUNT_COLORS]
+    const pickBank = (b) => setForm({ ...form, name: b.name, color: b.color })
     return (
       <div>
         {accounts.length > 0 && (
@@ -471,29 +468,29 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
         >
           <span className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-white/10" />
           <span className="pointer-events-none absolute -right-16 -bottom-24 size-56 rounded-full bg-white/[.06]" />
-          <div className="relative flex items-center justify-between">
-            <span className="flex items-center gap-2 text-sm font-semibold text-white/85">
+          <div className="relative flex h-9 items-center gap-2 text-sm font-semibold text-white/85">
+            {bank ? (
+              <span className="grid size-9 place-items-center rounded-[10px] bg-white">
+                <img src={bankLogo(bank)} alt="" className="size-6 rounded-md" />
+              </span>
+            ) : (
               <Glyph name={form.type} className="size-[18px]" />
-              {t.label}
-            </span>
-            <span className="flex">
-              <span className="size-6 rounded-full bg-white/35" />
-              <span className="-ml-2.5 size-6 rounded-full bg-white/20" />
-            </span>
+            )}
+            {t.label}
           </div>
-          <p className="relative mt-7 truncate text-base font-semibold">{form.name.trim() || t.name}</p>
+          <p className={`relative mt-4 truncate text-base font-semibold ${form.name.trim() ? '' : 'text-white/55'}`}>{form.name.trim() || t.placeholder}</p>
           <p className="relative text-xs text-white/70">{owed ? 'Owed today' : 'Balance today'}</p>
-          <p className="tabular relative font-display leading-tight font-bold">
+          <button onClick={() => setPadOpen(true)} className={`tabular relative font-display leading-tight font-bold ${owed && cents ? 'text-[#ffb4a8]' : ''}`}>
             <span className="text-[30px]">{whole}</span>
-            <span className="text-lg text-white/60">,{decimals}</span>
-          </p>
+            <span className="text-lg opacity-60">,{decimals}</span>
+          </button>
         </div>
 
-        <div className="mt-5 grid grid-cols-4 gap-1 rounded-2xl bg-card p-1">
+        <div className="mt-4 grid grid-cols-4 gap-1 rounded-2xl bg-card p-1">
           {Object.entries(TYPES).map(([type, info]) => (
             <button
               key={type}
-              onClick={() => setForm({ ...form, type, color: info.color, error: null })}
+              onClick={() => setForm({ ...form, type, color: bank ? form.color : info.color, error: null })}
               aria-pressed={form.type === type}
               className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${
                 form.type === type ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'
@@ -505,41 +502,58 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
           ))}
         </div>
 
+        {form.type !== 'cash' && (
+          <>
+            <p className="mt-4 mb-1.5 px-1 text-sm text-muted">Your bank</p>
+            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
+              {BANKS.map((b) => (
+                <button
+                  key={b.name}
+                  onClick={() => pickBank(b)}
+                  aria-pressed={bank === b}
+                  className={`flex h-10 shrink-0 items-center gap-2 rounded-full border-[1.5px] pr-3.5 pl-2 text-sm font-semibold ${
+                    bank === b ? 'border-cobalt bg-cobalt/15' : 'border-transparent bg-card'
+                  }`}
+                >
+                  <img src={bankLogo(b)} alt="" className="size-6 rounded-md bg-white" />
+                  {b.name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         <div className="mt-3 overflow-hidden rounded-2xl bg-card">
           <Row label="Name">
             <input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={t.name}
+              placeholder={t.placeholder}
               maxLength={40}
               className={`w-full ${plainInput}`}
             />
           </Row>
           <Row label={owed ? 'Owed' : 'Balance'}>
-            <span className="flex items-center gap-1">
-              <span className="font-semibold">€</span>
-              <input
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value, error: null })}
-                inputMode="decimal"
-                placeholder="0,00"
-                style={amountWidth(form.amount)}
-                className={`tabular max-w-[11rem] ${plainInput}`}
-              />
-            </span>
-          </Row>
-          <Row label="Color">
-            <Swatches colors={ACCOUNT_COLORS} value={form.color} onChange={(color) => setForm({ ...form, color })} />
+            <button onClick={() => setPadOpen(true)} className={`tabular text-base font-semibold ${!cents ? 'text-muted/60' : owed ? 'text-loss' : 'text-ink'}`}>
+              {formatCents(cents)}
+            </button>
           </Row>
         </div>
-        <p className={`mt-2 px-1 text-xs ${form.error ? 'text-sm text-loss' : 'text-muted'}`}>
-          {form.error ??
-            (owed
-              ? 'What you owe on the card right now. Enter 0 if nothing.'
-              : form.type === 'savings'
-                ? 'Savings are kept out of your spending budget.'
-                : 'Bank and cash accounts make up your spending budget.')}
-        </p>
+
+        <p className="mt-4 mb-1.5 px-1 text-sm text-muted">Color</p>
+        <div className="-mx-5 overflow-x-auto px-4">
+          <Swatches big colors={colors} value={form.color} onChange={(color) => setForm({ ...form, color })} />
+        </div>
+        {form.error && <p className="mt-2 px-1 text-sm text-loss">{form.error}</p>}
+
+        {padOpen && (
+          <AmountPad
+            label={owed ? 'Owed today' : 'Balance today'}
+            amount={form.amount}
+            onChange={(amount) => setForm({ ...form, amount, error: null })}
+            onDone={() => setPadOpen(false)}
+          />
+        )}
       </div>
     )
   }
@@ -569,6 +583,36 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
       </button>
       <SummaryBox title="Money to spend right now" sub="Bank and cash accounts" value={formatCents(budgetOf(accounts))} />
     </div>
+  )
+}
+
+// The same number pad as Add transaction, in a sheet over the bottom of the screen
+function AmountPad({ label, amount, onChange, onDone }) {
+  return (
+    <>
+      <div className="fixed inset-0 z-30 bg-navy/50" onClick={onDone} />
+      <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg rounded-t-[28px] bg-card px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] motion-safe:animate-[sheet-up_200ms_ease-out]">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="text-muted">{label}</span>
+          <span className="tabular truncate font-display text-[32px] font-extrabold">€{formatTyping(amount)}</span>
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          {PAD_KEYS.map((k) => (
+            <button
+              key={k}
+              onClick={() => onChange(pressKey(amount, k))}
+              className={`grid h-13 place-items-center rounded-2xl font-display text-[24px] font-semibold active:bg-line ${k === '.' || k === 'back' ? '' : 'bg-paper'}`}
+              aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
+            >
+              {k === 'back' ? <Icon name="backspace" size={24} /> : k === '.' ? ',' : k}
+            </button>
+          ))}
+        </div>
+        <button onClick={onDone} className={`${primaryClass} mt-3`}>
+          Done
+        </button>
+      </div>
+    </>
   )
 }
 
