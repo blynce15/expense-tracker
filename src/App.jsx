@@ -15,6 +15,7 @@ import { useOnline } from './lib/useOnline'
 import { useSession } from './lib/useSession'
 import Accounts from './screens/Accounts'
 import Analytics from './screens/Analytics'
+import AnalyticsSpending from './screens/AnalyticsSpending'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
 import Investments from './screens/Investments'
@@ -144,6 +145,8 @@ function screenFor(route, session, dataVersion, tx) {
     }
     case '/analytics':
       return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
+    case '/analytics/spending':
+      return { title: 'Spending', back: '/analytics', body: <AnalyticsSpending key={dataVersion} /> }
     case '/savings':
       return { title: <SavingsTitle investments={false} />, body: <Savings key={dataVersion} /> }
     case '/savings/investments':

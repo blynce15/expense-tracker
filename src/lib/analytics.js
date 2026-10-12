@@ -225,9 +225,17 @@ function buildAnalytics(p, accounts, recurring, rows) {
   for (let d = new Date(first); d <= lastDay; d.setDate(d.getDate() + 1)) weekdayCount[(d.getDay() + 6) % 7] += 1
   const weekdayAvg = weekday.map((c, i) => (weekdayCount[i] ? c / weekdayCount[i] : 0))
 
+  const expenses = rows.filter((t) => t.type === 'expense' && months.includes(t.date.slice(0, 7)))
+
   return {
     period: p,
     current,
+    days,
+    // This period's expenses, for the details pages
+    expenses,
+    fixedNames,
+    spentByDay,
+    byMonth,
     totals: cur,
     previous: before,
     // The period before, up to the same day while this one is still running (for comparisons)
