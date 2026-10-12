@@ -1,314 +1,396 @@
-import { useEffect, useMemo, useState } from 'react'
-import LynxWatermark from '../components/LynxWatermark'
+import { useEffect, useState } from 'react'
 import Icon from '../components/Icon'
-import { monthRange, todayISO } from '../lib/dates'
+import LynxWatermark from '../components/LynxWatermark'
+import {
+  currentPeriod,
+  fetchAnalytics,
+  highlights,
+  isCurrentPeriod,
+  monthShort,
+  periodLabel,
+  prevLabel,
+  shiftPeriod,
+} from '../lib/analytics'
+import { formatDayMonth } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
-import { supabase } from '../lib/supabase'
 
-const MONTHS_SHOWN = 6
+// "€2.400" (no cents), for compact numbers
+const whole = (cents) => formatCents(Math.round(cents)).replace(/,\d\d$/, '')
+const pct = (ratio) => `${Math.round(ratio * 100)}%`
+const ORANGE = '#f08c00'
 
-// "2026-10" style month keys
-const monthKey = (iso) => iso.slice(0, 7)
-function shiftMonth(key, delta) {
-  const [y, m] = key.split('-').map(Number)
-  const d = new Date(y, m - 1 + delta, 1)
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
-const monthLabel = (key, opts = { month: 'long', year: 'numeric' }) =>
-  new Date(Number(key.slice(0, 4)), Number(key.slice(5)) - 1, 1).toLocaleDateString('en-GB', opts)
-
-// Short amounts for chart labels: €1,2k / €85
-function compactCents(cents) {
-  const euros = cents / 100
-  if (euros >= 1000) return `€${(euros / 1000).toFixed(1).replace('.', ',')}k`
-  return `€${Math.round(euros)}`
-}
-
+// One page with a summary card per area: net worth, spending, categories, saving & investing,
+// trends and highlights. Month or Year, with arrows to move between periods.
 export default function Analytics() {
-  const thisMonth = monthKey(todayISO())
-  const [month, setMonth] = useState(thisMonth)
-  const [rows, setRows] = useState(null)
-  const [lookups, setLookups] = useState(null)
+  const [period, setPeriod] = useState(() => currentPeriod('month'))
+  const [data, setData] = useState(null)
+  const [categories, setCategories] = useState(null)
   const [error, setError] = useState(null)
 
-  // Load the selected month plus the months before it (for the month-by-month chart)
   useEffect(() => {
     let cancelled = false
-    const from = `${shiftMonth(month, -(MONTHS_SHOWN - 1))}-01`
-    const [, to] = monthRange(`${month}-01`)
-    Promise.all([
-      fetchLookups(),
-      supabase.from('transactions').select('type, amount_cents, date, category_id').neq('type', 'transfer').gte('date', from).lte('date', to),
-    ])
-      .then(([data, tx]) => {
-        if (tx.error) throw tx.error
+    Promise.all([fetchAnalytics(period), fetchLookups()])
+      .then(([a, lookups]) => {
         if (cancelled) return
-        setLookups(data)
-        setRows(tx.data)
+        setData(a)
+        setCategories(lookups.categories)
       })
       .catch((e) => !cancelled && setError(e.message))
     return () => {
       cancelled = true
     }
-  }, [month])
-
-  const stats = useMemo(() => (rows ? buildStats(rows, month) : null), [rows, month])
+  }, [period])
 
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load analytics: {error}</p>
 
-  return (
-    <div className="space-y-4 px-4 pt-1 pb-6">
-      <div className="flex items-center rounded-2xl bg-card p-1">
-        <button onClick={() => setMonth((m) => shiftMonth(m, -1))} className="grid size-11 place-items-center rounded-xl text-ink" aria-label="Previous month">
-          <Icon name="chevronLeft" />
-        </button>
-        <p className="flex-1 text-center font-display text-lg font-bold">{monthLabel(month)}</p>
-        <button
-          onClick={() => setMonth((m) => shiftMonth(m, 1))}
-          disabled={month >= thisMonth}
-          className="grid size-11 place-items-center rounded-xl disabled:text-line"
-          aria-label="Next month"
-        >
-          <Icon name="chevronRight" />
-        </button>
-      </div>
+  const ready = data && data.period === period && categories
+  const category = (id) => categories?.find((c) => c.id === id)
 
-      {stats && lookups && (
+  return (
+    <div className="space-y-3 px-4 pt-1 pb-6">
+      <PeriodBar period={period} onChange={setPeriod} />
+      {ready && (
         <>
-          <Headline stats={stats} month={month} />
-          <ByCategory stats={stats} categories={lookups.categories} />
-          <MonthByMonth stats={stats} month={month} onPick={setMonth} />
-          <Daily stats={stats} month={month} isCurrent={month === thisMonth} />
+          <WorthCard a={data} />
+          <SpendingCard a={data} />
+          {data.categories.length > 0 && <CategoriesCard a={data} category={category} />}
+          <SavingCard a={data} />
+          <TrendsCard a={data} />
+          <HighlightsCard a={data} category={category} />
         </>
       )}
     </div>
   )
 }
 
-function buildStats(rows, month) {
-  const prev = shiftMonth(month, -1)
-  const byMonth = new Map()
-  const byCategory = new Map()
-  const byDay = new Map()
-  let spent = 0
-  let income = 0
-  let prevSpent = 0
-
-  for (const t of rows) {
-    const key = monthKey(t.date)
-    if (t.type === 'expense') {
-      byMonth.set(key, (byMonth.get(key) ?? 0) + t.amount_cents)
-      if (key === month) {
-        spent += t.amount_cents
-        byCategory.set(t.category_id, (byCategory.get(t.category_id) ?? 0) + t.amount_cents)
-        const day = Number(t.date.slice(8))
-        byDay.set(day, (byDay.get(day) ?? 0) + t.amount_cents)
-      }
-      if (key === prev) prevSpent += t.amount_cents
-    } else if (key === month) {
-      income += t.amount_cents
-    }
-  }
-  return { spent, income, prevSpent, byMonth, byCategory, byDay }
+function PeriodBar({ period, onChange }) {
+  const atNow = isCurrentPeriod(period)
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center rounded-2xl bg-card p-1">
+        <button onClick={() => onChange(shiftPeriod(period, -1))} className="grid h-10 w-9 place-items-center rounded-xl text-ink" aria-label="Previous">
+          <Icon name="chevronLeft" />
+        </button>
+        <p className="flex-1 truncate text-center font-display text-base font-bold">{periodLabel(period)}</p>
+        <button onClick={() => onChange(shiftPeriod(period, 1))} disabled={atNow} className="grid h-10 w-9 place-items-center rounded-xl disabled:text-line" aria-label="Next">
+          <Icon name="chevronRight" />
+        </button>
+      </div>
+      <div className="flex shrink-0 rounded-2xl bg-line/60 p-1" role="tablist">
+        {['month', 'year'].map((kind) => (
+          <button
+            key={kind}
+            role="tab"
+            aria-selected={period.kind === kind}
+            onClick={() => period.kind !== kind && onChange(currentPeriod(kind))}
+            className={`rounded-xl px-2.5 py-2 text-[13px] font-semibold ${period.kind === kind ? 'bg-card text-ink shadow-sm' : 'text-muted'}`}
+          >
+            {kind === 'month' ? 'Month' : 'Year'}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 }
 
-function Card({ title, note, children }) {
+// Change against the previous period. `goodWhenDown`: for spending, less is good.
+function ChangeChip({ now, before, goodWhenDown = false, suffix, light = false }) {
+  if (!before) return null
+  const diff = now - before
+  const share = Math.round((Math.abs(diff) / Math.abs(before)) * 100)
+  if (share === 0) return <Chip tone={light ? 'light' : 'blue'}>= {suffix}</Chip>
+  const good = goodWhenDown ? diff < 0 : diff > 0
+  // Big rises read better as "3×" than "200%"
+  const amount = share >= 200 ? `${Math.round(now / before)}×` : `${share}%`
+  return (
+    <Chip tone={light ? 'light' : good ? 'good' : 'bad'}>
+      {diff > 0 ? '▲' : '▼'} {amount}
+      {suffix && ` ${suffix}`}
+    </Chip>
+  )
+}
+
+function Chip({ tone, children, className = '' }) {
+  const tones = {
+    good: 'bg-gain/12 text-gain',
+    bad: 'bg-loss/10 text-loss',
+    blue: 'bg-cobalt/10 text-cobalt',
+    light: 'bg-white/18 text-white',
+  }
+  return <span className={`tabular inline-block shrink-0 rounded-full px-2 py-0.5 text-xs font-bold whitespace-nowrap ${tones[tone]} ${className}`}>{children}</span>
+}
+
+function Card({ icon, color, title, children }) {
   return (
     <section className="rounded-[22px] bg-card p-4">
-      {title && (
-        <div className="mb-3 flex items-baseline justify-between gap-2">
-          <h2 className="font-display text-lg font-bold">{title}</h2>
-          {note && <span className="text-xs text-muted">{note}</span>}
-        </div>
-      )}
+      <div className="mb-3 flex items-center gap-2.5">
+        <span className="grid size-8 shrink-0 place-items-center rounded-[10px] text-white" style={{ background: color }}>
+          <Icon name={icon} size={17} strokeWidth={2.2} />
+        </span>
+        <h2 className="flex-1 font-display text-lg font-bold">{title}</h2>
+      </div>
       {children}
     </section>
   )
 }
 
-// "€1.190" big and ",45" small and faded
-function BigAmount({ cents }) {
-  const [whole, decimals] = formatCents(cents).split(',')
+function Mini({ label, value }) {
   return (
-    <p className="tabular relative font-display leading-tight font-bold">
-      <span className="text-[38px]">{whole}</span>
-      <span className="text-xl text-white/55">,{decimals}</span>
-    </p>
+    <div className="min-w-0 flex-1 rounded-2xl bg-paper px-3 py-2">
+      <p className="truncate text-[11px] text-muted">{label}</p>
+      <p className="tabular truncate font-display text-[15px] font-bold">{value}</p>
+    </div>
   )
 }
 
-function Headline({ stats, month }) {
-  const diff = stats.spent - stats.prevSpent
-  const pct = stats.prevSpent > 0 ? Math.round((Math.abs(diff) / stats.prevSpent) * 100) : null
-  const prevShort = monthLabel(shiftMonth(month, -1), { month: 'short' }).replace('Sept', 'Sep')
-  const left = stats.income - stats.spent
+// A line through `values`, scaled to the box (used for net worth and spending pace)
+function linePath(values, W, H, max, min = 0, length = values.length) {
+  const span = max - min || 1
+  const step = W / Math.max(1, length - 1)
+  return values.map((v, i) => `${i ? 'L' : 'M'}${(i * step).toFixed(1)} ${(H - ((v - min) / span) * H).toFixed(1)}`).join(' ')
+}
 
+// ---------- Net worth ----------
+function WorthCard({ a }) {
+  const { worth, totals } = a
+  const [euros, decimals] = formatCents(worth.end).split(',')
+  const values = worth.line.map((p) => p.cents)
+  const max = Math.max(...values)
+  const min = Math.min(...values)
   return (
-    <section className="relative overflow-hidden rounded-[24px] bg-cobalt p-5 text-white shadow-[0_18px_34px_-18px_#1f4fe0]">
-      <LynxWatermark />
-      <div className="relative flex items-start justify-between gap-2">
-        <p className="text-sm text-white/75">Spent in {monthLabel(month, { month: 'long' })}</p>
-        {pct !== null && diff !== 0 && (
-          <span className={`shrink-0 rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold ${diff > 0 ? 'text-[#ffd2c7]' : 'text-[#b8f5d6]'}`}>
-            {diff > 0 ? '▲' : '▼'} {pct}% vs {prevShort}
-          </span>
+    <section className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-4 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
+      <LynxWatermark className="-right-8 -bottom-12" />
+      <div className="relative flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-white/85">Net worth</p>
+        {worth.change !== 0 && (
+          <Chip tone="light">
+            {worth.change > 0 ? '▲' : '▼'} {whole(Math.abs(worth.change))} vs {prevLabel(a.period)}
+          </Chip>
         )}
       </div>
-      <BigAmount cents={stats.spent} />
-      {stats.prevSpent === 0 && <p className="relative text-xs text-white/65">Nothing recorded in {prevShort} to compare with.</p>}
-      <div className="relative mt-4 grid grid-cols-2 gap-2">
-        <div className="rounded-2xl bg-white/[.12] px-3 py-2">
-          <p className="text-xs text-white/70">Income</p>
-          <p className="tabular font-display font-bold">{formatCents(stats.income)}</p>
-        </div>
-        <div className="rounded-2xl bg-white/[.12] px-3 py-2">
-          <p className="text-xs text-white/70">Left over</p>
-          <p className={`tabular font-display font-bold ${left < 0 ? 'text-[#ffd2c7]' : ''}`}>{formatCents(left)}</p>
-        </div>
+      <p className="tabular relative truncate font-display leading-tight font-bold">
+        <span className="text-[34px] tracking-tight">{euros}</span>
+        <span className="text-lg text-white/55">,{decimals}</span>
+      </p>
+      {values.length > 1 && (
+        <svg viewBox="0 0 300 40" preserveAspectRatio="none" className="relative mt-1 block h-10 w-full overflow-visible" aria-hidden="true">
+          <path d={linePath(values, 300, 36, max, min)} transform="translate(0 2)" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+      )}
+      <div className="relative mt-3 grid grid-cols-4 gap-1.5">
+        <Fact label="In" value={whole(totals.income)} />
+        <Fact label="Spent" value={whole(totals.spent)} />
+        <Fact label="Saved" value={whole(totals.saved)} />
+        <Fact label="Invested" value={whole(totals.invested)} />
       </div>
     </section>
   )
 }
 
-function ByCategory({ stats, categories }) {
-  const items = [...stats.byCategory.entries()]
-    .map(([id, cents]) => ({ cents, category: categories.find((c) => c.id === id) }))
-    .sort((a, b) => b.cents - a.cents)
-  const max = items[0]?.cents ?? 1
-  const color = (c) => c?.color ?? '#868e96'
-
+function Fact({ label, value }) {
   return (
-    <Card title="By category" note={items.length ? `${items.length} ${items.length === 1 ? 'category' : 'categories'}` : null}>
-      {items.length === 0 ? (
-        <p className="text-muted">No spending recorded this month.</p>
-      ) : (
-        <>
-          {/* How the month splits, one piece per category */}
-          <div className="mb-4 flex h-2.5 gap-[3px] overflow-hidden rounded-full">
-            {items.map(({ cents, category }) => (
-              <span key={category?.id ?? 'none'} className="rounded-full" style={{ flex: cents, backgroundColor: color(category) }} />
-            ))}
-          </div>
-          <ul className="space-y-3">
-            {items.map(({ cents, category }) => (
-              <li key={category?.id ?? 'none'} className="flex items-center gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl text-base" style={{ backgroundColor: `${color(category)}1f` }}>
-                  {category?.icon ?? '❔'}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-baseline gap-2">
-                    <span className="flex-1 truncate text-sm font-semibold">{category?.name ?? 'No category'}</span>
-                    <span className="tabular text-sm font-semibold">{formatCents(cents)}</span>
-                  </span>
-                  <span className="mt-1.5 flex items-center gap-2">
-                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-paper">
-                      <span className="block h-full rounded-full" style={{ width: `${Math.max(3, (cents / max) * 100)}%`, backgroundColor: color(category) }} />
-                    </span>
-                    <span className="tabular w-9 text-right text-xs text-muted">{Math.round((cents / stats.spent) * 100)}%</span>
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+    <div className="min-w-0 rounded-xl bg-white/[.14] px-2 py-1.5">
+      <p className="text-[11px] text-white/75">{label}</p>
+      <p className="tabular truncate font-display text-sm font-bold">{value}</p>
+    </div>
+  )
+}
+
+// ---------- Spending ----------
+function SpendingCard({ a }) {
+  const { totals, spending } = a
+  const { pace } = spending
+  const max = Math.max(1, pace.current.at(-1) ?? 0, pace.previous.at(-1) ?? 0, spending.onTrack ?? 0)
+  const lastX = ((pace.current.length - 1) / Math.max(1, pace.length - 1)) * 300
+  const lastY = 56 - ((pace.current.at(-1) ?? 0) / max) * 52
+  const trackY = spending.onTrack ? 56 - (spending.onTrack / max) * 52 : null
+  return (
+    <Card icon="card" color={ORANGE} title="Spending">
+      <div className="flex items-end gap-2">
+        <p className="tabular font-display text-[26px] leading-none font-bold">{whole(totals.spent)}</p>
+        <ChangeChip now={totals.spent} before={a.compare.spent} goodWhenDown suffix={`vs ${prevLabel(a.period)}`} />
+      </div>
+      <svg viewBox="0 0 300 60" className="mt-3 block h-auto w-full overflow-visible" role="img" aria-label="Spending so far compared with the period before">
+        {pace.previous.length > 1 && (
+          <path d={linePath(pace.previous, 300, 52, max, 0, pace.length)} transform="translate(0 4)" fill="none" stroke="var(--color-muted)" strokeOpacity=".45" strokeWidth="2" strokeDasharray="5 4" />
+        )}
+        {trackY !== null && pace.current.length < pace.length && (
+          <path d={`M${lastX} ${lastY} L300 ${trackY}`} stroke={ORANGE} strokeWidth="2" strokeDasharray="2 5" strokeLinecap="round" opacity=".6" />
+        )}
+        {pace.current.length > 0 && (
+          <>
+            <path d={linePath(pace.current, 300, 52, max, 0, pace.length)} transform="translate(0 4)" fill="none" stroke={ORANGE} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx={lastX} cy={lastY} r="4" fill={ORANGE} stroke="var(--color-card)" strokeWidth="2" />
+          </>
+        )}
+      </svg>
+      <p className="mt-1.5 flex gap-3 text-xs text-muted">
+        <span className="flex items-center gap-1">
+          <span className="h-[3px] w-3 rounded-full" style={{ background: ORANGE }} />
+          {periodLabel(a.period).split(' ')[0]}
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-0 w-3 border-t-2 border-dashed border-muted/50" />
+          {prevLabel(a.period)}
+        </span>
+      </p>
+      <div className="mt-3 flex gap-2">
+        <Mini label="Per day" value={whole(spending.perDay)} />
+        {spending.onTrack !== null ? (
+          <Mini label="On track for" value={whole(spending.onTrack)} />
+        ) : (
+          <Mini label={spending.biggestDay ? `Biggest · ${formatDayMonth(spending.biggestDay.date)}` : 'Biggest day'} value={spending.biggestDay ? whole(spending.biggestDay.cents) : '—'} />
+        )}
+        <Mini label="Fixed bills" value={whole(spending.fixed)} />
+      </div>
     </Card>
   )
 }
 
-function MonthByMonth({ stats, month, onPick }) {
-  const months = Array.from({ length: MONTHS_SHOWN }, (_, i) => shiftMonth(month, i - (MONTHS_SHOWN - 1)))
-  const values = months.map((m) => stats.byMonth.get(m) ?? 0)
-  const max = Math.max(...values, 1)
-
+// ---------- Categories ----------
+function CategoriesCard({ a, category }) {
+  const total = a.totals.spent || 1
+  const top = a.categories.slice(0, 4)
+  const rest = a.categories.slice(4).reduce((s, c) => s + c.cents, 0)
   return (
-    <Card title="Month by month" note="Tap a month">
-      <div className="flex h-40 items-end gap-2">
-        {months.map((m, i) => {
-          const selected = m === month
+    <Card icon="tag" color="#12b886" title="Categories">
+      <div className="flex h-3 gap-0.5 overflow-hidden rounded-full">
+        {top.map((c) => (
+          <span key={c.id ?? 'none'} style={{ flex: c.cents, background: category(c.id)?.color ?? '#94a3c4' }} />
+        ))}
+        {rest > 0 && <span className="bg-line" style={{ flex: rest }} />}
+      </div>
+      <ul className="mt-2">
+        {a.categories.slice(0, 3).map((c) => {
+          const cat = category(c.id)
           return (
-            <button
-              key={m}
-              onClick={() => onPick(m)}
-              className="flex h-full flex-1 flex-col items-center justify-end gap-1.5"
-              aria-label={`${monthLabel(m)}: ${formatCents(values[i])}`}
-              aria-pressed={selected}
-            >
-              <span className={`tabular text-[11px] ${selected ? 'font-semibold text-ink' : 'text-muted'}`}>
-                {values[i] > 0 ? compactCents(values[i]) : ''}
+            <li key={c.id ?? 'none'} className="flex items-center gap-2.5 py-1.5">
+              <span className="text-lg">{cat?.icon ?? '❔'}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-medium">{cat?.name ?? 'No category'}</span>
+                <span className="text-xs text-muted">{pct(c.cents / total)} of spending</span>
               </span>
-              <span
-                className={`w-full max-w-9 rounded-xl transition ${selected ? 'bg-cobalt shadow-[0_8px_16px_-8px_rgba(31,79,224,0.9)]' : 'bg-cobalt/15'}`}
-                style={{ height: `${(values[i] / max) * 75}%`, minHeight: values[i] > 0 ? 3 : 0 }}
-              />
-              <span className={`text-xs ${selected ? 'font-semibold text-ink' : 'text-muted'}`}>{monthLabel(m, { month: 'short' })}</span>
-            </button>
+              <b className="tabular font-display">{whole(c.cents)}</b>
+              <span className="w-[68px] text-right">
+                {c.prev ? <ChangeChip now={c.cents} before={c.prev} goodWhenDown suffix="" /> : <Chip tone="blue">new</Chip>}
+              </span>
+            </li>
           )
         })}
+      </ul>
+    </Card>
+  )
+}
+
+// ---------- Saving & investing ----------
+function SavingCard({ a }) {
+  const { totals, saving } = a
+  const r = 30
+  const c = 2 * Math.PI * r
+  const income = totals.income || 0
+  const savedShare = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
+  const investedShare = income > 0 ? Math.max(0, Math.min(1 - savedShare, totals.invested / income)) : 0
+  return (
+    <Card icon="invest" color="var(--color-teal)" title="Saving & investing">
+      <div className="flex items-center gap-4">
+        <div className="relative grid size-[76px] shrink-0 place-items-center">
+          <svg width="76" height="76" viewBox="0 0 76 76" className="absolute inset-0 -rotate-90" aria-hidden="true">
+            <circle cx="38" cy="38" r={r} fill="none" strokeWidth="9" stroke="var(--color-line)" />
+            {savedShare > 0 && <circle cx="38" cy="38" r={r} fill="none" strokeWidth="9" stroke="var(--color-cobalt)" strokeDasharray={`${savedShare * c} ${c}`} />}
+            {investedShare > 0 && (
+              <circle cx="38" cy="38" r={r} fill="none" strokeWidth="9" stroke="var(--color-teal)" strokeDasharray={`${investedShare * c} ${c}`} strokeDashoffset={-savedShare * c} />
+            )}
+          </svg>
+          <span className="tabular relative font-display text-base font-extrabold">{saving.rate !== null ? pct(Math.max(0, saving.rate)) : '—'}</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs text-muted">You kept</p>
+          <p className="tabular truncate font-display text-[24px] leading-tight font-bold">
+            {whole(saving.kept)} {income > 0 && <span className="font-sans text-sm font-medium text-muted">of {whole(income)}</span>}
+          </p>
+          <p className="mt-1 flex flex-wrap gap-x-3 text-xs">
+            <span className="flex items-center gap-1">
+              <span className="size-2 rounded-sm bg-cobalt" /> Saved {whole(totals.saved)}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="size-2 rounded-sm bg-teal" /> Invested {whole(totals.invested)}
+            </span>
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <Mini label={`Kept in ${saving.year}`} value={whole(saving.yearKept)} />
+        <Mini label="Average rate" value={saving.avgRate !== null ? pct(saving.avgRate) : '—'} />
+        <Mini label="Best month" value={saving.best ? monthShort(saving.best.key) : '—'} />
       </div>
     </Card>
   )
 }
 
-function Daily({ stats, month, isCurrent }) {
-  const [picked, setPicked] = useState(null)
-  const daysInMonth = Number(monthRange(`${month}-01`)[1].slice(8))
-  // For the current month, average over the days so far
-  const daysCounted = isCurrent ? Number(todayISO().slice(8)) : daysInMonth
-  const average = Math.round(stats.spent / daysCounted)
-  const values = Array.from({ length: daysInMonth }, (_, i) => stats.byDay.get(i + 1) ?? 0)
-  const max = Math.max(...values, average, 1)
-  const pickedValue = picked ? values[picked - 1] : null
-
+// ---------- Trends ----------
+function TrendsCard({ a }) {
+  const max = Math.max(1, ...a.trend.map((t) => Math.max(t.income, t.spent)))
+  const colW = 300 / 12
+  const H = 62
   return (
-    <Card title="Daily spending">
-      <p className="-mt-2 mb-3 h-5 text-sm text-muted">
-        {picked ? (
-          <>
-            {picked} {monthLabel(month, { month: 'short' })}:{' '}
-            <span className="tabular font-semibold text-ink">{formatCents(pickedValue)}</span>
-          </>
-        ) : (
-          <>
-            Average <span className="tabular font-semibold text-ink">{formatCents(average)}</span> per day
-          </>
-        )}
-      </p>
-      <div className="relative h-32">
-        {/* Average line */}
-        {average > 0 && (
-          <div
-            className="pointer-events-none absolute inset-x-0 border-t-2 border-dashed border-muted/30"
-            style={{ bottom: `${(average / max) * 100}%` }}
-          />
-        )}
-        <div className="flex h-full items-end gap-[2px]">
-          {values.map((v, i) => {
-            const day = i + 1
-            const future = isCurrent && day > daysCounted
-            return (
-              <button
-                key={day}
-                onClick={() => setPicked(picked === day ? null : day)}
-                className="flex h-full flex-1 items-end"
-                aria-label={`${day}: ${formatCents(v)}`}
-                disabled={future}
-              >
-                <span
-                  className={`w-full rounded-t-[4px] ${picked === day ? 'bg-ink' : 'bg-cobalt'}`}
-                  style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? 3 : 0 }}
-                />
-              </button>
-            )
-          })}
-        </div>
+    <Card icon="chart" color="#7048e8" title="Trends">
+      <div className="-mt-1 mb-1 flex justify-end gap-3 text-xs text-muted">
+        <span className="flex items-center gap-1">
+          <span className="size-2 rounded-sm bg-gain" /> In
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="size-2 rounded-sm" style={{ background: ORANGE }} /> Out
+        </span>
       </div>
-      <div className="mt-1.5 flex justify-between text-xs text-muted">
-        <span>1</span>
-        <span>{Math.ceil(daysInMonth / 2)}</span>
-        <span>{daysInMonth}</span>
+      <svg viewBox="0 0 300 78" className="block h-auto w-full" role="img" aria-label="Money in and out over the last 12 months">
+        {a.trend.map((t, i) => {
+          const x = i * colW + 2
+          const hi = (t.income / max) * H
+          const ho = (t.spent / max) * H
+          return (
+            <g key={t.key} opacity={t.future ? 0.25 : t.partial ? 0.5 : 1}>
+              {hi > 0 && <rect x={x} y={H - hi} width="9" height={hi} rx="2.5" fill="var(--color-gain)" />}
+              {ho > 0 && <rect x={x + 10} y={H - ho} width="9" height={ho} rx="2.5" fill={ORANGE} />}
+              <text x={x + 9.5} y="76" textAnchor="middle" fontSize="9.5" className="fill-muted">
+                {monthShort(t.key)[0]}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {a.avgIn !== null && <Chip tone="good">Avg in {whole(a.avgIn)}</Chip>}
+        {a.avgOut !== null && <Chip tone="bad">Avg out {whole(a.avgOut)}</Chip>}
       </div>
+    </Card>
+  )
+}
+
+// ---------- Highlights ----------
+function HighlightsCard({ a, category }) {
+  const items = highlights(a, (id) => category(id)?.name ?? 'No category', whole)
+  if (!items.length) return null
+  return (
+    <Card icon="sun" color="#fab005" title="Highlights">
+      <ul className="space-y-1">
+        {items.map((h) => (
+          <li key={h.key} className="flex items-center gap-3 py-1 text-sm">
+            <span
+              className={`grid size-8 shrink-0 place-items-center rounded-[10px] ${
+                h.good === true ? 'bg-gain/12 text-gain' : h.good === false ? 'bg-loss/10 text-loss' : 'bg-cobalt/10 text-cobalt'
+              }`}
+            >
+              <Icon name={h.icon} size={16} strokeWidth={2.2} />
+            </span>
+            <span>
+              {h.text[0]}
+              <b>{h.text[1]}</b>
+              {h.text[2]}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Card>
   )
 }
