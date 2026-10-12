@@ -22,6 +22,10 @@
   --color-orange-text: #c26b00;
   /* Always-dark surfaces (account page top, dimmed backdrops) */
   --color-navy: #0b1b45;
+  /* Investments (Savings → Investments): teal accent and the light-teal chart card */
+  --color-teal: #0c8599;
+  --color-teal-from: #e6f6f8;
+  --color-teal-to: #cdeef2;
 }
 
 /* Dark mode: chosen in Profile → Appearance (data-theme set in index.html before the app draws) */
@@ -42,6 +46,9 @@
   --color-warn: #ffb84d;
   --color-orange-text: #ffa94d;
   --color-navy: #070d24;
+  --color-teal: #3bc0d4;
+  --color-teal-from: #0f2a33;
+  --color-teal-to: #123845;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -62,6 +69,9 @@
     --color-warn: #ffb84d;
     --color-orange-text: #ffa94d;
     --color-navy: #070d24;
+  --color-teal: #3bc0d4;
+  --color-teal-from: #0f2a33;
+  --color-teal-to: #123845;
     color-scheme: dark;
   }
 }

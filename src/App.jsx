@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { TabBar, TopBar } from './components/AppShell'
+import { SavingsTitle, TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
 import LockScreen from './components/LockScreen'
 import { lockSettings, shouldLockOnLeave } from './lib/applock'
@@ -17,6 +17,7 @@ import Accounts from './screens/Accounts'
 import Analytics from './screens/Analytics'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
+import Investments from './screens/Investments'
 import Login from './screens/Login'
 import Onboarding from './screens/Onboarding'
 import Recurring from './screens/Recurring'
@@ -144,7 +145,9 @@ function screenFor(route, session, dataVersion, tx) {
     case '/analytics':
       return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
     case '/savings':
-      return { title: 'Savings', body: <Savings key={dataVersion} /> }
+      return { title: <SavingsTitle investments={false} />, body: <Savings key={dataVersion} /> }
+    case '/savings/investments':
+      return { title: <SavingsTitle investments />, body: <Investments key={dataVersion} /> }
     case '/profile':
     case '/settings':
     case '/account':

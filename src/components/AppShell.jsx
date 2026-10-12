@@ -25,7 +25,11 @@ export function TopBar({ title, back, action, center, email }) {
           // The LynxOS lynx before the title of each main tab
           <img src="/logo.png" alt="" className="ml-2 size-8 shrink-0" />
         )}
-        <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
+        {typeof title === 'string' ? (
+          <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center">{title}</div>
+        )}
         {action}
         {!back && (
           <button onClick={() => navigate('/profile')} className="grid size-11 place-items-center rounded-full" aria-label="Profile">
@@ -34,6 +38,36 @@ export function TopBar({ title, back, action, center, email }) {
         )}
       </div>
     </header>
+  )
+}
+
+// Savings tab title: "Savings  Investments" side by side; the page you're on is dark, the other faded.
+// Switching replaces the address, so Back doesn't step through every switch.
+export function SavingsTitle({ investments }) {
+  const tabs = [
+    { path: '/savings', label: 'Savings', on: !investments },
+    { path: '/savings/investments', label: 'Investments', on: investments },
+  ]
+  return (
+    <div className="flex min-w-0 items-center gap-2.5" role="tablist">
+      {tabs.map((t) =>
+        t.on ? (
+          <h1 key={t.path} role="tab" aria-selected="true" className="truncate font-display text-[22px] font-bold tracking-tight">
+            {t.label}
+          </h1>
+        ) : (
+          <button
+            key={t.path}
+            role="tab"
+            aria-selected="false"
+            onClick={() => window.location.replace(`#${t.path}`)}
+            className="-my-2 truncate py-2 font-display text-[22px] font-bold tracking-tight text-muted/50 active:text-muted"
+          >
+            {t.label}
+          </button>
+        ),
+      )}
+    </div>
   )
 }
 

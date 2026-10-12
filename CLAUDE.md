@@ -24,7 +24,7 @@ Bottom tab bar: Home · Transactions · [+] · Analytics · Savings
 
 ## Data model (Supabase tables)
 Every table has `user_id uuid default auth.uid()` and `created_at`.
-- accounts: name, type (debit | credit | cash | savings | meal; meal = meal card, migration 013), starting_balance_cents, color, archived
+- accounts: name, type (debit | credit | cash | savings | meal | investment; meal = meal card, migration 013; investment = money only goes in, migration 014), starting_balance_cents, color, archived
 - categories: name, icon, color, kind (expense | income), archived, sort_order (owner-chosen order)
 - transactions: type (expense | income | transfer), amount_cents (always positive), date, account_id, to_account_id (transfers only), category_id (null for transfers), note, goal_id (savings goal, only when it moves savings money; null = General savings)
 - savings_goals: name, icon, target_cents, deadline (optional). saved_cents is no longer used (migration 011): a goal's money is calculated.
@@ -153,6 +153,8 @@ Done:
 - Onboarding account types in the order Bank, Meal card, Cash, Savings, Credit card. Published.
 - New goal / Edit goal sheet redesigned like the onboarding forms: big emoji tile with live name and "€2.500 target · by Oct 2026" (plus a small progress bar when starting with money), grouped rows Name / Target / Start with (from General savings, shows how much is there) / Deadline, amounts entered with the number pad (shared src/components/AmountPad.jsx, also used by onboarding), emoji grid without the typed-emoji box, Remove in the Deadline calendar's top bar. Published.
 
+- Investment account type (owner's choice): type 'investment' (migration 014 widens the accounts type check, NOT yet run by owner). Money only goes in: an investment account can only be a transfer's "to" account (canPayFrom/overdraftProblem in src/lib/balances.js; hidden from From, Paid from, Recurring and Default account pickers). Its balance = how much was invested (no market value). Not in Home's total balance ("Investments not included") or the budget; can be archived with money in it. Onboarding types are two rows of three (Bank, Meal card, Cash / Savings, Credit card, Investment); amount labelled "Invested".
+- Savings → Investments (owner chose title style "1" and layout "A" from mockups): the Savings tab title is "Savings  Investments" side by side, the page you're on dark, the other faded (SavingsTitle in src/components/AppShell.jsx; switching replaces the address). #/savings/investments (src/screens/Investments.jsx): teal "Invested so far" card with This month / This year, light-teal bar chart of money put in over the last 6 months (avg per full month), "Where it is" list of investment accounts (logo, +€ this month, total) and "+ Invest" which opens Add transaction as a transfer into the first investment account (TransactionSheet `draft` prop). Teal colour tokens teal / teal-from / teal-to in src/index.css (light + dark).
 Next:
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).

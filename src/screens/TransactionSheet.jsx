@@ -49,20 +49,21 @@ function suggestCategory(history, type, name) {
   return null
 }
 
-// transaction: null to add a new one, or an existing row to edit it
+// transaction: null to add a new one, or an existing row to edit it.
+// draft (new ones only): starting type and "to" account, e.g. a transfer into an investment account.
 // Step 1: amount (number pad). Step 2: a sheet with the name and categories, then Save.
-export default function TransactionSheet({ transaction, onClose, onSaved }) {
+export default function TransactionSheet({ transaction, draft, onClose, onSaved }) {
   const isNew = !transaction
   const [lookups, setLookups] = useState(lookupCache.lookups)
   const [history, setHistory] = useState(null)
   const [step, setStep] = useState(1)
-  const [type, setType] = useState(transaction?.type ?? 'expense')
+  const [type, setType] = useState(transaction?.type ?? draft?.type ?? 'expense')
   const [amount, setAmount] = useState(transaction ? centsToPad(transaction.amount_cents) : '')
   const [categoryId, setCategoryId] = useState(transaction?.category_id ?? null)
   const [accountId, setAccountId] = useState(() =>
     transaction ? transaction.account_id : lookupCache.lookups && defaultAccountId(lookupCache.lookups, lookupCache.lastUsedAccountId),
   )
-  const [toAccountId, setToAccountId] = useState(transaction?.to_account_id ?? null)
+  const [toAccountId, setToAccountId] = useState(transaction?.to_account_id ?? draft?.to_account_id ?? null)
   const [date, setDate] = useState(transaction?.date ?? todayISO())
   const [name, setName] = useState(transaction?.note ?? '')
   const [goalId, setGoalId] = useState(transaction?.goal_id ?? null) // null = General savings
