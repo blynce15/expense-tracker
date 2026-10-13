@@ -17,9 +17,9 @@ Single user (the owner). Currency: EUR only.
 - vite-plugin-pwa for installability
 
 ## Navigation
-Bottom tab bar: Home · Transactions · [+] · Analytics · Savings
-- [+] is a raised center button that opens "Add transaction".
-- Top bar: one profile avatar that opens Profile (settings live there).
+Bottom tab bar: Home · Transactions · Savings · Investments, with the [+] button on its own at the right (changed 2026-10-13).
+- [+] opens "Add transaction".
+- Top bar (main tabs): an Analytics button (bars icon) next to the profile avatar; the avatar opens Profile (settings live there). Analytics has a back arrow (to Home).
 - Mobile-first. Respect iPhone safe areas (notch, home indicator). Large tap targets.
 
 ## Data model (Supabase tables)
@@ -157,6 +157,10 @@ Done:
 - Savings → Investments (owner chose title style "1" and layout "A" from mockups): the Savings tab title is "Savings  Investments" side by side, the page you're on dark, the other faded (SavingsTitle in src/components/AppShell.jsx; switching replaces the address). #/savings/investments (src/screens/Investments.jsx): teal "Invested so far" card with This month / This year, light-teal bar chart of money put in over the last 6 months (avg per full month), "Where it is" list of investment accounts (logo, +€ this month, total) and "+ Invest" which opens Add transaction as a transfer into the first investment account (TransactionSheet `draft` prop). Teal colour tokens teal / teal-from / teal-to in src/index.css (light + dark). Published 2026-10-12 together with the Investment account type.
 - Analytics redesigned (owner chose "one page of summary cards, each opening a details page" from mockups; details pages still to build, one at a time, so the cards have no "More" link yet). Month / Year switch with arrows (current period's comparisons use the period before up to the same day). Cards: Net worth (all accounts incl. savings + investments − card owed; 12-month line worked out backwards from today's balances using income − spending; In / Spent / Saved / Invested), Spending (total, change, pace line vs the period before, Per day, On track for (current) or Biggest day, Fixed bills = expenses named like a recurring payment), Categories (split bar, top 3 with change; big rises shown as "3×"), Saving & investing (kept = net money into savings + investment accounts; ring of saved/invested share of income; Kept this year, Average rate over full months (owner: no goal, just the average), Best month), Trends (12 months in/out, averages over full months), Highlights (spent vs before, biggest category rise, costliest weekday, kept vs average). Calculations in src/lib/analytics.js, page src/screens/Analytics.jsx. The old By category / Last 6 months / Daily charts are gone until the details pages bring them back. Published 2026-10-12.
 - Analytics → Spending details (#/analytics/spending, src/screens/AnalyticsSpending.jsx; the Spending card on Analytics shows "More ›" and opens it): same Month/Year bar (the chosen period is shared with the main page while the app is open: usePeriod in src/components/AnalyticsKit.jsx, which also holds the shared PeriodBar, Card, Chip, ChangeChip, Mini, linePath), total with change and on-track, Spending pace chart (vs the period before, "Sep by then"), Per day / Per month bars (orange above average, dashed average, tap to read, big days capped), Fixed vs everyday (counts and shares), quick facts (transactions, average each, no-spend days or average month, biggest day), Where you spend most (top 5 names with shop logos, times, bar) and Biggest expenses (top 5). Published 2026-10-12.
+### 2026-10-13
+Done:
+- Navigation change (owner's request): Analytics moved from the bottom bar to a round button in the top bar next to the profile photo (on every main tab); Analytics now has a back arrow. Investments is its own bottom tab (#/investments, icon "invest"), to the right of Savings; the "Savings  Investments" title switch is gone (titles are plain "Savings" / "Investments"). The old #/savings/investments address forwards to #/investments.
+
 Next:
 - Analytics details pages still to build (owner will continue later): Net worth, Categories (full list with mini charts; tap a category for its own page: 12 months vs average, where, per visit), Saving & investing (income vs kept per month, savings rate over time, year totals), Trends (12 months, recurring costs over time, weekdays, month calendar). Each card on Analytics gets "More ›" (Card onMore) once its page exists.
 - Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).

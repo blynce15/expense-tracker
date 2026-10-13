@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SavingsTitle, TabBar, TopBar } from './components/AppShell'
+import { TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
 import LockScreen from './components/LockScreen'
 import { lockSettings, shouldLockOnLeave } from './lib/applock'
@@ -30,6 +30,10 @@ import TransactionSheet from './screens/TransactionSheet'
 function App() {
   const session = useSession()
   const route = useRoute()
+  // Investments used to live at #/savings/investments; it's its own tab now
+  useEffect(() => {
+    if (route === '/savings/investments') window.location.replace('#/investments')
+  }, [route])
   const online = useOnline()
   const [adding, setAdding] = useState(false)
   // App lock: locked when the app starts and every time you come back to it
@@ -144,13 +148,13 @@ function screenFor(route, session, dataVersion, tx) {
       }
     }
     case '/analytics':
-      return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
+      return { title: 'Analytics', back: '/home', body: <Analytics key={dataVersion} /> }
     case '/analytics/spending':
       return { title: 'Spending', back: '/analytics', body: <AnalyticsSpending key={dataVersion} /> }
     case '/savings':
-      return { title: <SavingsTitle investments={false} />, body: <Savings key={dataVersion} /> }
-    case '/savings/investments':
-      return { title: <SavingsTitle investments />, body: <Investments key={dataVersion} /> }
+      return { title: 'Savings', body: <Savings key={dataVersion} /> }
+    case '/investments':
+      return { title: 'Investments', body: <Investments key={dataVersion} /> }
     case '/profile':
     case '/settings':
     case '/account':

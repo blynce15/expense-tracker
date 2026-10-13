@@ -5,8 +5,8 @@ import { goBack, navigate } from '../lib/useRoute'
 const TABS = [
   { path: '/home', label: 'Home', icon: 'home' },
   { path: '/transactions', label: 'Transactions', icon: 'list' },
-  { path: '/analytics', label: 'Analytics', icon: 'bars' },
   { path: '/savings', label: 'Savings', icon: 'target' },
+  { path: '/investments', label: 'Investments', icon: 'invest' },
 ]
 
 export function TopBar({ title, back, action, center, email }) {
@@ -25,12 +25,20 @@ export function TopBar({ title, back, action, center, email }) {
           // The LynxOS lynx before the title of each main tab
           <img src="/logo.png" alt="" className="ml-2 size-8 shrink-0" />
         )}
-        {typeof title === 'string' ? (
-          <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center">{title}</div>
-        )}
+        <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
         {action}
+        {!back && (
+          // Analytics lives up here, next to the profile photo
+          <button
+            onClick={() => navigate('/analytics')}
+            className="grid size-11 place-items-center rounded-full"
+            aria-label="Analytics"
+          >
+            <span className="grid size-[34px] place-items-center rounded-full bg-card text-cobalt shadow-[0_6px_14px_-8px_rgba(11,27,69,0.45)] ring-1 ring-line">
+              <Icon name="bars" size={18} strokeWidth={2.3} />
+            </span>
+          </button>
+        )}
         {!back && (
           <button onClick={() => navigate('/profile')} className="grid size-11 place-items-center rounded-full" aria-label="Profile">
             <Avatar name={look.name} email={email} photo={look.photo} size={34} className="shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]" />
@@ -38,36 +46,6 @@ export function TopBar({ title, back, action, center, email }) {
         )}
       </div>
     </header>
-  )
-}
-
-// Savings tab title: "Savings  Investments" side by side; the page you're on is dark, the other faded.
-// Switching replaces the address, so Back doesn't step through every switch.
-export function SavingsTitle({ investments }) {
-  const tabs = [
-    { path: '/savings', label: 'Savings', on: !investments },
-    { path: '/savings/investments', label: 'Investments', on: investments },
-  ]
-  return (
-    <div className="flex min-w-0 items-center gap-2.5" role="tablist">
-      {tabs.map((t) =>
-        t.on ? (
-          <h1 key={t.path} role="tab" aria-selected="true" className="truncate font-display text-[22px] font-bold tracking-tight">
-            {t.label}
-          </h1>
-        ) : (
-          <button
-            key={t.path}
-            role="tab"
-            aria-selected="false"
-            onClick={() => window.location.replace(`#${t.path}`)}
-            className="-my-2 truncate py-2 font-display text-[22px] font-bold tracking-tight text-muted/50 active:text-muted"
-          >
-            {t.label}
-          </button>
-        ),
-      )}
-    </div>
   )
 }
 
