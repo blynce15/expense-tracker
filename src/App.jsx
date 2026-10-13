@@ -125,7 +125,7 @@ function screenFor(route, session, dataVersion, tx) {
         action: (
           <button
             onClick={() => tx.setFilterOpen(true)}
-            className={`relative grid size-11 place-items-center rounded-full ${active ? 'text-cobalt' : 'text-muted'}`}
+            className={`relative grid h-11 w-10 place-items-center rounded-full ${active ? 'text-cobalt' : 'text-muted'}`}
             aria-label="Filters"
           >
             <Icon name="sliders" size={22} />

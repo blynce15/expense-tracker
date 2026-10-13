@@ -1,5 +1,8 @@
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import Avatar, { useProfileLook } from './Avatar'
 import Icon from './Icon'
+import Sheet from './Sheet'
 import { goBack, navigate } from '../lib/useRoute'
 
 const TABS = [
@@ -11,30 +14,33 @@ const TABS = [
 
 export function TopBar({ title, back, action, center, email }) {
   const look = useProfileLook()
+  const [aiOpen, setAiOpen] = useState(false)
   return (
     <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="relative flex h-14 items-center gap-1 px-2">
-        {center && (
-          <p className="pointer-events-none absolute inset-x-0 text-center text-sm font-semibold text-muted">{center}</p>
-        )}
+        {center && <p className="pointer-events-none absolute inset-x-0 text-center text-sm font-semibold text-muted">{center}</p>}
         {back ? (
           <button onClick={() => goBack(back)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back">
             <Icon name="chevronLeft" />
           </button>
         ) : (
           // The LynxOS lynx before the title of each main tab
-          <img src="/logo.png" alt="" className="ml-2 size-8 shrink-0" />
+          <img src="/logo.png" alt="" className="ml-1 size-8 shrink-0" />
         )}
         <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
         {action}
         {!back && (
+          // AI assistant: a placeholder for now
+          <button onClick={() => setAiOpen(true)} className="grid h-11 w-9 place-items-center rounded-full" aria-label="AI assistant">
+            <span className="grid size-8 place-items-center rounded-full bg-card text-cobalt shadow-[0_6px_14px_-8px_rgba(11,27,69,0.45)] ring-1 ring-line">
+              <Icon name="sparkles" size={18} strokeWidth={2} />
+            </span>
+          </button>
+        )}
+        {!back && (
           // Analytics lives up here, next to the profile photo
-          <button
-            onClick={() => navigate('/analytics')}
-            className="grid size-11 place-items-center rounded-full"
-            aria-label="Analytics"
-          >
-            <span className="grid size-[34px] place-items-center rounded-full bg-card text-cobalt shadow-[0_6px_14px_-8px_rgba(11,27,69,0.45)] ring-1 ring-line">
+          <button onClick={() => navigate('/analytics')} className="grid h-11 w-9 place-items-center rounded-full" aria-label="Analytics">
+            <span className="grid size-8 place-items-center rounded-full bg-card text-cobalt shadow-[0_6px_14px_-8px_rgba(11,27,69,0.45)] ring-1 ring-line">
               <Icon name="bars" size={18} strokeWidth={2.3} />
             </span>
           </button>
@@ -45,6 +51,19 @@ export function TopBar({ title, back, action, center, email }) {
           </button>
         )}
       </div>
+      {/* Outside the header: its blur would otherwise keep the sheet inside the bar */}
+      {aiOpen &&
+        createPortal(
+          <Sheet title="AI assistant" onClose={() => setAiOpen(false)}>
+            <div className="flex flex-col items-center pt-2 pb-4 text-center">
+              <span className="grid size-16 place-items-center rounded-[22px] bg-cobalt/10 text-cobalt">
+                <Icon name="sparkles" size={32} strokeWidth={1.8} />
+              </span>
+              <p className="mt-3 font-display text-xl font-bold">Coming soon</p>
+            </div>
+          </Sheet>,
+          document.body,
+        )}
     </header>
   )
 }

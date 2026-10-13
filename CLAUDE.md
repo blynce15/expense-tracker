@@ -19,7 +19,7 @@ Single user (the owner). Currency: EUR only.
 ## Navigation
 Bottom tab bar: Home · Transactions · Savings · Investments, with the [+] button on its own at the right (changed 2026-10-13).
 - [+] opens "Add transaction".
-- Top bar (main tabs): an Analytics button (bars icon) next to the profile avatar; the avatar opens Profile (settings live there). Analytics has a back arrow (to Home).
+- Top bar (main tabs): an AI button (sparkles icon; placeholder "Coming soon" sheet for now), an Analytics button (bars icon), then the profile avatar; the avatar opens Profile (settings live there). Analytics has a back arrow (to Home).
 - Mobile-first. Respect iPhone safe areas (notch, home indicator). Large tap targets.
 
 ## Data model (Supabase tables)
@@ -160,6 +160,7 @@ Done:
 ### 2026-10-13
 Done:
 - Navigation change (owner's request): Analytics moved from the bottom bar to a round button in the top bar next to the profile photo (on every main tab); Analytics now has a back arrow. Investments is its own bottom tab (#/investments, icon "invest"), to the right of Savings; the "Savings  Investments" title switch is gone (titles are plain "Savings" / "Investments"). The old #/savings/investments address forwards to #/investments.
+- AI button (owner: "for later"): sparkles icon in the top bar to the left of Analytics; opens a sheet that only says "Coming soon" (rendered outside the header because the header's blur would trap it). Top-bar buttons narrowed (36px) so "Transactions" still fits next to its filter button.
 
 Next:
 - Analytics details pages still to build (owner will continue later): Net worth, Categories (full list with mini charts; tap a category for its own page: 12 months vs average, where, per visit), Saving & investing (income vs kept per month, savings rate over time, year totals), Trends (12 months, recurring costs over time, weekdays, month calendar). Each card on Analytics gets "More ›" (Card onMore) once its page exists.
