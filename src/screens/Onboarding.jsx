@@ -23,7 +23,7 @@ import { supabase } from '../lib/supabase'
 
 const STEPS = [
   { key: 'welcome' },
-  { key: 'profile', title: 'Profile' },
+  { key: 'profile', title: 'Nice to meet you', center: true },
   { key: 'accounts', title: 'Accounts' },
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
   { key: 'cats', title: 'Categories' },
@@ -283,7 +283,7 @@ export default function Onboarding({ email, onDone }) {
                 ))}
               </div>
             </div>
-            <h1 className="mt-6 font-display text-[34px] leading-[1.02] font-extrabold tracking-tight">{STEPS[step].title}</h1>
+            <h1 className={`mt-6 font-display text-[34px] leading-[1.02] font-extrabold tracking-tight ${STEPS[step].center ? 'text-center' : ''}`}>{STEPS[step].title}</h1>
             {STEPS[step].sub ? <p className="mt-2 mb-5 text-muted">{STEPS[step].sub}</p> : <div className="mb-5" />}
 
             {key === 'profile' && <ProfileStep email={email} profile={profile} setProfile={setProfile} />}
@@ -431,46 +431,48 @@ function ProfileStep({ email, profile, setProfile }) {
     input.current.click()
   }
 
+  const named = profile.name.trim()
   return (
     <div>
-      <div className="flex flex-col items-center pt-2">
-        <button type="button" onClick={choosePhoto} className="relative rounded-full" aria-label={profile.photo ? 'Change photo' : 'Add photo'}>
-          <Avatar name={profile.name} email={email} photo={profile.photo} size={116} className="shadow-[0_18px_34px_-16px_rgba(31,79,224,0.75)]" />
-          <span className="absolute right-0.5 bottom-0.5 grid size-9 place-items-center rounded-full bg-cobalt text-white ring-4 ring-paper">
-            <Icon name="camera" size={17} strokeWidth={2.2} />
-          </span>
-        </button>
-        <input ref={input} type="file" accept="image/*" onChange={picked} className="hidden" />
-        <p className={`mt-4 max-w-full truncate font-display text-2xl leading-tight font-bold ${profile.name.trim() ? '' : 'text-muted/50'}`}>
-          {profile.name.trim() || 'Your name'}
-        </p>
-        <p className="max-w-full truncate text-sm text-muted">{email}</p>
-        <div className="mt-3 flex gap-2">
-          <button type="button" onClick={choosePhoto} className="rounded-full bg-cobalt/10 px-4 py-1.5 text-sm font-semibold text-cobalt">
-            {profile.photo ? 'Change photo' : 'Add photo'}
+      {/* "Spotlight": the photo in the middle with soft rings (like the lock screen); tap it to add or change */}
+      <div className="flex flex-col items-center">
+        <div className="relative grid size-[230px] place-items-center [@media(max-height:700px)]:size-[180px]">
+          <span className="absolute -inset-6 rounded-full border-[1.5px] border-cobalt/[.08] [@media(max-height:700px)]:-inset-3" aria-hidden="true" />
+          <span className="absolute inset-0 rounded-full border-[1.5px] border-cobalt/15" aria-hidden="true" />
+          <span className="absolute inset-6 rounded-full border-[1.5px] border-cobalt/20" aria-hidden="true" />
+          <button type="button" onClick={choosePhoto} className="relative rounded-full" aria-label={profile.photo ? 'Change photo' : 'Add photo'}>
+            <Avatar
+              name={profile.name}
+              email={email}
+              photo={profile.photo}
+              size={140}
+              className="shadow-[0_22px_40px_-18px_rgba(31,79,224,0.9)] [@media(max-height:700px)]:!size-[110px]"
+            />
+            <span className="absolute right-0 bottom-0 grid size-[42px] place-items-center rounded-full bg-card text-cobalt shadow-[0_2px_8px_rgba(11,27,69,0.25)] [@media(max-height:700px)]:size-9">
+              <Icon name="camera" size={20} strokeWidth={2.2} />
+            </span>
           </button>
-          {profile.photo && (
-            <button type="button" onClick={() => setProfile({ ...profile, photo: null })} className="rounded-full bg-card px-4 py-1.5 text-sm font-semibold text-muted">
-              Remove
-            </button>
-          )}
         </div>
+        <input ref={input} type="file" accept="image/*" onChange={picked} className="hidden" />
+        <p className={`mt-2 max-w-full truncate font-display text-[30px] leading-tight font-extrabold tracking-tight ${named ? '' : 'text-muted/40'}`}>
+          {named || 'Your name'}
+        </p>
+        <p className="mt-2 max-w-full truncate rounded-full bg-card px-3 py-1.5 text-[13px] text-muted">{email}</p>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-2xl bg-card">
-        <Row label="Name">
-          <input
-            value={profile.name}
-            onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-            placeholder="Your name"
-            maxLength={40}
-            autoComplete="given-name"
-            enterKeyHint="done"
-            onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-            className={`w-full ${plainInput}`}
-          />
-        </Row>
-      </div>
+      <label className="group mt-6 block rounded-[18px] border-2 border-line bg-card px-4 pt-2.5 pb-2 transition-colors focus-within:border-cobalt">
+        <span className="block text-xs font-bold text-muted group-focus-within:text-cobalt">Your name</span>
+        <input
+          value={profile.name}
+          onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+          placeholder="First name"
+          maxLength={40}
+          autoComplete="given-name"
+          enterKeyHint="done"
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          className="mt-0.5 w-full bg-transparent text-lg font-semibold text-ink outline-none placeholder:font-normal placeholder:text-muted/60"
+        />
+      </label>
       {error && <p className="mt-2 px-1 text-sm text-loss">{error}</p>}
     </div>
   )
