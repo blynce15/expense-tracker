@@ -235,7 +235,7 @@ function TrendsCard({ a }) {
   const colW = 300 / 12
   const H = 62
   return (
-    <Card icon="chart" color="#7048e8" title="Trends">
+    <Card icon="chart" color="#7048e8" title="Trends" onMore={() => navigate('/analytics/trends')}>
       <div className="-mt-1 mb-1 flex justify-end gap-3 text-xs text-muted">
         <span className="flex items-center gap-1">
           <span className="size-2 rounded-sm bg-gain" /> In

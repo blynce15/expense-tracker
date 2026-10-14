@@ -3,7 +3,7 @@
 // ({ kind: 'year', key: '2026' }).
 import { fetchAccountsWithBalances } from './balances'
 import { todayISO } from './dates'
-import { fetchRecurring } from './recurring'
+import { fetchRecurring, monthlyCents } from './recurring'
 import { supabase } from './supabase'
 
 // ---------- Months and periods ----------
@@ -241,6 +241,9 @@ function buildAnalytics(p, accounts, recurring, rows) {
     catBy,
     last12,
     activeMonths: active.map((t) => t.key),
+    // Spending on recurring payments per month, and what the active ones cost per month today
+    fixedBy,
+    recurringMonthly: recurring.filter((r) => r.active && r.type !== 'income').reduce((s, r) => s + monthlyCents(r), 0),
     // Savings and investment accounts (today's balance) with the net money in during this period
     keepAccounts: accounts
       .filter((a) => a.type === 'savings' || a.type === 'investment')

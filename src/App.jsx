@@ -18,6 +18,7 @@ import Analytics from './screens/Analytics'
 import AnalyticsCategories, { CategoryDetail } from './screens/AnalyticsCategories'
 import AnalyticsSaving from './screens/AnalyticsSaving'
 import AnalyticsSpending from './screens/AnalyticsSpending'
+import AnalyticsTrends from './screens/AnalyticsTrends'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
 import Investments from './screens/Investments'
@@ -162,6 +163,8 @@ function screenFor(route, session, dataVersion, tx) {
       return { title: 'Categories', back: '/analytics', body: <AnalyticsCategories key={dataVersion} /> }
     case '/analytics/saving':
       return { title: 'Saving & investing', back: '/analytics', body: <AnalyticsSaving key={dataVersion} /> }
+    case '/analytics/trends':
+      return { title: 'Trends', back: '/analytics', body: <AnalyticsTrends key={dataVersion} /> }
     case '/analytics/spending':
       return { title: 'Spending', back: '/analytics', body: <AnalyticsSpending key={dataVersion} /> }
     case '/savings':
