@@ -932,37 +932,58 @@ function PaymentRow({ payment, today, children }) {
 
 function PaymentsStep({ today, accounts, categories, payments, form, setForm, onOpen, onRemove }) {
   const [kind, setKind] = useState('expense')
-  const [picking, setPicking] = useState(null) // null | 'amount' | 'date'
+  const [picking, setPicking] = useState(null) // null | 'amount' | 'date' | 'account' | 'category'
 
   if (form) {
     const income = form.type === 'income'
     // Money comes in to any account; payments go out of spending accounts
     const choices = accounts.filter((a) => income || a.type !== 'savings')
+    // Every category the user kept or created for this kind in the Categories step
     const cats = categories.filter((c) => c.kind === form.type && c.selected)
+    const account = accounts.find((a) => a.key === form.accountKey)
+    const category = cats.find((c) => c.name === form.categoryName)
     const cents = parseToCents(form.amount) ?? 0
     const per = FREQUENCIES.find((f) => f[0] === form.frequency)[3]
-    const chip = (on) => `flex items-center gap-2 rounded-full border-[1.5px] text-sm font-semibold ${on ? 'border-cobalt bg-cobalt/15' : 'border-transparent bg-card'}`
+    const [euros, decimals] = formatCents(cents).split(',')
+    const close = () => setPicking(null)
     return (
       <div>
-        <div className="flex items-center justify-between px-1">
+        <div className="mb-3 flex items-center justify-between px-1">
           <p className="text-sm font-semibold text-muted">{income ? 'New income' : 'New payment'}</p>
           <SectionAction label="Cancel" onClick={() => setForm(null)} />
         </div>
 
-        {/* How it will look: logo or emoji, name, amount per period */}
-        <div className="flex flex-col items-center pt-3">
-          <MerchantIcon name={form.name} className="size-[68px] rounded-[22px] bg-card text-[36px]">
+        {/* How it will look on the Recurring page */}
+        <div className="flex items-center gap-3.5 rounded-[22px] bg-card p-4 shadow-[0_14px_28px_-20px_rgba(11,27,69,0.35)]">
+          <MerchantIcon name={form.name} className="size-[52px] rounded-2xl bg-paper text-[28px]">
             {form.icon}
           </MerchantIcon>
-          <b className={`mt-3 max-w-full truncate font-display text-2xl ${form.name.trim() ? '' : 'text-muted/50'}`}>{form.name.trim() || 'Name'}</b>
-          <span className={`tabular text-sm ${cents ? (income ? 'font-semibold text-gain' : 'text-muted') : 'text-muted/60'}`}>
-            {cents ? `${income ? '+' : ''}${formatCents(cents)} a ${per}` : 'Amount not set'}
+          <span className="min-w-0 flex-1">
+            <b className={`block truncate font-display text-xl leading-tight ${form.name.trim() ? '' : 'text-muted/50'}`}>{form.name.trim() || 'Name'}</b>
+            <span className="mt-0.5 block truncate text-[13px] text-muted">{whenText(form.nextDue, today)}</span>
+          </span>
+          <span className="shrink-0 text-right">
+            <b className={`tabular block font-display text-xl leading-tight ${cents ? (income ? 'text-gain' : '') : 'text-muted/50'}`}>
+              {income && cents ? '+' : ''}
+              {euros}
+              {decimals !== '00' && <span className="text-sm opacity-60">,{decimals}</span>}
+            </b>
+            <span className="block text-xs text-muted">per {per}</span>
           </span>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-2xl bg-card">
+        <p className={capClass}>{income ? 'Income' : 'Payment'}</p>
+        <div className="overflow-hidden rounded-[20px] bg-card">
           <Row label="Name">
-            <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value, error: null })} placeholder={income ? 'e.g. Salary' : 'e.g. Netflix'} maxLength={40} className={`w-full ${plainInput}`} />
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value, error: null })}
+              placeholder={income ? 'e.g. Salary' : 'e.g. Netflix'}
+              maxLength={40}
+              enterKeyHint="done"
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              className={`w-full ${plainInput}`}
+            />
           </Row>
           <Row label="Amount">
             <button onClick={() => setPicking('amount')} className={`tabular text-base font-semibold ${cents ? 'text-ink' : 'text-muted/60'}`}>
@@ -970,12 +991,15 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
             </button>
           </Row>
           <Row label="Repeats">
-            <div className="grid grid-cols-3 gap-0.5 rounded-xl bg-paper p-0.5">
+            <div className="grid grid-cols-3 rounded-xl bg-paper p-[3px]">
               {FREQUENCIES.map(([value, label]) => (
                 <button
                   key={value}
                   onClick={() => setForm({ ...form, frequency: value })}
-                  className={`rounded-[10px] px-2.5 py-1.5 text-xs font-semibold ${form.frequency === value ? 'bg-card text-ink shadow-sm' : 'text-muted'}`}
+                  aria-pressed={form.frequency === value}
+                  className={`rounded-[9px] px-2.5 py-1.5 text-[13px] font-semibold transition-colors ${
+                    form.frequency === value ? 'bg-card text-ink shadow-[0_2px_6px_rgba(11,27,69,0.12)]' : 'text-muted'
+                  }`}
                 >
                   {label}
                 </button>
@@ -985,49 +1009,92 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
           <Row label={income ? 'Next date' : 'Next payment'}>
             <button onClick={() => setPicking('date')} className="flex items-center gap-1 text-base font-semibold">
               {form.nextDue === today ? 'Today' : formatDayMonth(form.nextDue)}
-              <Icon name="chevronRight" size={16} className="text-muted" />
+              <Icon name="chevronRight" size={16} className="text-muted/60" />
             </button>
           </Row>
         </div>
 
-        <p className="mt-4 mb-1.5 px-1 text-sm text-muted">{income ? 'Paid into' : 'Paid from'}</p>
-        <div className="flex flex-wrap gap-2">
-          {choices.map((a) => (
-            <button key={a.key} onClick={() => setForm({ ...form, accountKey: a.key })} className={`${chip(form.accountKey === a.key)} py-1.5 pr-3.5 pl-1.5`}>
-              <MiniCard account={a} className="h-6 w-8 rounded-md" iconClass="size-3" />
-              {a.name}
+        <p className={capClass}>{income ? 'Paid into & category' : 'Paid from & category'}</p>
+        <div className="overflow-hidden rounded-[20px] bg-card">
+          <Row label={income ? 'Paid into' : 'Paid from'}>
+            <button onClick={() => setPicking('account')} className="flex min-w-0 items-center gap-2 text-base font-semibold">
+              {account && <MiniCard account={account} className="h-5 w-[30px] rounded-[5px]" iconClass="size-3" />}
+              <span className="truncate">{account?.name ?? 'Choose'}</span>
+              <Icon name="chevronRight" size={16} className="shrink-0 text-muted/60" />
             </button>
-          ))}
-        </div>
-        <p className="mt-4 mb-1.5 px-1 text-sm text-muted">Category</p>
-        <div className="flex flex-wrap gap-2">
-          {cats.map((c) => (
-            <button key={c.name} onClick={() => setForm({ ...form, categoryName: c.name })} className={`${chip(form.categoryName === c.name)} px-3.5 py-2`}>
-              {c.icon} {c.name}
+          </Row>
+          <Row label="Category">
+            <button onClick={() => setPicking('category')} className="flex min-w-0 items-center gap-2 text-base font-semibold">
+              {category && <span className="text-lg leading-none">{category.icon}</span>}
+              <span className={`truncate ${category ? '' : 'text-muted/60'}`}>{category?.name ?? 'Choose'}</span>
+              <Icon name="chevronRight" size={16} className="shrink-0 text-muted/60" />
             </button>
-          ))}
+          </Row>
         </div>
         {form.error && <p className="mt-3 px-1 text-sm text-loss">{form.error}</p>}
 
         {picking === 'amount' && (
-          <AmountPad label={income ? 'Amount received' : 'Amount'} amount={form.amount} onChange={(amount) => setForm({ ...form, amount, error: null })} onDone={() => setPicking(null)} />
+          <AmountPad label={income ? 'Amount received' : 'Amount'} amount={form.amount} onChange={(amount) => setForm({ ...form, amount, error: null })} onDone={close} />
         )}
         {picking === 'date' && (
-          <>
-            <div className="fixed inset-0 z-30 bg-navy/50" onClick={() => setPicking(null)} />
-            <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg rounded-t-[28px] bg-card px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] motion-safe:animate-[sheet-up_200ms_ease-out]">
-              <p className="mb-2 font-display text-lg font-bold">{income ? 'Next date' : 'Next payment'}</p>
-              <DatePicker
-                value={form.nextDue}
-                dimFuture={false}
-                quickPicks={false}
-                onChange={(iso) => {
-                  setForm({ ...form, nextDue: iso < today ? today : iso })
-                  setPicking(null)
-                }}
-              />
+          <Sheet title={income ? 'Next date' : 'Next payment'} onClose={close}>
+            <DatePicker
+              value={form.nextDue}
+              dimFuture={false}
+              quickPicks={false}
+              onChange={(iso) => {
+                setForm({ ...form, nextDue: iso < today ? today : iso })
+                close()
+              }}
+            />
+          </Sheet>
+        )}
+        {picking === 'account' && (
+          <Sheet title={income ? 'Paid into' : 'Paid from'} onClose={close}>
+            <div className="overflow-hidden rounded-[20px] bg-card">
+              {choices.map((a) => (
+                <button
+                  key={a.key}
+                  onClick={() => {
+                    setForm({ ...form, accountKey: a.key })
+                    close()
+                  }}
+                  className="flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-0 active:bg-paper"
+                >
+                  <MiniCard account={a} className="h-8 w-12 rounded-lg" iconClass="size-3.5" />
+                  <span className="min-w-0 flex-1">
+                    <b className="block truncate">{a.name}</b>
+                    <span className="block text-xs text-muted">{TYPES[a.type].label}</span>
+                  </span>
+                  {form.accountKey === a.key && <Glyph name="check" className="size-5 text-cobalt" width={2.6} />}
+                </button>
+              ))}
             </div>
-          </>
+          </Sheet>
+        )}
+        {picking === 'category' && (
+          <Sheet title="Category" onClose={close}>
+            <div className="grid grid-cols-3 gap-2 pb-2">
+              {cats.map((c) => {
+                const on = form.categoryName === c.name
+                return (
+                  <button
+                    key={c.name}
+                    onClick={() => {
+                      setForm({ ...form, categoryName: c.name })
+                      close()
+                    }}
+                    aria-pressed={on}
+                    className={`flex h-[78px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border-[1.5px] px-1 transition ${on ? '' : 'border-transparent bg-card'}`}
+                    style={on ? { backgroundColor: `${c.color}2e`, borderColor: c.color } : undefined}
+                  >
+                    <span className="text-[24px] leading-none">{c.icon}</span>
+                    <span className="w-full truncate text-center text-xs font-semibold">{c.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </Sheet>
         )}
       </div>
     )
