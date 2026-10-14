@@ -8,6 +8,7 @@ import { goBack, navigate } from '../lib/useRoute'
 const TABS = [
   { path: '/home', label: 'Home', icon: 'home' },
   { path: '/transactions', label: 'Transactions', icon: 'list' },
+  { path: '/analytics', label: 'Analytics', icon: 'bars' },
   { path: '/savings', label: 'Savings', icon: 'target' },
   { path: '/investments', label: 'Investments', icon: 'invest' },
 ]
@@ -38,14 +39,6 @@ export function TopBar({ title, back, action, center, email }) {
           </button>
         )}
         {!back && (
-          // Analytics lives up here, next to the profile photo
-          <button onClick={() => navigate('/analytics')} className="grid h-11 w-9 place-items-center rounded-full" aria-label="Analytics">
-            <span className="grid size-8 place-items-center rounded-full bg-card text-cobalt shadow-[0_6px_14px_-8px_rgba(11,27,69,0.45)] ring-1 ring-line">
-              <Icon name="bars" size={18} strokeWidth={2.3} />
-            </span>
-          </button>
-        )}
-        {!back && (
           <button onClick={() => navigate('/profile')} className="grid size-11 place-items-center rounded-full" aria-label="Profile">
             <Avatar name={look.name} email={email} photo={look.photo} size={34} className="shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]" />
           </button>
@@ -68,21 +61,21 @@ export function TopBar({ title, back, action, center, email }) {
   )
 }
 
-// Floating frosted pill with the four tabs (icons only), and the + button on its own at the right.
+// Floating frosted pill with the five tabs (icons only), and the + button on its own at the right.
 export function TabBar({ route, onAdd }) {
   const current = TABS.findIndex((tab) => route.startsWith(tab.path))
   return (
     <nav className="pointer-events-none fixed inset-x-0 bottom-[max(env(safe-area-inset-bottom),12px)] z-30 px-4">
       <div className="mx-auto flex max-w-lg items-center gap-2.5">
-        <ul className="pointer-events-auto relative grid h-[60px] flex-1 grid-cols-4 rounded-[30px] border border-line/90 bg-card/80 px-1.5 shadow-[0_12px_30px_-14px_rgba(11,27,69,0.35)] backdrop-blur-xl">
+        <ul className="pointer-events-auto relative grid h-[60px] flex-1 grid-cols-5 rounded-[30px] border border-line/90 bg-card/80 px-1.5 shadow-[0_12px_30px_-14px_rgba(11,27,69,0.35)] backdrop-blur-xl">
           <span
             aria-hidden="true"
-            className={`pointer-events-none absolute inset-y-1.5 left-1.5 grid w-[calc((100%-12px)/4)] place-items-center transition-[transform,opacity] duration-300 ease-[cubic-bezier(.3,1.3,.5,1)] motion-reduce:transition-none ${
+            className={`pointer-events-none absolute inset-y-1.5 left-1.5 grid w-[calc((100%-12px)/5)] place-items-center transition-[transform,opacity] duration-300 ease-[cubic-bezier(.3,1.3,.5,1)] motion-reduce:transition-none ${
               current < 0 ? 'opacity-0' : ''
             }`}
             style={{ transform: `translateX(${Math.max(current, 0) * 100}%)` }}
           >
-            <span className="h-[42px] w-[52px] rounded-[21px] bg-bubble" />
+            <span className="h-[42px] w-[46px] rounded-[21px] bg-bubble" />
           </span>
           {TABS.map((tab, i) => (
             <li key={tab.path} className="relative grid">
