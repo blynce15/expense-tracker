@@ -33,8 +33,8 @@ export async function fetchAccountsWithBalances() {
   }))
 }
 
-// Accounts that can't go below €0. Credit cards can: a negative balance is what you owe.
-export const NO_OVERDRAFT_TYPES = ['debit', 'cash', 'savings', 'meal', 'investment']
+// Accounts that can't go below €0: all of them ('credit' too: an older credit card, if any, is a normal account now)
+export const NO_OVERDRAFT_TYPES = ['debit', 'cash', 'savings', 'meal', 'investment', 'credit']
 
 // Investment accounts only receive money (as a transfer's "to" account): never paid from, no income,
 // no transfers out. Their balance is how much has been invested; it isn't part of the total balance.

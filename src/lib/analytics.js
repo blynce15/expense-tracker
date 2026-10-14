@@ -264,7 +264,6 @@ function buildAnalytics(p, accounts, recurring, rows) {
       bank: byType(BANK_TYPES),
       savings: byType(['savings']),
       investments: byType(['investment']),
-      owed: byType(['credit']),
     },
     spending: {
       perDay: days.passed ? cur.spent / days.passed : 0,

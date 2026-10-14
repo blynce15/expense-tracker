@@ -37,7 +37,6 @@ const TYPES = {
   meal: { label: 'Meal card', placeholder: 'e.g. Coverflex', color: '#f2705a' },
   cash: { label: 'Cash', placeholder: 'e.g. Wallet', color: '#2b8a3e' },
   savings: { label: 'Savings', placeholder: 'e.g. Savings', color: '#7048e8' },
-  credit: { label: 'Credit card', placeholder: 'e.g. Visa', color: '#e8590c' },
   investment: { label: 'Investment', placeholder: 'e.g. Trade Republic', color: '#0c8599' },
 }
 const ACCOUNT_COLORS = [
@@ -175,7 +174,7 @@ export default function Onboarding({ email, onDone }) {
     setAccountForm(null)
   }
   function openAccountForm() {
-    const type = ['savings', 'credit', 'cash', 'debit'].find((t) => !accounts.some((a) => a.type === t)) ?? 'debit'
+    const type = ['savings', 'cash', 'debit'].find((t) => !accounts.some((a) => a.type === t)) ?? 'debit'
     setAccountForm(newAccountForm(type))
   }
 
@@ -191,7 +190,7 @@ export default function Onboarding({ email, onDone }) {
 
   function openPaymentForm(idea, type = 'expense') {
     const income = type === 'income'
-    // Money comes in to a spending account; payments go out of spending accounts and credit cards
+    // Money comes in to a spending account; payments go out of spending accounts
     const spendable = accounts.filter((a) => a.type !== 'savings' && a.type !== 'investment')
     const names = categories.filter((c) => c.kind === type && c.selected).map((c) => c.name)
     setPaymentForm({
@@ -484,9 +483,8 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
 
   if (form) {
     const t = TYPES[form.type]
-    const owed = form.type === 'credit'
     const cents = parseToCents(form.amount) ?? 0
-    const [whole, decimals] = formatCents(owed && cents ? -cents : cents).split(',')
+    const [whole, decimals] = formatCents(cents).split(',')
     const bank = bankFor(form.name)
     // A picked bank's colour (or one not in the list) goes first, so the selected colour is in view
     const colors = bank || !ACCOUNT_COLORS.includes(form.color) ? [form.color, ...ACCOUNT_COLORS.filter((c) => c !== form.color)] : ACCOUNT_COLORS
@@ -522,20 +520,21 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
               <span className="block text-xs text-white/70">{t.label}</span>
             </span>
           </div>
-          <p className="relative mt-6 text-xs text-white/70">{owed ? 'Owed today' : form.type === 'investment' ? 'Invested so far' : 'Balance today'}</p>
-          <button onClick={() => setPadOpen(true)} className={`tabular relative font-display leading-tight font-bold ${owed && cents ? 'text-[#ffb4a8]' : ''}`}>
+          <p className="relative mt-6 text-xs text-white/70">{form.type === 'investment' ? 'Invested so far' : 'Balance today'}</p>
+          <button onClick={() => setPadOpen(true)} className="tabular relative font-display leading-tight font-bold">
             <span className="text-[30px]">{whole}</span>
             <span className="text-lg opacity-60">,{decimals}</span>
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-1 rounded-2xl bg-card p-1">
+        {/* Five types: three on the first row, two centred under them */}
+        <div className="mt-4 flex flex-wrap justify-center gap-1 rounded-2xl bg-card p-1">
           {Object.entries(TYPES).map(([type, info]) => (
             <button
               key={type}
               onClick={() => setForm({ ...form, type, color: bank ? form.color : info.color, error: null })}
               aria-pressed={form.type === type}
-              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${
+              className={`flex w-[calc((100%-0.5rem)/3)] flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${
                 form.type === type ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'
               }`}
             >
@@ -576,8 +575,8 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
               className={`w-full ${plainInput}`}
             />
           </Row>
-          <Row label={owed ? 'Owed' : form.type === 'investment' ? 'Invested' : 'Balance'}>
-            <button onClick={() => setPadOpen(true)} className={`tabular text-base font-semibold ${!cents ? 'text-muted/60' : owed ? 'text-loss' : 'text-ink'}`}>
+          <Row label={form.type === 'investment' ? 'Invested' : 'Balance'}>
+            <button onClick={() => setPadOpen(true)} className={`tabular text-base font-semibold ${!cents ? 'text-muted/60' : 'text-ink'}`}>
               {formatCents(cents)}
             </button>
           </Row>
@@ -591,7 +590,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
 
         {padOpen && (
           <AmountPad
-            label={owed ? 'Owed today' : form.type === 'investment' ? 'Invested so far' : 'Balance today'}
+            label={form.type === 'investment' ? 'Invested so far' : 'Balance today'}
             amount={form.amount}
             onChange={(amount) => setForm({ ...form, amount, error: null })}
             onDone={() => setPadOpen(false)}
@@ -611,8 +610,8 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
               <b className="block truncate">{a.name}</b>
               <span className="text-xs text-muted">{TYPES[a.type].label}</span>
             </span>
-            <b className={`tabular font-display text-lg ${a.type === 'credit' && a.cents ? 'text-loss' : ''}`}>
-              {formatCents(a.type === 'credit' ? -a.cents : a.cents)}
+            <b className="tabular font-display text-lg">
+              {formatCents(a.cents)}
             </b>
             <RemoveButton label={`Remove ${a.name}`} onClick={() => onRemove(a.key)} />
           </li>
@@ -840,7 +839,7 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
 
   if (form) {
     const income = form.type === 'income'
-    // Money comes in to any account; payments go out of spending accounts and credit cards
+    // Money comes in to any account; payments go out of spending accounts
     const choices = accounts.filter((a) => a.type !== 'investment' && (income || a.type !== 'savings'))
     const cats = categories.filter((c) => c.kind === form.type && c.selected)
     const cents = parseToCents(form.amount) ?? 0

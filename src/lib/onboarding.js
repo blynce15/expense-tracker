@@ -19,7 +19,7 @@ export async function fetchExistingCategories() {
 
 // Saves everything from the setup flow. `done` remembers what was already saved,
 // so pressing "Try again" after a dropped connection doesn't create duplicates.
-//   accounts:   [{ key, name, type, cents, color }]  (cents = amount owed for credit cards)
+//   accounts:   [{ key, name, type, cents, color }]
 //   categories: [{ id?, name, icon, color, kind, selected }]
 //   payments:   [{ type, name, icon, cents, frequency, nextDue, accountKey, categoryName }]  (type: expense | income)
 //   profile:    { name, photo }  (photo = small square JPEG data URL or null; kept in user_settings.answers)
@@ -32,8 +32,7 @@ export async function saveOnboarding({ profile, accounts, categories, payments, 
         .insert({
           name: a.name,
           type: a.type,
-          // A credit card's balance is what's owed, so it starts below zero
-          starting_balance_cents: a.type === 'credit' ? -a.cents : a.cents,
+          starting_balance_cents: a.cents,
           color: a.color,
         })
         .select('id')

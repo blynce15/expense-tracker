@@ -10,7 +10,6 @@ import { supabase } from '../lib/supabase'
 
 const ACCOUNT_TYPES = [
   { value: 'debit', label: 'Debit card' },
-  { value: 'credit', label: 'Credit card' },
   { value: 'cash', label: 'Cash' },
   { value: 'savings', label: 'Savings' },
   { value: 'meal', label: 'Meal card' },
@@ -19,12 +18,12 @@ const ACCOUNT_TYPES = [
 
 const ACCOUNT_COLORS = ['#1f4fe0', '#0b1b45', '#0f8a5f', '#c23b22', '#e8590c', '#6741d9', '#d6336c', '#0c8599']
 
-// The account as a card: logo, name and type at the top, then the balance ("Owed today" for credit cards)
+// The account as a card: logo, name and type at the top, then the balance
 function AccountCard({ account, cents, className = '', corner }) {
   const [whole, decimals] = formatCents(cents).split(',')
   return (
     <BankCard account={account} named className={`text-sm ${className}`} corner={corner}>
-      <p className="mt-5 text-xs text-white/70">{account.type === 'credit' ? 'Owed today' : account.type === 'investment' ? 'Invested' : 'Balance today'}</p>
+      <p className="mt-5 text-xs text-white/70">{account.type === 'investment' ? 'Invested' : 'Balance today'}</p>
       <p className="tabular font-display leading-tight font-bold">
         <span className="text-[26px]">{whole}</span>
         <span className="text-base text-white/60">,{decimals}</span>
@@ -130,27 +129,21 @@ function AccountForm({ account, onClose, onSaved }) {
   const [name, setName] = useState(account?.name ?? '')
   const [type, setType] = useState(account?.type ?? 'debit')
   const [color, setColor] = useState(account?.color ?? ACCOUNT_COLORS[0])
-  // Credit cards: the user enters how much they owe; we store it as a negative balance.
   const [balance, setBalance] = useState(account ? centsToInput(account.starting_balance_cents) : '')
+  // Only an older account saved below €0 (from when credit cards existed) shows the + / − switch, to fix it
   const [negative, setNegative] = useState(account ? account.starting_balance_cents < 0 : false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
-  const isCredit = type === 'credit'
-
-  function changeType(next) {
-    setType(next)
-    if (isNew) setNegative(next === 'credit')
-  }
 
   async function save(e) {
     e.preventDefault()
     const cents = balance.trim() === '' ? 0 : parseToCents(balance)
     if (cents === null) return setError('Enter the balance as a number, like 250 or 1250,50.')
-    // Money rule: only credit cards can be below €0 (what you owe)
-    if (!isCredit && negative && cents > 0) return setError('Only a credit card can start below €0. Choose + for this account.')
-    if (!isCredit && previewCents < 0 && (!account || previewCents < account.balance_cents || account.type === 'credit')) {
-      return setError(`This would leave ${name.trim() || 'the account'} at ${formatCents(previewCents)}. Only credit cards can go below €0.`)
+    // Money rule: no account can be below €0
+    if (negative && cents > 0) return setError('An account can’t start below €0. Choose + for this account.')
+    if (previewCents < 0 && (!account || previewCents < account.balance_cents)) {
+      return setError(`This would leave ${name.trim() || 'the account'} at ${formatCents(previewCents)}. Accounts can’t go below €0.`)
     }
 
     setBusy(true)
@@ -186,7 +179,7 @@ function AccountForm({ account, onClose, onSaved }) {
     if (archived && account.type !== 'investment' && account.balance_cents !== 0) {
       return setError(
         account.balance_cents < 0
-          ? `${account.name} still owes ${formatCents(-account.balance_cents)}. Pay it off first, then archive it.`
+          ? `${account.name} is at ${formatCents(account.balance_cents)}. Bring it to €0 first, then archive it.`
           : `${account.name} still has ${formatCents(account.balance_cents)}. Move or spend it first, so the balance is €0, then archive it.`,
       )
     }
@@ -244,7 +237,7 @@ function AccountForm({ account, onClose, onSaved }) {
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Revolut, Visa, Wallet"
+            placeholder="e.g. Revolut, Wallet"
             className={inputClass}
           />
         </label>
@@ -256,7 +249,7 @@ function AccountForm({ account, onClose, onSaved }) {
               <button
                 key={t.value}
                 type="button"
-                onClick={() => changeType(t.value)}
+                onClick={() => setType(t.value)}
                 aria-pressed={type === t.value}
                 className={`rounded-xl border py-3 text-base font-medium ${
                   type === t.value ? 'border-cobalt bg-cobalt text-white' : 'border-line bg-card'
@@ -273,8 +266,8 @@ function AccountForm({ account, onClose, onSaved }) {
             {isNew ? 'Balance right now' : 'Starting balance'}
           </span>
           <div className="flex gap-2">
-            {/* + / − only for credit cards (or to fix an older account that was saved below €0) */}
-            {(isCredit || negative) && (
+            {/* + / − only to fix an older account that was saved below €0 */}
+            {negative && (
               <div className="flex shrink-0 overflow-hidden rounded-xl border border-line bg-card">
                 {[false, true].map((neg) => (
                   <button
@@ -284,7 +277,7 @@ function AccountForm({ account, onClose, onSaved }) {
                     aria-pressed={negative === neg}
                     className={`w-16 text-sm font-medium ${negative === neg ? 'bg-ink text-paper' : 'text-muted'}`}
                   >
-                    {neg ? (isCredit ? 'Owed' : '−') : isCredit ? 'Credit' : '+'}
+                    {neg ? '−' : '+'}
                   </button>
                 ))}
               </div>
@@ -300,9 +293,6 @@ function AccountForm({ account, onClose, onSaved }) {
               />
             </div>
           </div>
-          {isCredit && (
-            <p className="mt-1.5 text-sm text-muted">For a credit card, choose “Owed” and enter what you currently owe.</p>
-          )}
         </div>
 
         <fieldset>

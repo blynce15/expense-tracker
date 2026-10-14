@@ -1,7 +1,7 @@
 import { shiftDays } from './dates'
 
 // The budget is the money you can spend: the balance of debit, cash and meal card accounts
-// (savings and credit cards are left out). Nothing is stored except the day
+// (savings and investments are left out). Nothing is stored except the day
 // the budget period starts, which lives in the user's profile.
 
 export const BUDGET_ACCOUNT_TYPES = ['debit', 'cash', 'meal']
