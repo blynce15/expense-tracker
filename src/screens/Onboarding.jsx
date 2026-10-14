@@ -37,7 +37,6 @@ const TYPES = {
   meal: { label: 'Meal card', placeholder: 'e.g. Coverflex', color: '#f2705a' },
   cash: { label: 'Cash', placeholder: 'e.g. Wallet', color: '#2b8a3e' },
   savings: { label: 'Savings', placeholder: 'e.g. Savings', color: '#7048e8' },
-  investment: { label: 'Investment', placeholder: 'e.g. Trade Republic', color: '#0c8599' },
 }
 const ACCOUNT_COLORS = [
   '#1f4fe0', '#0b1b45', '#4dabf7', '#0c8599', '#12b886', '#2b8a3e', '#94d82d', '#fab005',
@@ -191,7 +190,7 @@ export default function Onboarding({ email, onDone }) {
   function openPaymentForm(idea, type = 'expense') {
     const income = type === 'income'
     // Money comes in to a spending account; payments go out of spending accounts
-    const spendable = accounts.filter((a) => a.type !== 'savings' && a.type !== 'investment')
+    const spendable = accounts.filter((a) => a.type !== 'savings')
     const names = categories.filter((c) => c.kind === type && c.selected).map((c) => c.name)
     setPaymentForm({
       type,
@@ -520,21 +519,21 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
               <span className="block text-xs text-white/70">{t.label}</span>
             </span>
           </div>
-          <p className="relative mt-6 text-xs text-white/70">{form.type === 'investment' ? 'Invested so far' : 'Balance today'}</p>
+          <p className="relative mt-6 text-xs text-white/70">Balance today</p>
           <button onClick={() => setPadOpen(true)} className="tabular relative font-display leading-tight font-bold">
             <span className="text-[30px]">{whole}</span>
             <span className="text-lg opacity-60">,{decimals}</span>
           </button>
         </div>
 
-        {/* Five types: three on the first row, two centred under them */}
-        <div className="mt-4 flex flex-wrap justify-center gap-1 rounded-2xl bg-card p-1">
+        {/* Four types in one row */}
+        <div className="mt-4 grid grid-cols-4 gap-1 rounded-2xl bg-card p-1">
           {Object.entries(TYPES).map(([type, info]) => (
             <button
               key={type}
               onClick={() => setForm({ ...form, type, color: bank ? form.color : info.color, error: null })}
               aria-pressed={form.type === type}
-              className={`flex w-[calc((100%-0.5rem)/3)] flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${
+              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 text-[11px] font-semibold transition ${
                 form.type === type ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'
               }`}
             >
@@ -546,7 +545,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
 
         {form.type !== 'cash' && (
           <>
-            <p className="mt-4 mb-1.5 px-1 text-sm text-muted">{form.type === 'meal' ? 'Your meal card' : form.type === 'investment' ? 'Your broker' : 'Your bank'}</p>
+            <p className="mt-4 mb-1.5 px-1 text-sm text-muted">{form.type === 'meal' ? 'Your meal card' : 'Your bank'}</p>
             <div className="grid grid-cols-4 gap-2">
               {(form.type === 'meal' ? MEAL_CARDS : BANKS).map((b) => (
                 <button
@@ -575,7 +574,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
               className={`w-full ${plainInput}`}
             />
           </Row>
-          <Row label={form.type === 'investment' ? 'Invested' : 'Balance'}>
+          <Row label="Balance">
             <button onClick={() => setPadOpen(true)} className={`tabular text-base font-semibold ${!cents ? 'text-muted/60' : 'text-ink'}`}>
               {formatCents(cents)}
             </button>
@@ -590,7 +589,7 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
 
         {padOpen && (
           <AmountPad
-            label={form.type === 'investment' ? 'Invested so far' : 'Balance today'}
+            label="Balance today"
             amount={form.amount}
             onChange={(amount) => setForm({ ...form, amount, error: null })}
             onDone={() => setPadOpen(false)}
@@ -840,7 +839,7 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
   if (form) {
     const income = form.type === 'income'
     // Money comes in to any account; payments go out of spending accounts
-    const choices = accounts.filter((a) => a.type !== 'investment' && (income || a.type !== 'savings'))
+    const choices = accounts.filter((a) => income || a.type !== 'savings')
     const cats = categories.filter((c) => c.kind === form.type && c.selected)
     const cents = parseToCents(form.amount) ?? 0
     const per = FREQUENCIES.find((f) => f[0] === form.frequency)[3]

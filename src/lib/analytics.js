@@ -203,8 +203,9 @@ function buildAnalytics(p, accounts, recurring, rows) {
     .map(([id, cents]) => ({ id: id === 'null' ? null : id, cents, prev: catPrevSoFar.get(id) ?? 0 }))
     .sort((a, b) => b.cents - a.cents)
 
-  // Saving: what you kept (saved + invested) out of your income
-  const keptOf = (m) => m.saved + m.invested
+  // Saving: what you kept (net money into savings accounts) out of your income. Investments aren't
+  // counted any more (no investment accounts since 2026-10-14; they'll come from getquin later).
+  const keptOf = (m) => m.saved
   const fullMonths = last12.filter((k) => k < now || !current) // leave out a month still in progress
   const rateMonths = fullMonths.filter((k) => (byMonth.get(k)?.income ?? 0) > 0)
   const rateIncome = sum(rateMonths, 'income')
@@ -244,9 +245,9 @@ function buildAnalytics(p, accounts, recurring, rows) {
     // Spending on recurring payments per month, and what the active ones cost per month today
     fixedBy,
     recurringMonthly: recurring.filter((r) => r.active && r.type !== 'income').reduce((s, r) => s + monthlyCents(r), 0),
-    // Savings and investment accounts (today's balance) with the net money in during this period
+    // Savings accounts (today's balance) with the net money in during this period
     keepAccounts: accounts
-      .filter((a) => a.type === 'savings' || a.type === 'investment')
+      .filter((a) => a.type === 'savings')
       .map((a) => ({ id: a.id, name: a.name, type: a.type, color: a.color, archived: a.archived, balance: a.balance_cents, flow: flowByAccount.get(a.id) ?? 0 }))
       .filter((a) => !a.archived || a.flow !== 0 || a.balance !== 0),
     fixedNames,
@@ -343,7 +344,7 @@ export function highlights(a, name, euros) {
     const r = Math.round(a.saving.rate * 100)
     const avg = Math.round(a.saving.avgRate * 100)
     const how = r > avg ? 'above' : r < avg ? 'below' : 'the same as'
-    out.push({ key: 'kept', good: r >= avg, icon: 'invest', text: ['You kept ', `${r}%`, ` of your income, ${how} your ${avg}% average.`] })
+    out.push({ key: 'kept', good: r >= avg, icon: 'invest', text: ['You saved ', `${r}%`, ` of your income, ${how} your ${avg}% average.`] })
   }
   return out
 }

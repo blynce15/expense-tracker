@@ -13,7 +13,6 @@ const ACCOUNT_TYPES = [
   { value: 'cash', label: 'Cash' },
   { value: 'savings', label: 'Savings' },
   { value: 'meal', label: 'Meal card' },
-  { value: 'investment', label: 'Investment' },
 ]
 
 const ACCOUNT_COLORS = ['#1f4fe0', '#0b1b45', '#0f8a5f', '#c23b22', '#e8590c', '#6741d9', '#d6336c', '#0c8599']

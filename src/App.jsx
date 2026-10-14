@@ -162,7 +162,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/analytics/categories':
       return { title: 'Categories', back: '/analytics', body: <AnalyticsCategories key={dataVersion} /> }
     case '/analytics/saving':
-      return { title: 'Saving & investing', back: '/analytics', body: <AnalyticsSaving key={dataVersion} /> }
+      return { title: 'Saving', back: '/analytics', body: <AnalyticsSaving key={dataVersion} /> }
     case '/analytics/trends':
       return { title: 'Trends', back: '/analytics', body: <AnalyticsTrends key={dataVersion} /> }
     case '/analytics/spending':
