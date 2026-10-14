@@ -233,6 +233,11 @@ function buildAnalytics(p, accounts, recurring, rows) {
     days,
     // This period's expenses, for the details pages
     expenses,
+    // Spending per category per month (`${monthKey}|${categoryId}` → cents), the 12 months up to
+    // the period's end, and which of them are full months with any activity (for "usual month")
+    catBy,
+    last12,
+    activeMonths: active.map((t) => t.key),
     fixedNames,
     spentByDay,
     byMonth,
@@ -281,6 +286,20 @@ function sameDayBefore(p) {
   const tm = p.kind === 'year' ? m : m === 1 ? 12 : m - 1
   const day = Math.min(d, new Date(ty, tm, 0).getDate())
   return `${ty}-${String(tm).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// Expenses grouped by their name (shop, place), biggest first: { name, cents, count, categoryId }
+export function placesFrom(expenses, limit = 5) {
+  const groups = new Map()
+  for (const t of expenses) {
+    const k = (t.note ?? '').trim().toLowerCase()
+    if (!k) continue
+    const g = groups.get(k) ?? { name: t.note.trim(), cents: 0, count: 0, categoryId: t.category_id }
+    g.cents += t.amount_cents
+    g.count += 1
+    groups.set(k, g)
+  }
+  return [...groups.values()].sort((x, y) => y.cents - x.cents).slice(0, limit)
 }
 
 function running(values) {

@@ -7,7 +7,7 @@ import './lib/theme'
 import { formatTodayLabel } from './lib/dates'
 import { ensureDefaultCategories } from './lib/defaults'
 import { activeFilterCount, EMPTY_FILTER } from './lib/filters'
-import { fetchLastUsedAccountId, fetchLookups } from './lib/lookups'
+import { fetchLastUsedAccountId, fetchLookups, lookupCache } from './lib/lookups'
 import { needsOnboarding } from './lib/onboarding'
 import { fetchProfile } from './lib/profile'
 import { navigate, useRoute } from './lib/useRoute'
@@ -15,6 +15,7 @@ import { useOnline } from './lib/useOnline'
 import { useSession } from './lib/useSession'
 import Accounts from './screens/Accounts'
 import Analytics from './screens/Analytics'
+import AnalyticsCategories, { CategoryDetail } from './screens/AnalyticsCategories'
 import AnalyticsSpending from './screens/AnalyticsSpending'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
@@ -117,6 +118,13 @@ function App() {
 }
 
 function screenFor(route, session, dataVersion, tx) {
+  // One category's analytics: #/analytics/categories/<id> ("none" = no category)
+  if (route.startsWith('/analytics/categories/')) {
+    const id = route.slice('/analytics/categories/'.length)
+    const cat = lookupCache.lookups?.categories.find((c) => c.id === id)
+    const title = cat ? `${cat.icon} ${cat.name}` : id === 'none' ? 'No category' : 'Category'
+    return { title, back: '/analytics/categories', body: <CategoryDetail key={`${id}-${dataVersion}`} id={id} /> }
+  }
   switch (route) {
     case '/transactions': {
       const active = activeFilterCount(tx.txFilter)
@@ -149,6 +157,8 @@ function screenFor(route, session, dataVersion, tx) {
     }
     case '/analytics':
       return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
+    case '/analytics/categories':
+      return { title: 'Categories', back: '/analytics', body: <AnalyticsCategories key={dataVersion} /> }
     case '/analytics/spending':
       return { title: 'Spending', back: '/analytics', body: <AnalyticsSpending key={dataVersion} /> }
     case '/savings':

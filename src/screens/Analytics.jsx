@@ -155,7 +155,7 @@ function CategoriesCard({ a, category }) {
   const top = a.categories.slice(0, 4)
   const rest = a.categories.slice(4).reduce((s, c) => s + c.cents, 0)
   return (
-    <Card icon="tag" color="#12b886" title="Categories">
+    <Card icon="tag" color="#12b886" title="Categories" onMore={() => navigate('/analytics/categories')}>
       <div className="flex h-3 gap-0.5 overflow-hidden rounded-full">
         {top.map((c) => (
           <span key={c.id ?? 'none'} style={{ flex: c.cents, background: category(c.id)?.color ?? '#94a3c4' }} />

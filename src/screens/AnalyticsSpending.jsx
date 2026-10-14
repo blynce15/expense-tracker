@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, ChangeChip, linePath, Mini, ORANGE, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
 import MerchantIcon from '../components/MerchantIcon'
-import { fetchAnalytics, monthShort, periodLabel, prevLabel, shiftMonth } from '../lib/analytics'
+import { fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel, shiftMonth } from '../lib/analytics'
 import { formatDayMonth } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
@@ -86,17 +86,7 @@ function spendingFacts(a) {
     }
   }
 
-  // Places: expenses grouped by their name
-  const groups = new Map()
-  for (const t of expenses) {
-    const k = key(t)
-    if (!k) continue
-    const g = groups.get(k) ?? { name: t.note.trim(), cents: 0, count: 0, categoryId: t.category_id }
-    g.cents += t.amount_cents
-    g.count += 1
-    groups.set(k, g)
-  }
-  const places = [...groups.values()].sort((x, y) => y.cents - x.cents).slice(0, 5)
+  const places = placesFrom(expenses)
 
   const biggest = [...expenses].sort((x, y) => y.amount_cents - x.amount_cents).slice(0, 5)
   const noSpendDays = period.kind === 'month' ? past.filter((b) => b.cents === 0).length : null
