@@ -100,6 +100,26 @@ body {
   outline-offset: 2px;
 }
 
+/* Safari paints text boxes it fills in itself (name, email, password) pale yellow. Keep each box's own
+   background and text colour instead: the background change is delayed "forever", so it never shows. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-ink);
+  caret-color: var(--color-ink);
+  transition:
+    background-color 600000s 0s,
+    color 600000s 0s;
+}
+/* The standard name, as its own rule so a browser that doesn't know one name still reads the other */
+input:autofill {
+  -webkit-text-fill-color: var(--color-ink);
+  caret-color: var(--color-ink);
+  transition:
+    background-color 600000s 0s,
+    color 600000s 0s;
+}
+
 @keyframes sheet-up {
   from {
     transform: translateY(100%);
