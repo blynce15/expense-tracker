@@ -33,7 +33,12 @@ async function fetchPage(link) {
 function readPortfolio(html) {
   const raw = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)?.[1]
   if (!raw) throw new Error('The getquin page looks different than expected.')
-  const dashboards = JSON.parse(raw)?.props?.initialState?.dashboard?.dashboards ?? {}
+  const props = JSON.parse(raw)?.props
+  // getquin picks the currency from where the visitor is (a US server got dollars); only euros are shown
+  const query = Object.keys(props?.queryClientCache?.ROOT_QUERY ?? {}).find((k) => k.startsWith('getSharedAggregatedDashboard('))
+  const currency = query?.match(/"currency":"([A-Z]+)"/)?.[1]
+  if (currency !== 'EUR') throw new Error(`getquin sent ${currency ?? 'an unknown currency'} instead of euros.`)
+  const dashboards = props?.initialState?.dashboard?.dashboards ?? {}
   const d = Object.values(dashboards).find((x) => x && Array.isArray(x.positions))
   if (!d) throw new Error('No portfolio found on that getquin page.')
 
