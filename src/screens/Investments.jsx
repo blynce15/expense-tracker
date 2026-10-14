@@ -33,6 +33,16 @@ const signedWhole = (cents) => (cents < 0 ? `−${whole(-cents)}` : `+${whole(ce
 const percent = (rate) => `${rate < 0 ? '−' : '+'}${Math.abs(rate * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 })}%`
 const KINDS = { etf: 'ETF', stock: 'Stock', crypto: 'Crypto', bond: 'Bond', fund: 'Fund', commodity: 'Commodity' }
 
+// The last MONTHS_SHOWN months (oldest first) from getquin's [{ key: '2026-09', cents }]; missing months are 0
+function lastMonths(months) {
+  const byKey = new Map(months.map((m) => [m.key, m.cents]))
+  const thisMonth = todayISO().slice(0, 7)
+  return Array.from({ length: MONTHS_SHOWN }, (_, i) => {
+    const key = shiftMonth(thisMonth, i - (MONTHS_SHOWN - 1))
+    return { key, cents: byKey.get(key) ?? 0, partial: key === thisMonth }
+  })
+}
+
 // Investment accounts and the money put into them. Money only goes in (transfers into an investment
 // account, src/lib/balances.js), so a balance is how much has been invested, not its market value.
 async function fetchInvestments() {
@@ -121,6 +131,9 @@ export default function Investments() {
 
   const active = state.accounts.filter((a) => !a.archived || a.balance_cents !== 0)
   const hasAccounts = state.accounts.length > 0
+  // getquin's own monthly amounts (buys − sales) when linked; otherwise transfers into investment accounts
+  const getquinFlow = link && portfolio?.months ? lastMonths(portfolio.months) : null
+  const putInMonth = getquinFlow ? getquinFlow.at(-1).cents : hasAccounts ? state.month : null
   const linkSheet = editingLink && (
     <LinkSheet
       link={link}
@@ -165,8 +178,8 @@ export default function Investments() {
 
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
-      {link ? <ValueCard portfolio={portfolio} state={hasAccounts ? state : null} error={portfolioError} /> : <TotalCard state={state} />}
-      {hasAccounts && <InvestChart flow={state.flow} />}
+      {link ? <ValueCard portfolio={portfolio} monthCents={putInMonth} error={portfolioError} /> : <TotalCard state={state} />}
+      {(getquinFlow || hasAccounts) && <InvestChart flow={getquinFlow ?? state.flow} />}
 
       {link ? (
         <>
@@ -233,7 +246,7 @@ export default function Investments() {
 }
 
 // Today's value from getquin with the overall gain; Invested = what getquin says the positions cost
-function ValueCard({ portfolio, state, error }) {
+function ValueCard({ portfolio, monthCents, error }) {
   if (!portfolio) {
     return (
       <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#14a3b8] via-[#0c8599] to-[#08606f] p-[18px] text-white">
@@ -260,8 +273,8 @@ function ValueCard({ portfolio, state, error }) {
       </div>
       <div className="relative mt-3.5 grid grid-cols-2 rounded-2xl bg-white/[.12]">
         <Fact label="Invested" value={whole(portfolio.invested_cents)} />
-        {state ? (
-          <Fact label="Put in this month" value={`+${whole(state.month)}`} divider />
+        {monthCents != null ? (
+          <Fact label="Put in this month" value={signedWhole(monthCents)} divider />
         ) : (
           <Fact label="Dividends" value={formatCents(portfolio.dividends_cents)} divider />
         )}
@@ -313,7 +326,10 @@ function SourceRow({ portfolio, refreshing, error, onRefresh, onEdit }) {
   const text = refreshing ? 'Updating…' : error && time ? `Couldn’t update · from ${time}` : time ? `Updated ${time}` : ''
   return (
     <div className="flex items-center gap-1 px-1 text-[13px] text-muted">
-      <span className="min-w-0 flex-1 truncate">From getquin{text && ` · ${text}`}</span>
+      <span className="min-w-0 flex-1 truncate">
+        From getquin{text && ` · ${text}`}
+        {portfolio && !portfolio.months && ' · months from LynxOS'}
+      </span>
       <button onClick={onRefresh} disabled={refreshing} className="rounded-full px-2.5 py-2 font-semibold text-teal disabled:opacity-50">
         Refresh
       </button>
@@ -459,7 +475,7 @@ function InvestChart({ flow }) {
         <line x1="0" x2={W} y1={base} y2={base} strokeWidth="1" stroke="var(--color-ink)" strokeOpacity=".15" />
         {flow.map((d, i) => {
           const x = i * colW + (colW - barW) / 2
-          const h = d.cents ? Math.max(4, (d.cents / max) * (base - top)) : 0
+          const h = d.cents > 0 ? Math.max(4, (d.cents / max) * (base - top)) : 0
           return (
             <g key={d.key} onClick={() => setPicked(i)} className="cursor-pointer">
               <rect x={i * colW} y="0" width={colW} height={H} fill="transparent" />

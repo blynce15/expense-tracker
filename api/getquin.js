@@ -1,7 +1,8 @@
 // Investments page: reads the owner's public getquin share page (e.g. https://getqu.in/WO8FIo/) and returns
-// the portfolio's current value, how much went in, and each position. getquin has no public API, so this
-// reads the data the share page itself carries (Next.js __NEXT_DATA__); if getquin changes that page,
-// this answers 502 and the app falls back to what it tracks itself.
+// the portfolio's current value, how much went in, each position, and the money put in each month.
+// getquin has no public API, so this reads the data the share page itself carries (Next.js __NEXT_DATA__)
+// and its trades from getquin's data service; if getquin changes either, the app falls back to what it
+// tracks itself.
 // GET /api/getquin?url=<share link> with the user's login token (only signed-in users can use it).
 //
 // Needs these Vercel settings: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (only to check the login).
@@ -64,13 +65,98 @@ function readPortfolio(html) {
     })
     .sort((a, b) => b.value_cents - a.value_cents)
 
-  return {
-    value_cents: cents(d.total),
-    invested_cents: cents(d.capital_invested),
-    dividends_cents: cents(d.dividends_received),
-    positions,
-    updated_at: new Date().toISOString(),
+  // Each instrument's own currency (open, partly and fully sold positions), for the monthly amounts
+  const currencies = {}
+  for (const p of [...d.positions, ...(d.sold?.partial ?? []), ...(d.sold?.total ?? []), ...(d.soldPositions ?? [])]) {
+    if (p?.isin && p.original_currency) currencies[p.isin] = p.original_currency
   }
+
+  return {
+    portfolio: {
+      value_cents: cents(d.total),
+      invested_cents: cents(d.capital_invested),
+      dividends_cents: cents(d.dividends_received),
+      positions,
+      updated_at: new Date().toISOString(),
+    },
+    code: query.match(/"code":"([^"]+)"/)?.[1],
+    currencies,
+  }
+}
+
+// The share's trades come from getquin's own data service (the same one its share page uses). It turns
+// away requests that don't look like a browser, so this asks like one.
+const GQL_HEADERS = {
+  'content-type': 'application/json',
+  origin: 'https://app.getquin.com',
+  referer: 'https://app.getquin.com/',
+  accept: '*/*',
+  'accept-language': 'en-GB,en;q=0.9',
+  'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+}
+
+async function fetchTrades(code) {
+  const trades = []
+  for (let offset = 0; offset < 5000; offset += 500) {
+    const res = await fetch('https://api-gql-v2.getquin.com/', {
+      method: 'POST',
+      headers: GQL_HEADERS,
+      body: JSON.stringify({
+        query: `query($code: String!, $offset: Int) { t: getSharedAggregatedDashboardTransactions(code: $code, limit: 500, offset: $offset) { count results { timestamp transaction_type units price isin } } }`,
+        variables: { code, offset },
+      }),
+    })
+    const body = await res.json()
+    const page = body?.data?.t
+    if (!page) throw new Error(body?.errors?.[0]?.message || `getquin answered ${res.status}.`)
+    trades.push(...page.results)
+    if (trades.length >= page.count || page.results.length === 0) break
+  }
+  return trades
+}
+
+// "2026-09-23": the trade's day where the owner lives (getquin stores e.g. 2026-09-22T22:00:00Z)
+const lisbonDay = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Europe/Lisbon' })
+
+// Money put in each month = buys − sales. Trades in other currencies (US stocks are in dollars) are
+// converted at the European Central Bank rate of that day (Frankfurter, free, sees only dates).
+async function monthlyAmounts(code, currencies) {
+  const trades = (await fetchTrades(code))
+    .filter((t) => t.transaction_type === 'BUYING' || t.transaction_type === 'SELLING')
+    .map((t) => ({ ...t, day: lisbonDay(t.timestamp), currency: currencies[t.isin] || 'EUR' }))
+  if (!trades.length) return []
+
+  const foreign = [...new Set(trades.map((t) => t.currency).filter((c) => c !== 'EUR'))]
+  let rateDays = []
+  let rates = {}
+  if (foreign.length) {
+    const first = trades.map((t) => t.day).sort()[0]
+    // A few days earlier, so a weekend trade at the start still has a rate before it
+    const start = new Date(Date.parse(first) - 7 * 864e5).toISOString().slice(0, 10)
+    const res = await fetch(`https://api.frankfurter.dev/v1/${start}..?base=EUR&symbols=${foreign.join(',')}`)
+    if (!res.ok) throw new Error('Exchange rates unavailable.')
+    rates = (await res.json()).rates
+    rateDays = Object.keys(rates).sort()
+  }
+  // Latest ECB rate on or before the day (none on weekends and holidays)
+  const toEuros = (amount, currency, day) => {
+    if (currency === 'EUR') return amount
+    let rate
+    for (const k of rateDays) {
+      if (k > day) break
+      rate = rates[k][currency] ?? rate
+    }
+    if (!rate) throw new Error(`No exchange rate for ${currency}.`)
+    return amount / rate
+  }
+
+  const byMonth = new Map()
+  for (const t of trades) {
+    const euros = toEuros(t.units * t.price, t.currency, t.day) * (t.transaction_type === 'SELLING' ? -1 : 1)
+    const key = t.day.slice(0, 7)
+    byMonth.set(key, (byMonth.get(key) ?? 0) + euros)
+  }
+  return [...byMonth].sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, euros]) => ({ key, cents: cents(euros) }))
 }
 
 export default async function handler(req, res) {
@@ -90,7 +176,14 @@ export default async function handler(req, res) {
   }
 
   try {
-    const portfolio = readPortfolio(await fetchPage(link.href))
+    const { portfolio, code, currencies } = readPortfolio(await fetchPage(link.href))
+    // Monthly amounts are extra: without them the page uses what LynxOS tracks (months = null)
+    try {
+      portfolio.months = code ? await monthlyAmounts(code, currencies) : null
+    } catch (e) {
+      portfolio.months = null
+      portfolio.months_error = e.message
+    }
     res.setHeader('cache-control', 'no-store')
     return res.status(200).json(portfolio)
   } catch (e) {
