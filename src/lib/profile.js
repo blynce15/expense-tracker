@@ -33,6 +33,8 @@ export const saveName = (name) => saveAnswers({ name: name.trim() })
 export const savePhoto = (dataUrl) => saveAnswers({ photo: dataUrl })
 // The account new transactions start on; null = the last one used
 export const saveDefaultAccount = (id) => saveAnswers({ defaultAccountId: id })
+// The getquin share link the Investments page reads (src/lib/getquin.js); null = not linked
+export const saveGetquinLink = (url) => saveAnswers({ getquinUrl: url })
 
 // Center-crops a picked image to a square and shrinks it to `size` px
 export function squareJpeg(file, size = 256) {

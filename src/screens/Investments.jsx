@@ -3,10 +3,13 @@ import EmptyLynx from '../components/EmptyLynx'
 import Icon from '../components/Icon'
 import LynxWatermark from '../components/LynxWatermark'
 import { BankLogo } from '../components/BankCard'
+import Sheet from '../components/Sheet'
 import { fetchAccountsWithBalances } from '../lib/balances'
 import { bankFor } from '../lib/banks'
 import { todayISO } from '../lib/dates'
+import { cachedPortfolio, cleanGetquinLink, fetchPortfolio, forgetPortfolio } from '../lib/getquin'
 import { formatCents } from '../lib/money'
+import { fetchProfile, saveGetquinLink } from '../lib/profile'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
 import TransactionSheet from './TransactionSheet'
@@ -24,6 +27,11 @@ const shortMonth = (key) =>
 
 // "€2.400" (no cents)
 const whole = (cents) => formatCents(cents).replace(/,\d\d$/, '')
+// "+€518" / "−€11"
+const signedWhole = (cents) => (cents < 0 ? `−${whole(-cents)}` : `+${whole(cents)}`)
+// "+17,7%"
+const percent = (rate) => `${rate < 0 ? '−' : '+'}${Math.abs(rate * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 })}%`
+const KINDS = { etf: 'ETF', stock: 'Stock', crypto: 'Crypto', bond: 'Bond', fund: 'Fund', commodity: 'Commodity' }
 
 // Investment accounts and the money put into them. Money only goes in (transfers into an investment
 // account, src/lib/balances.js), so a balance is how much has been invested, not its market value.
@@ -73,6 +81,11 @@ export default function Investments() {
   const [state, setState] = useState(null)
   const [error, setError] = useState(null)
   const [investing, setInvesting] = useState(false)
+  const [link, setLink] = useState(undefined) // getquin share link; null = not linked, undefined = loading
+  const [portfolio, setPortfolio] = useState(null)
+  const [portfolioError, setPortfolioError] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [editingLink, setEditingLink] = useState(false)
 
   const load = useCallback(() => {
     fetchInvestments()
@@ -80,16 +93,57 @@ export default function Investments() {
       .catch((e) => setError(e.message))
   }, [])
 
+  // Fresh numbers from getquin every time the page opens; the last ones show meanwhile
+  const refresh = useCallback((url) => {
+    setPortfolioError(null)
+    if (!url) return setPortfolio(null)
+    setPortfolio(cachedPortfolio(url))
+    setRefreshing(true)
+    fetchPortfolio(url)
+      .then(setPortfolio)
+      .catch((e) => setPortfolioError(e.message))
+      .finally(() => setRefreshing(false))
+  }, [])
+
   useEffect(() => {
     load()
-  }, [load])
+    fetchProfile()
+      .then((p) => {
+        const url = p?.answers?.getquinUrl ?? null
+        setLink(url)
+        refresh(url)
+      })
+      .catch(() => setLink(null))
+  }, [load, refresh])
 
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your investments: {error}</p>
-  if (!state) return null
+  if (!state || link === undefined) return null
 
   const active = state.accounts.filter((a) => !a.archived || a.balance_cents !== 0)
+  const hasAccounts = state.accounts.length > 0
+  const linkSheet = editingLink && (
+    <LinkSheet
+      link={link}
+      onClose={() => setEditingLink(false)}
+      onSaved={(url) => {
+        setEditingLink(false)
+        if (!url) forgetPortfolio()
+        setLink(url)
+        refresh(url)
+      }}
+    />
+  )
+  const investButton = active.some((a) => !a.archived) && (
+    <button
+      onClick={() => setInvesting(true)}
+      className="flex items-center gap-1 rounded-full bg-teal py-1.5 pr-3.5 pl-2.5 text-sm font-semibold text-card active:opacity-80"
+    >
+      <Icon name="plus" size={16} strokeWidth={2.6} />
+      Invest
+    </button>
+  )
 
-  if (state.accounts.length === 0) {
+  if (!hasAccounts && !link) {
     return (
       <div className="px-4 pt-1 pb-6">
         <div className="rounded-[22px] bg-card px-5 py-8 text-center">
@@ -103,42 +157,65 @@ export default function Investments() {
             Add an investment account
           </button>
         </div>
+        <ConnectCard onConnect={() => setEditingLink(true)} />
+        {linkSheet}
       </div>
     )
   }
 
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
-      <TotalCard state={state} />
-      <InvestChart flow={state.flow} />
+      {link ? <ValueCard portfolio={portfolio} state={hasAccounts ? state : null} error={portfolioError} /> : <TotalCard state={state} />}
+      {hasAccounts && <InvestChart flow={state.flow} />}
 
-      <div className="flex items-center justify-between px-1 pt-2">
-        <h2 className="font-display text-lg font-bold">
-          Where it is <span className="tabular text-base font-semibold text-muted">· {active.length}</span>
-        </h2>
-        <button
-          onClick={() => setInvesting(true)}
-          className="flex items-center gap-1 rounded-full bg-teal py-1.5 pr-3.5 pl-2.5 text-sm font-semibold text-card active:opacity-80"
-        >
-          <Icon name="plus" size={16} strokeWidth={2.6} />
-          Invest
-        </button>
-      </div>
+      {link ? (
+        <>
+          <div className="flex items-center justify-between px-1 pt-2">
+            <h2 className="font-display text-lg font-bold">
+              Positions {portfolio && <span className="tabular text-base font-semibold text-muted">· {portfolio.positions.length}</span>}
+            </h2>
+            {investButton}
+          </div>
+          {portfolio ? (
+            <ul className="space-y-2.5">
+              {portfolio.positions.map((p) => (
+                <PositionRow key={`${p.ticker}-${p.name}`} position={p} />
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-[22px] bg-card px-4 py-6 text-center text-muted">
+              {portfolioError ? `Couldn't load your positions: ${portfolioError}` : 'Loading your positions…'}
+            </p>
+          )}
+          <SourceRow portfolio={portfolio} refreshing={refreshing} error={portfolioError} onRefresh={() => refresh(link)} onEdit={() => setEditingLink(true)} />
+        </>
+      ) : (
+        <>
+          <div className="flex items-center justify-between px-1 pt-2">
+            <h2 className="font-display text-lg font-bold">
+              Where it is <span className="tabular text-base font-semibold text-muted">· {active.length}</span>
+            </h2>
+            {investButton}
+          </div>
 
-      <ul className="space-y-2.5">
-        {active.map((a) => (
-          <li key={a.id} className="flex items-center gap-3 rounded-[22px] bg-card p-4">
-            <PlatformMark account={a} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-display text-base font-bold">{a.name}</span>
-              <span className="tabular block truncate text-xs text-muted">
-                {a.archived ? 'Archived' : a.month_cents ? `+${whole(a.month_cents)} this month` : 'Nothing this month'}
-              </span>
-            </span>
-            <span className="tabular font-display text-lg font-bold">{whole(a.balance_cents)}</span>
-          </li>
-        ))}
-      </ul>
+          <ul className="space-y-2.5">
+            {active.map((a) => (
+              <li key={a.id} className="flex items-center gap-3 rounded-[22px] bg-card p-4">
+                <PlatformMark account={a} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-display text-base font-bold">{a.name}</span>
+                  <span className="tabular block truncate text-xs text-muted">
+                    {a.archived ? 'Archived' : a.month_cents ? `+${whole(a.month_cents)} this month` : 'Nothing this month'}
+                  </span>
+                </span>
+                <span className="tabular font-display text-lg font-bold">{whole(a.balance_cents)}</span>
+              </li>
+            ))}
+          </ul>
+          <ConnectCard onConnect={() => setEditingLink(true)} />
+        </>
+      )}
+      {linkSheet}
 
       {investing && (
         <TransactionSheet
@@ -152,6 +229,165 @@ export default function Investments() {
         />
       )}
     </div>
+  )
+}
+
+// Today's value from getquin with the overall gain; Invested = what getquin says the positions cost
+function ValueCard({ portfolio, state, error }) {
+  if (!portfolio) {
+    return (
+      <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#14a3b8] via-[#0c8599] to-[#08606f] p-[18px] text-white">
+        <p className="text-sm font-semibold text-white/80">Portfolio value</p>
+        <p className="mt-2 text-sm text-white/80">{error ? 'Couldn’t reach getquin right now.' : 'Checking getquin…'}</p>
+      </section>
+    )
+  }
+  const gain = portfolio.value_cents - portfolio.invested_cents
+  const rate = portfolio.invested_cents ? gain / portfolio.invested_cents : 0
+  const [euros, decimals] = formatCents(portfolio.value_cents).split(',')
+  return (
+    <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#14a3b8] via-[#0c8599] to-[#08606f] p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(12,133,153,0.9)]">
+      <LynxWatermark className="-bottom-14 -left-10" />
+      <p className="relative text-sm font-semibold text-white/80">Portfolio value</p>
+      <div className="relative mt-0.5 flex items-end justify-between gap-2">
+        <p className="tabular min-w-0 truncate font-display leading-none font-bold">
+          <span className="text-[38px] tracking-tight">{euros}</span>
+          <span className="text-lg text-white/55">,{decimals}</span>
+        </p>
+        <span className="tabular mb-1 shrink-0 rounded-full bg-white/20 px-2.5 py-1 text-[13px] font-bold">
+          {signedWhole(gain)} · {percent(rate)}
+        </span>
+      </div>
+      <div className="relative mt-3.5 grid grid-cols-2 rounded-2xl bg-white/[.12]">
+        <Fact label="Invested" value={whole(portfolio.invested_cents)} />
+        {state ? (
+          <Fact label="Put in this month" value={`+${whole(state.month)}`} divider />
+        ) : (
+          <Fact label="Dividends" value={formatCents(portfolio.dividends_cents)} divider />
+        )}
+      </div>
+    </section>
+  )
+}
+
+function PositionRow({ position: p }) {
+  const units = p.units != null ? `${p.units.toLocaleString('de-DE', { maximumFractionDigits: 4 })} ${p.units === 1 ? 'unit' : 'units'}` : null
+  const kind = KINDS[p.kind] ?? (p.kind ? p.kind[0].toUpperCase() + p.kind.slice(1) : null)
+  return (
+    <li className="flex items-center gap-3 rounded-[22px] bg-card p-4">
+      <PositionLogo position={p} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-display text-base font-bold">{p.name}</span>
+        <span className="tabular block truncate text-xs text-muted">{[p.ticker, units, kind].filter(Boolean).join(' · ')}</span>
+      </span>
+      <span className="shrink-0 text-right">
+        <span className="tabular block font-display text-base font-bold">{formatCents(p.value_cents)}</span>
+        <span className={`tabular block text-xs font-semibold ${p.gain_cents < 0 ? 'text-loss' : 'text-gain'}`}>
+          {signedWhole(p.gain_cents)} · {percent(p.gain_rate)}
+        </span>
+      </span>
+    </li>
+  )
+}
+
+// getquin's logo on a white tile, else the ticker on a teal tile
+function PositionLogo({ position }) {
+  const [broken, setBroken] = useState(false)
+  if (position.logo && !broken) {
+    return (
+      <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-2xl bg-white shadow-[0_0_0_1px_var(--color-line)]">
+        <img src={position.logo} alt="" className="size-9 object-contain" onError={() => setBroken(true)} />
+      </span>
+    )
+  }
+  return (
+    <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-teal text-sm font-bold text-white">
+      {(position.ticker || position.name).slice(0, 3).toUpperCase()}
+    </span>
+  )
+}
+
+// "From getquin · Updated 14:32", with Refresh and Link (change or disconnect)
+function SourceRow({ portfolio, refreshing, error, onRefresh, onEdit }) {
+  const time = portfolio?.updated_at && new Date(portfolio.updated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const text = refreshing ? 'Updating…' : error && time ? `Couldn’t update · from ${time}` : time ? `Updated ${time}` : ''
+  return (
+    <div className="flex items-center gap-1 px-1 text-[13px] text-muted">
+      <span className="min-w-0 flex-1 truncate">From getquin{text && ` · ${text}`}</span>
+      <button onClick={onRefresh} disabled={refreshing} className="rounded-full px-2.5 py-2 font-semibold text-teal disabled:opacity-50">
+        Refresh
+      </button>
+      <button onClick={onEdit} className="rounded-full px-2.5 py-2 font-semibold text-teal">
+        Link
+      </button>
+    </div>
+  )
+}
+
+function ConnectCard({ onConnect }) {
+  return (
+    <button onClick={onConnect} className="mt-4 flex w-full items-center gap-3 rounded-[22px] bg-card p-4 text-left active:opacity-80">
+      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-teal/15 text-teal">
+        <Icon name="invest" size={22} strokeWidth={2.2} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-display text-base font-bold">Connect getquin</span>
+        <span className="block text-xs text-muted">See today’s value and your positions</span>
+      </span>
+      <Icon name="chevronRight" size={18} className="text-muted" />
+    </button>
+  )
+}
+
+function LinkSheet({ link, onClose, onSaved }) {
+  const [value, setValue] = useState(link ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+
+  async function save(url) {
+    setBusy(true)
+    setError(null)
+    try {
+      await saveGetquinLink(url)
+      onSaved(url)
+    } catch (e) {
+      setError(e.message)
+      setBusy(false)
+    }
+  }
+
+  function submit(e) {
+    e.preventDefault()
+    const url = cleanGetquinLink(value)
+    if (!url) return setError('Paste your getquin share link, like getqu.in/AbC123.')
+    save(url)
+  }
+
+  return (
+    <Sheet title="getquin link" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4 pt-1">
+        <p className="text-sm text-muted">In getquin, share your portfolio and copy the link. LynxOS reads it each time you open Investments.</p>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="https://getqu.in/…"
+          inputMode="url"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck="false"
+          className="w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-teal"
+        />
+        {error && <p className="text-sm text-loss">{error}</p>}
+        <button type="submit" disabled={busy} className="w-full rounded-2xl bg-teal py-4 text-base font-semibold text-white active:opacity-80 disabled:opacity-50">
+          Save
+        </button>
+        {link && (
+          <button type="button" disabled={busy} onClick={() => save(null)} className="w-full py-2 text-sm font-semibold text-loss disabled:opacity-50">
+            Disconnect getquin
+          </button>
+        )}
+      </form>
+    </Sheet>
   )
 }
 

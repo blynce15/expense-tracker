@@ -61,6 +61,16 @@ export default defineConfig({
               cacheableResponse: { statuses: [0, 200] },
             },
           },
+          // Investment logos from getquin (src/screens/Investments.jsx), kept like the shop logos
+          {
+            urlPattern: /^https:\/\/static\.getquin\.com\/logos.*/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'investment-logos',
+              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
           // Supabase (your data) is never cached: it always comes fresh from the server
         ],
       },
