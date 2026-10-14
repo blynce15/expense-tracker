@@ -45,7 +45,7 @@ const ACCOUNT_COLORS = [
 ]
 const CATEGORY_COLORS = ['#1f9d55', '#e8590c', '#1f4fe0', '#6741d9', '#d6336c', '#0c8599', '#f08c00', '#495057']
 const CATEGORY_IDEAS = [
-  ['Travel', '✈️', '#1c7ed6', 'expense'], ['Subscriptions', '📺', '#7048e8', 'expense'], ['Car', '🚗', '#1971c2', 'expense'],
+  ['Bills', '🧾', '#495057', 'expense'], ['Travel', '✈️', '#1c7ed6', 'expense'], ['Car', '🚗', '#1971c2', 'expense'],
   ['Coffee', '☕', '#8d6e63', 'expense'], ['Going out', '🍻', '#f08c00', 'expense'], ['Personal care', '💇', '#d6336c', 'expense'],
   ['Gym', '🏋️', '#2b8a3e', 'expense'], ['Education', '🎓', '#0c8599', 'expense'], ['Insurance', '🛡️', '#495057', 'expense'],
   ['Gifts', '🎁', '#e64980', 'expense'], ['Pets', '🐶', '#a0522d', 'expense'], ['Kids', '🧸', '#f06595', 'expense'],

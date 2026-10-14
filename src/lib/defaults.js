@@ -5,7 +5,6 @@ export const DEFAULT_CATEGORIES = [
   { name: 'Eating out', icon: '🍽️', color: '#e8590c', kind: 'expense' },
   { name: 'Transport', icon: '🚆', color: '#1f4fe0', kind: 'expense' },
   { name: 'Housing', icon: '🏠', color: '#6741d9', kind: 'expense' },
-  { name: 'Bills', icon: '🧾', color: '#495057', kind: 'expense' },
   { name: 'Shopping', icon: '🛍️', color: '#d6336c', kind: 'expense' },
   { name: 'Health', icon: '🩺', color: '#0c8599', kind: 'expense' },
   { name: 'Entertainment', icon: '🎬', color: '#f08c00', kind: 'expense' },
