@@ -193,7 +193,7 @@ function SavingCard({ a }) {
   const savedShare = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
   const investedShare = income > 0 ? Math.max(0, Math.min(1 - savedShare, totals.invested / income)) : 0
   return (
-    <Card icon="invest" color="var(--color-teal)" title="Saving & investing">
+    <Card icon="invest" color="var(--color-teal)" title="Saving & investing" onMore={() => navigate('/analytics/saving')}>
       <div className="flex items-center gap-4">
         <div className="relative grid size-[76px] shrink-0 place-items-center">
           <svg width="76" height="76" viewBox="0 0 76 76" className="absolute inset-0 -rotate-90" aria-hidden="true">

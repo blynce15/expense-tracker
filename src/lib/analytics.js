@@ -112,10 +112,13 @@ function buildAnalytics(p, accounts, recurring, rows) {
   let prevSpentSoFar = 0
   const catPrevSoFar = new Map()
 
-  const moveInto = (m, accountId, cents) => {
+  const flowByAccount = new Map() // savings/investment account id → net money in during this period
+  const moveInto = (m, accountId, cents, k) => {
     const t = typeOf.get(accountId)
     if (t === 'savings') m.saved += cents
     else if (t === 'investment') m.invested += cents
+    else return
+    if (months.includes(k)) flowByAccount.set(accountId, (flowByAccount.get(accountId) ?? 0) + cents)
   }
 
   for (const t of rows) {
@@ -123,10 +126,10 @@ function buildAnalytics(p, accounts, recurring, rows) {
     const m = month(k)
     if (t.type === 'income') {
       m.income += t.amount_cents
-      moveInto(m, t.account_id, t.amount_cents)
+      moveInto(m, t.account_id, t.amount_cents, k)
     } else if (t.type === 'expense') {
       m.spent += t.amount_cents
-      moveInto(m, t.account_id, -t.amount_cents)
+      moveInto(m, t.account_id, -t.amount_cents, k)
       spentByDay.set(t.date, (spentByDay.get(t.date) ?? 0) + t.amount_cents)
       catBy.set(`${k}|${t.category_id}`, (catBy.get(`${k}|${t.category_id}`) ?? 0) + t.amount_cents)
       if (prevMonths.includes(k) && (!cutoff || t.date <= cutoff)) {
@@ -139,8 +142,8 @@ function buildAnalytics(p, accounts, recurring, rows) {
         weekday[(new Date(y, mo - 1, d).getDay() + 6) % 7] += t.amount_cents
       }
     } else {
-      moveInto(m, t.account_id, -t.amount_cents)
-      moveInto(m, t.to_account_id, t.amount_cents)
+      moveInto(m, t.account_id, -t.amount_cents, k)
+      moveInto(m, t.to_account_id, t.amount_cents, k)
     }
   }
 
@@ -238,6 +241,11 @@ function buildAnalytics(p, accounts, recurring, rows) {
     catBy,
     last12,
     activeMonths: active.map((t) => t.key),
+    // Savings and investment accounts (today's balance) with the net money in during this period
+    keepAccounts: accounts
+      .filter((a) => a.type === 'savings' || a.type === 'investment')
+      .map((a) => ({ id: a.id, name: a.name, type: a.type, color: a.color, archived: a.archived, balance: a.balance_cents, flow: flowByAccount.get(a.id) ?? 0 }))
+      .filter((a) => !a.archived || a.flow !== 0 || a.balance !== 0),
     fixedNames,
     spentByDay,
     byMonth,

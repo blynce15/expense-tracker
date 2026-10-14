@@ -16,6 +16,7 @@ import { useSession } from './lib/useSession'
 import Accounts from './screens/Accounts'
 import Analytics from './screens/Analytics'
 import AnalyticsCategories, { CategoryDetail } from './screens/AnalyticsCategories'
+import AnalyticsSaving from './screens/AnalyticsSaving'
 import AnalyticsSpending from './screens/AnalyticsSpending'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
@@ -159,6 +160,8 @@ function screenFor(route, session, dataVersion, tx) {
       return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
     case '/analytics/categories':
       return { title: 'Categories', back: '/analytics', body: <AnalyticsCategories key={dataVersion} /> }
+    case '/analytics/saving':
+      return { title: 'Saving & investing', back: '/analytics', body: <AnalyticsSaving key={dataVersion} /> }
     case '/analytics/spending':
       return { title: 'Spending', back: '/analytics', body: <AnalyticsSpending key={dataVersion} /> }
     case '/savings':
