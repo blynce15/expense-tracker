@@ -164,7 +164,7 @@ Done:
 
 ### 2026-10-14
 Done:
-- Analytics back in the bottom bar, in the middle (owner's request): Home · Transactions · Analytics · Savings · Investments (five tabs; the sliding bubble is 46px wide). The Analytics button left the top bar (only AI + profile remain) and Analytics no longer has a back arrow.
+- Analytics back in the bottom bar, in the middle (owner's request): Home · Transactions · Analytics · Savings · Investments (five tabs; the sliding bubble is 46px wide). The Analytics button left the top bar (only AI + profile remain) and Analytics no longer has a back arrow. Published 2026-10-14.
 
 Next:
 - Analytics details pages still to build (owner will continue later): Net worth, Categories (full list with mini charts; tap a category for its own page: 12 months vs average, where, per visit), Saving & investing (income vs kept per month, savings rate over time, year totals), Trends (12 months, recurring costs over time, weekdays, month calendar). Each card on Analytics gets "More ›" (Card onMore) once its page exists.
