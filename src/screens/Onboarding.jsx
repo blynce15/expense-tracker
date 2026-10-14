@@ -220,7 +220,7 @@ export default function Onboarding({ email, onDone }) {
   if (key === 'welcome')
     footer = (
       <>
-        <button onClick={() => go(1)} className={primaryClass}>Set up</button>
+        <button onClick={() => go(1)} className={primaryClass}>Let’s start</button>
         <button onClick={() => supabase.auth.signOut()} className="mt-1 w-full py-2.5 text-sm font-medium text-muted">
           Sign out
         </button>
@@ -335,38 +335,16 @@ export default function Onboarding({ email, onDone }) {
   )
 }
 
-// First page: the app's logo and name, then the setup steps as a coloured timeline.
-// Tighter on short screens (iPhone SE) so the list stays clear of the Set up button.
+// First page: just the big logo, the app's name and "Expense tracker", centred in the space above
+// the Let's start button (the page's padding: safe areas + 1rem top, 7.5rem bottom).
 function Welcome() {
-  const steps = [
-    ['user', 'Your profile', '#d6336c'],
-    ['credit', 'Accounts and balances', '#2f6bff'],
-    ['calendar', 'Budget start day', '#f08c00'],
-    ['tag', 'Categories', '#7048e8'],
-    ['repeat', 'Regular payments', '#0f9d6b'],
-  ]
   return (
-    <div className="flex flex-col items-center pt-10 [@media(max-height:700px)]:pt-3">
-      <img src="/logo.png" alt="" className="size-[120px] [@media(max-height:700px)]:size-[84px]" />
-      <h1 className="mt-4 font-display text-[44px] leading-none font-extrabold tracking-tight">
+    <div className="flex min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-8.5rem)] flex-col items-center justify-center pb-6">
+      <img src="/logo.png" alt="" className="size-[168px] [@media(max-height:700px)]:size-[128px]" />
+      <h1 className="mt-5 font-display text-[48px] leading-none font-extrabold tracking-tight">
         Lynx<span className="brand-text">OS</span>
       </h1>
-      <p className="mt-2 text-muted">Expense tracker</p>
-      <ol className="relative mt-10 w-full px-2 [@media(max-height:700px)]:mt-6">
-        {/* The line joining the steps, behind the circles */}
-        <span className="absolute top-7 bottom-7 left-[29px] w-0.5 bg-line [@media(max-height:700px)]:left-[27px]" aria-hidden="true" />
-        {steps.map(([icon, title, color], n) => (
-          <li key={title} className="relative flex h-[58px] items-center gap-4 [@media(max-height:700px)]:h-[50px]">
-            <span className="grid size-11 shrink-0 place-items-center rounded-full text-white [@media(max-height:700px)]:size-10" style={{ backgroundColor: color }}>
-              <Glyph name={icon} />
-            </span>
-            <span className="text-base font-semibold">
-              {title}
-              {n === steps.length - 1 && <span className="font-normal text-muted"> (optional)</span>}
-            </span>
-          </li>
-        ))}
-      </ol>
+      <p className="mt-2.5 text-lg text-muted">Expense tracker</p>
     </div>
   )
 }
