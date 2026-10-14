@@ -3,6 +3,7 @@ import DatePicker from '../components/DatePicker'
 import Avatar from '../components/Avatar'
 import AmountPad from '../components/AmountPad'
 import Icon from '../components/Icon'
+import Sheet from '../components/Sheet'
 import MerchantIcon from '../components/MerchantIcon'
 import LynxWatermark from '../components/LynxWatermark'
 import { BankLogo } from '../components/BankCard'
@@ -480,18 +481,20 @@ function ProfileStep({ email, profile, setProfile }) {
 // ---------- Step 2: accounts ----------
 function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
   const [padOpen, setPadOpen] = useState(false)
-  const [typeMenu, setTypeMenu] = useState(false)
+  const [allColors, setAllColors] = useState(false)
 
   if (form) {
     const t = TYPES[form.type]
     const cents = parseToCents(form.amount) ?? 0
     const [whole, decimals] = formatCents(cents).split(',')
     const bank = bankFor(form.name)
-    // 16 colours on two rows; a picked bank's own colour (not in the list) takes the first spot
-    const colors = ACCOUNT_COLORS.includes(form.color) ? ACCOUNT_COLORS : [form.color, ...ACCOUNT_COLORS.slice(0, -1)]
     const pickBank = (b) => setForm({ ...form, name: b.name, color: b.color, error: null })
     const shortcuts = form.type === 'meal' ? MEAL_CARDS : form.type === 'cash' ? [] : BANKS
-    const dashed = 'border-b-[1.5px] border-dashed border-white/45'
+    // A picked bank's own colour (not in the list) joins the start of the list
+    const colors = ACCOUNT_COLORS.includes(form.color) ? ACCOUNT_COLORS : [form.color, ...ACCOUNT_COLORS]
+    // The quick row: five styles, always including the selected one (it takes the last spot)
+    const quick = colors.slice(0, 5).includes(form.color) ? colors.slice(0, 5) : [...colors.slice(0, 4), form.color]
+    const pickColor = (color) => setForm({ ...form, color })
     return (
       <div>
         {accounts.length > 0 && (
@@ -500,23 +503,23 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
             <SectionAction label="Cancel" onClick={() => setForm(null)} />
           </div>
         )}
-        {/* "The card is the form": type the name on the card, tap the balance for the number pad,
-            and the pill in the corner changes the type */}
-        <div className="relative">
-          <div
-            className="relative h-[178px] overflow-clip rounded-[24px] p-5 text-white transition-colors"
-            style={{ background: `linear-gradient(140deg, ${form.color} 0%, ${shade(form.color, 0.62)} 100%)`, boxShadow: `0 18px 34px -18px ${form.color}` }}
-          >
-            <span className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-white/10" />
-            <span className="pointer-events-none absolute -right-16 -bottom-24 size-56 rounded-full bg-white/[.06]" />
-            <div className="relative flex items-center gap-3">
-              {bank ? (
-                <BankLogo bank={bank} className="size-11" />
-              ) : (
-                <span className="grid size-11 shrink-0 place-items-center rounded-[24%] bg-white/15">
-                  <Glyph name={form.type} className="size-[22px]" />
-                </span>
-              )}
+        {/* The account drawn as a bank card. The name is typed right on it and tapping the balance
+            opens the number pad; both look like plain card text (no boxes or lines) */}
+        <div
+          className="relative h-[178px] overflow-clip rounded-[24px] p-5 text-white transition-[background,box-shadow] duration-300"
+          style={{ background: `linear-gradient(140deg, ${form.color} 0%, ${shade(form.color, 0.62)} 100%)`, boxShadow: `0 18px 34px -18px ${form.color}` }}
+        >
+          <span className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-white/10" />
+          <span className="pointer-events-none absolute -right-16 -bottom-24 size-56 rounded-full bg-white/[.06]" />
+          <div className="relative flex items-center gap-3">
+            {bank ? (
+              <BankLogo bank={bank} className="size-11" />
+            ) : (
+              <span className="grid size-11 shrink-0 place-items-center rounded-[24%] bg-white/15">
+                <Glyph name={form.type} className="size-[22px]" />
+              </span>
+            )}
+            <span className="min-w-0 flex-1">
               <input
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value, error: null })}
@@ -525,50 +528,37 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
                 enterKeyHint="done"
                 onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                 aria-label="Account name"
-                className={`min-w-0 flex-1 bg-transparent pb-0.5 text-base font-semibold text-white caret-white outline-none placeholder:font-normal placeholder:text-white/55 ${dashed}`}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+                className="block w-full appearance-none truncate border-0 bg-transparent p-0 text-base leading-tight font-semibold text-white caret-white outline-none placeholder:text-white/55"
               />
-              <button
-                onClick={() => setTypeMenu((v) => !v)}
-                aria-expanded={typeMenu}
-                className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/[.16] py-1.5 pr-2.5 pl-2 text-xs font-semibold active:bg-white/25"
-              >
-                <Glyph name={form.type} className="size-[15px]" width={2.1} />
-                {t.label}
-                <svg viewBox="0 0 12 12" className="size-2.5" fill="currentColor" aria-hidden="true">
-                  <path d="M2 4h8L6 8.5z" />
-                </svg>
-              </button>
-            </div>
-            <p className="relative mt-6 text-xs text-white/70">Balance today</p>
-            <button onClick={() => setPadOpen(true)} className={`tabular relative font-display leading-tight font-bold ${dashed}`}>
-              <span className="text-[30px]">{whole}</span>
-              <span className="text-lg opacity-60">,{decimals}</span>
-            </button>
+              <span className="block text-xs text-white/70">{t.label}</span>
+            </span>
           </div>
+          <p className="relative mt-6 text-xs text-white/70">Balance today</p>
+          <button onClick={() => setPadOpen(true)} aria-label="Balance today" className="tabular relative -mx-1 rounded-lg px-1 text-left font-display leading-tight font-bold active:bg-white/10">
+            <span className={`text-[30px] ${cents ? '' : 'text-white/55'}`}>{whole}</span>
+            <span className={`text-lg ${cents ? 'opacity-60' : 'text-white/40'}`}>,{decimals}</span>
+          </button>
+        </div>
 
-          {typeMenu && (
-            <>
-              <button className="fixed inset-0 z-20 cursor-default" aria-label="Close" onClick={() => setTypeMenu(false)} />
-              <div className="absolute top-[58px] right-3 z-30 w-48 overflow-hidden rounded-2xl bg-card py-1 shadow-[0_18px_40px_-12px_rgba(11,27,69,0.45)] motion-safe:animate-[sheet-up_160ms_ease-out]">
-                {Object.entries(TYPES).map(([type, info]) => (
-                  <button
-                    key={type}
-                    onClick={() => {
-                      setForm({ ...form, type, color: bank ? form.color : info.color, error: null })
-                      setTypeMenu(false)
-                    }}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-semibold active:bg-paper"
-                  >
-                    <span className="text-muted">
-                      <Glyph name={type} />
-                    </span>
-                    <span className="flex-1">{info.label}</span>
-                    {form.type === type && <Glyph name="check" className="size-4 text-cobalt" width={2.6} />}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
+        {/* Type as underlined tabs */}
+        <div className="mt-5 flex justify-between border-b-[1.5px] border-line px-1" role="tablist">
+          {Object.entries(TYPES).map(([type, info]) => (
+            <button
+              key={type}
+              role="tab"
+              aria-selected={form.type === type}
+              onClick={() => setForm({ ...form, type, color: bank ? form.color : info.color, error: null })}
+              className={`-mb-[1.5px] flex items-center gap-1.5 border-b-[2.5px] pt-2.5 pb-[11px] text-[13.5px] font-semibold whitespace-nowrap transition-colors ${
+                form.type === type ? 'border-ink text-ink' : 'border-transparent text-muted'
+              }`}
+            >
+              <Glyph name={type} className="size-[18px]" />
+              {info.label}
+            </button>
+          ))}
         </div>
 
         {shortcuts.length > 0 && (
@@ -583,11 +573,14 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
                     key={b.name}
                     onClick={() => pickBank(b)}
                     aria-pressed={bank === b}
-                    className={`flex min-w-0 flex-col items-center gap-1.5 px-1 pt-3.5 pb-3 active:bg-paper ${i % 4 !== 3 && i !== shortcuts.length - 1 ? 'border-r border-line' : ''} ${
-                      lastRow ? '' : 'border-b border-line'
-                    }`}
+                    className={`flex min-w-0 flex-col items-center gap-1.5 px-1 pt-3.5 pb-3 transition-colors active:bg-paper ${
+                      i % 4 !== 3 && i !== shortcuts.length - 1 ? 'border-r border-line' : ''
+                    } ${lastRow ? '' : 'border-b border-line'}`}
                   >
-                    <BankLogo bank={b} className={`size-10 ${bank === b ? 'shadow-[0_0_0_2.5px_var(--color-card),0_0_0_4.5px_var(--color-cobalt)]' : ''}`} />
+                    <BankLogo
+                      bank={b}
+                      className={`size-10 transition-shadow ${bank === b ? 'shadow-[0_0_0_2.5px_var(--color-card),0_0_0_4.5px_var(--color-cobalt)]' : ''}`}
+                    />
                     <span className={`line-clamp-2 w-full text-center text-[11.5px] leading-tight font-semibold ${bank === b ? 'text-cobalt' : ''}`}>{b.name}</span>
                   </button>
                 )
@@ -596,19 +589,35 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
           </>
         )}
 
-        <p className={capClass}>Card colour</p>
-        <div className="grid grid-cols-8 gap-3 rounded-[20px] bg-card p-4">
-          {colors.map((c) => (
-            <button
-              key={c}
-              onClick={() => setForm({ ...form, color: c })}
-              aria-label={`Colour ${c}`}
-              aria-pressed={form.color === c}
-              className={`aspect-square rounded-full ${form.color === c ? 'ring-[2.5px] ring-ink ring-offset-2 ring-offset-card' : ''}`}
-              style={{ backgroundColor: c }}
-            />
+        <p className={capClass}>Card style</p>
+        {/* Five mini cards and an arrow that opens every colour in a sheet */}
+        <div className="flex items-center justify-between px-0.5">
+          {quick.map((c) => (
+            <MiniStyle key={c} color={c} selected={form.color === c} onClick={() => pickColor(c)} />
           ))}
+          <button
+            onClick={() => setAllColors(true)}
+            aria-haspopup="dialog"
+            aria-label="More colours"
+            className="grid h-[34px] w-[50px] shrink-0 place-items-center rounded-[9px] border-[1.5px] border-line bg-card text-muted transition-colors active:bg-paper"
+          >
+            <svg viewBox="0 0 24 24" className="size-[18px]" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
         </div>
+        {allColors && (
+          <ColourSheet
+            value={form.color}
+            bankColor={ACCOUNT_COLORS.includes(form.color) ? null : form.color}
+            bankName={bank?.name}
+            onPick={(c) => {
+              pickColor(c)
+              setAllColors(false)
+            }}
+            onClose={() => setAllColors(false)}
+          />
+        )}
         {form.error && <p className="mt-2 px-1 text-sm text-loss">{form.error}</p>}
 
         {padOpen && (
@@ -647,6 +656,71 @@ function AccountsStep({ accounts, form, setForm, onOpen, onRemove }) {
         Add another account
       </button>
     </div>
+  )
+}
+
+// Every card colour in a sheet, with names, in groups (the order inside a group runs light to dark-ish)
+const COLOUR_GROUPS = [
+  ['Blues', [['#1f4fe0', 'Cobalt'], ['#0b1b45', 'Navy'], ['#4dabf7', 'Sky'], ['#7048e8', 'Purple']]],
+  ['Greens', [['#0c8599', 'Teal'], ['#12b886', 'Mint'], ['#2b8a3e', 'Forest'], ['#94d82d', 'Lime']]],
+  ['Warm', [['#fab005', 'Sun'], ['#f08c00', 'Amber'], ['#e8590c', 'Orange'], ['#e03131', 'Red']]],
+  ['Others', [['#d6336c', 'Pink'], ['#ae3ec9', 'Violet'], ['#495057', 'Graphite'], ['#111111', 'Black']]],
+]
+
+function ColourSheet({ value, bankColor, bankName, onPick, onClose }) {
+  // A bank's own colour (not one of the 16) gets its own group at the top
+  const groups = bankColor ? [[bankName ? `${bankName} colour` : 'Bank colour', [[bankColor, bankName ?? 'Bank']]], ...COLOUR_GROUPS] : COLOUR_GROUPS
+  return (
+    <Sheet title="Card colour" onClose={onClose}>
+      <div className="pb-2">
+        {groups.map(([group, colours]) => (
+          <section key={group} className="mt-5 first:mt-1">
+            <p className="mb-2 px-0.5 text-xs font-bold tracking-[.07em] text-muted uppercase">{group}</p>
+            <div className="grid grid-cols-4 gap-2.5">
+              {colours.map(([c, name]) => {
+                const selected = value === c
+                return (
+                  <button key={c} onClick={() => onPick(c)} aria-pressed={selected} className="flex min-w-0 flex-col items-center gap-1.5">
+                    <span
+                      className={`relative grid h-12 w-full place-items-center overflow-clip rounded-xl text-white transition-shadow ${
+                        selected ? 'shadow-[0_0_0_2.5px_var(--color-paper),0_0_0_4.5px_var(--color-ink)]' : ''
+                      }`}
+                      style={{ background: `linear-gradient(140deg, ${c} 0%, ${shade(c, 0.62)} 100%)` }}
+                    >
+                      <span className="pointer-events-none absolute -top-3.5 -right-3 size-9 rounded-full bg-white/15" />
+                      {selected && <Glyph name="check" className="relative size-4" width={3} />}
+                    </span>
+                    <span className={`truncate text-xs font-semibold ${selected ? 'text-ink' : 'text-muted'}`}>{name}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        ))}
+      </div>
+    </Sheet>
+  )
+}
+
+// A card style: a tiny card in the colour, with the same soft circle as the big card
+function MiniStyle({ color, selected, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={`Colour ${color}`}
+      aria-pressed={selected}
+      className={`relative h-[34px] w-[50px] shrink-0 overflow-clip rounded-[9px] transition-shadow ${
+        selected ? 'shadow-[0_0_0_2.5px_var(--color-paper),0_0_0_4.5px_var(--color-ink)]' : ''
+      }`}
+      style={{ background: `linear-gradient(140deg, ${color} 0%, ${shade(color, 0.62)} 100%)` }}
+    >
+      <span className="pointer-events-none absolute -top-3 -right-2.5 size-[26px] rounded-full bg-white/15" />
+      {selected && (
+        <span className="absolute inset-0 grid place-items-center text-white">
+          <Glyph name="check" className="size-3.5" width={3} />
+        </span>
+      )}
+    </button>
   )
 }
 
