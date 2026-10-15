@@ -171,7 +171,7 @@ function TransactionList({ rows, lookups, filtered, onSelect }) {
       <FullEmpty
         className="mt-1"
         title={filtered ? 'Nothing matches' : 'No transactions yet'}
-        text={filtered ? 'Try another tab or change the filters.' : 'Tap the + button to record your first expense or income.'}
+        text={filtered ? 'Try other filters' : 'Tap + to add one'}
       />
     )
   }

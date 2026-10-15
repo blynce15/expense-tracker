@@ -101,7 +101,7 @@ export default function Recurring() {
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
       {payments.length === 0 ? (
-        <FullEmpty title="Add recurring payments and income" text="Rent, subscriptions, your salary. See what's due and record each one with one tap.">
+        <FullEmpty title="No recurring payments">
           <button onClick={() => setEditing('new')} className="rounded-full bg-cobalt px-6 py-3 text-[15px] font-semibold text-white active:bg-cobalt-deep">
             Add a payment
           </button>

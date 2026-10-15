@@ -22,7 +22,7 @@ export function FullEmpty({ title, text, children, className = '' }) {
     >
       <EmptyLynx className="size-20" />
       <p className="mt-4 font-display text-xl font-bold text-balance">{title}</p>
-      {text && <p className="mt-1.5 max-w-[280px] text-[15px] leading-snug text-muted text-balance">{text}</p>}
+      {text && <p className="mt-1 text-[13px] text-muted">{text}</p>}
       {children && <div className="mt-5">{children}</div>}
     </div>
   )

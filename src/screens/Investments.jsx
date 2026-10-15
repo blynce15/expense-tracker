@@ -86,7 +86,7 @@ export default function Investments() {
   if (!link) {
     return (
       <div className="px-4 pt-1 pb-6">
-        <FullEmpty title="Track what you invest" text="Connect your getquin portfolio to see its value, what you put in each month and your positions.">
+        <FullEmpty title="No investments yet">
           <button onClick={() => setEditingLink(true)} className="rounded-full bg-teal px-6 py-3 text-[15px] font-semibold text-white active:opacity-80">
             Connect getquin
           </button>
