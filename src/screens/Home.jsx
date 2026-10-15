@@ -373,7 +373,10 @@ function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch, c
 // One bar per day of the budget period: blue when within the daily budget, orange when above it.
 // Touch or drag along the bars to read any day so far.
 const W = 300
-const H = 64
+const H = 56
+
+// Budget: a ring of what's left to spend (thin outer arc = how far through the period you are),
+// and under it the money spent so far as a line against an even pace. Touch the line to read a day.
 function BudgetCard({ budget, hidden }) {
   const { period, cumulative, budgetCents, leftCents } = budget
   const [day, setDay] = useState(null) // day number being read, or null for today
@@ -397,90 +400,134 @@ function BudgetCard({ budget, hidden }) {
   }
 
   const today = period.dayNumber
-  const daily = cumulative.map((c, i) => c - (cumulative[i - 1] ?? 0))
-  const dailyBudget = budgetCents / period.days
-  // One huge day (like rent) shouldn't flatten all the others: taller bars are cut at the top
-  const scale = Math.max(1, Math.min(Math.max(...daily, dailyBudget * 1.5), dailyBudget * 4 || Infinity))
-  const slot = W / period.days
-  const barH = (cents) => Math.max(3, Math.min(cents / scale, 1) * H)
-  const budgetY = H - Math.min(dailyBudget / scale, 1) * H
-
-  const spentBy = cumulative[today - 1] ?? 0
-  const evenBy = budgetCents > 0 ? Math.round((budgetCents * today) / period.days) : 0
-  const diff = spentBy - evenBy
+  const daysLeft = period.days - today + 1 // today included
+  const shown = day ?? today
+  const spentBy = cumulative[shown - 1] ?? 0
+  const paceBy = budgetCents > 0 ? Math.round((budgetCents * shown) / period.days) : 0
+  const diff = (cumulative[today - 1] ?? 0) - (budgetCents > 0 ? Math.round((budgetCents * today) / period.days) : 0)
+  const leftShare = budgetCents > 0 ? Math.max(0, Math.min(1, leftCents / budgetCents)) : 0
+  const timeShare = Math.min(1, today / period.days)
+  const perDayLeft = Math.max(0, Math.round(leftCents / daysLeft))
   const money = (c) => (hidden ? '••••' : formatCents(c).replace(/,\d\d$/, ''))
+  const [euros, decimals] = formatCents(Math.max(leftCents, 0)).split(',')
+
+  // Ring
+  const R = 37
+  const C = 2 * Math.PI * R
+  const R2 = R + 11
+  const C2 = 2 * Math.PI * R2
+
+  // Pace chart: x = day, y = money spent so far (top = the whole budget)
+  const top = Math.max(budgetCents, cumulative[today - 1] ?? 0, 1)
+  const x = (d) => (d / period.days) * W
+  const y = (c) => H - (Math.min(c, top) / top) * H
+  const points = cumulative.slice(0, today).map((c, i) => `${x(i + 1).toFixed(1)},${y(c).toFixed(1)}`)
+  const line = `M0,${H} L${points.join(' L')}`
+  const area = `${line} L${x(today).toFixed(1)},${H} Z`
+  const over = diff > 0
 
   function read(e) {
     const r = chartRef.current.getBoundingClientRect()
     if (!r.width) return
-    const d = Math.floor(((e.clientX - r.left) / r.width) * period.days) + 1
+    const d = Math.round(((e.clientX - r.left) / r.width) * period.days)
     const clamped = Math.max(1, Math.min(today, d))
     setDay(clamped === today ? null : clamped)
   }
 
   return (
     <section className="px-4">
-      <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to px-4 pt-3 pb-2.5 shadow-[0_16px_30px_-22px_rgba(31,79,224,0.7)]">
-        <div className="flex items-center justify-between gap-2">
-          <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-muted">
-            <Icon name="calendar" size={15} className="shrink-0 text-cobalt" />
-            {day ? `On ${shortDate(dateOf(period.start, day))} you spent` : 'Left to spend'}
-          </p>
-          {budgetCents > 0 && (
-            <span className={`shrink-0 rounded-full bg-card px-2 py-0.5 text-xs font-bold ${diff > 0 ? 'text-loss' : 'text-gain'}`}>
-              {diff > 0 ? `▲ ${money(diff)} over pace` : `▼ ${money(-diff)} under pace`}
-            </span>
-          )}
-        </div>
-        <p className="tabular truncate font-display text-[26px] leading-tight font-bold">
-          {day ? (
-            hidden ? '€ ••••' : formatCents(daily[day - 1])
-          ) : (
-            <>
-              {hidden ? '€ ••••' : formatCents(leftCents).replace(/,\d\d$/, '')}
-              <span className="text-base font-semibold text-muted"> of {money(budgetCents)}</span>
-            </>
-          )}
-        </p>
+      <div className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-[#1f4fe0] to-[#1638a8] px-4 pt-3.5 pb-3.5 text-white shadow-[0_22px_36px_-22px_rgba(31,79,224,0.95)]">
+        <span className="pointer-events-none absolute -top-20 -right-16 size-56 rounded-full bg-white/[.07]" />
+        <span className="pointer-events-none absolute -bottom-24 -left-20 size-56 rounded-full bg-[#6aa8ff]/[.12]" />
 
-        <svg
-          ref={chartRef}
-          viewBox={`0 -4 ${W} ${H + 4}`}
-          className="mt-2 w-full cursor-crosshair touch-none select-none"
-          onPointerDown={read}
-          onPointerMove={(e) => (e.buttons || e.pointerType === 'mouse') && read(e)}
-          onPointerLeave={() => setDay(null)}
-          onPointerUp={(e) => e.pointerType !== 'mouse' && setDay(null)}
-          role="img"
-          aria-label={`Spent ${formatCents(spentBy)} of ${formatCents(budgetCents)} so far this period`}
-        >
-          {Array.from({ length: period.days }, (_, i) => {
-            const d = i + 1
-            const future = d > today
-            const cents = daily[i] ?? 0
-            const h = future ? 3 : barH(cents)
-            const fill = future ? '#1f4fe0' : d === (day ?? today) ? 'var(--color-ink)' : cents > dailyBudget ? '#f08c00' : '#1f4fe0'
-            return (
-              <rect
-                key={d}
-                x={i * slot + slot * 0.15}
-                y={H - h}
-                width={slot * 0.7}
-                height={h}
-                rx={Math.min(2.5, slot * 0.3)}
-                fill={fill}
-                opacity={future ? 0.15 : 1}
+        <div className="relative flex items-center gap-4">
+          {/* What's left, as a ring */}
+          <div className="relative grid size-[104px] shrink-0 place-items-center">
+            <svg width="104" height="104" viewBox="0 0 104 104" className="absolute inset-0 -rotate-90" aria-hidden="true">
+              <circle cx="52" cy="52" r={R} fill="none" stroke="rgba(255,255,255,.16)" strokeWidth="10" />
+              <circle
+                cx="52"
+                cy="52"
+                r={R}
+                fill="none"
+                stroke="#fff"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeDasharray={`${leftShare * C} ${C}`}
+                className="transition-[stroke-dasharray] duration-700"
               />
-            )
-          })}
-          {budgetCents > 0 && (
-            <line x1="0" x2={W} y1={budgetY} y2={budgetY} stroke="var(--color-ink)" strokeOpacity=".35" strokeWidth="1" strokeDasharray="3 3" />
-          )}
-        </svg>
-        <div className="mt-1 flex justify-between text-[10px] leading-none text-muted">
-          <span>{shortDate(period.start)}</span>
-          <span>- - - daily budget {money(Math.round(dailyBudget))} · touch a bar</span>
-          <span>{shortDate(period.end)}</span>
+              <circle cx="52" cy="52" r={R2} fill="none" stroke="rgba(255,255,255,.14)" strokeWidth="2" />
+              <circle cx="52" cy="52" r={R2} fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${timeShare * C2} ${C2}`} />
+              <circle cx={52 + R2 * Math.cos(timeShare * 2 * Math.PI)} cy={52 + R2 * Math.sin(timeShare * 2 * Math.PI)} r="3.5" fill="#fff" />
+            </svg>
+            <span className="relative text-center leading-none">
+              <b className="tabular block font-display text-[21px]">{hidden ? '••' : `${Math.round(leftShare * 100)}%`}</b>
+              <span className="mt-1 block text-[10.5px] font-semibold text-white/75">left</span>
+            </span>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-white/80">Left to spend</p>
+            <p className="tabular truncate font-display leading-tight font-bold tracking-tight">
+              <span className="text-[32px]">{hidden ? '€ ••••' : euros}</span>
+              {!hidden && <span className="text-lg text-white/55">,{decimals}</span>}
+            </p>
+            <p className="tabular text-[12.5px] text-white/75">of {money(budgetCents)}</p>
+            <span className="tabular mt-2 inline-flex items-center gap-1 rounded-full bg-white/16 px-2.5 py-1 text-xs font-bold ring-1 ring-white/15">
+              {money(perDayLeft)}
+              <span className="font-semibold text-white/75">/ day · {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Spending against an even pace */}
+        <div className="relative mt-3 rounded-[20px] bg-white/[.09] px-3.5 pt-2.5 pb-2 ring-1 ring-white/[.12] ring-inset">
+          <div className="flex items-center justify-between gap-2">
+            <p className="tabular min-w-0 truncate text-xs font-semibold text-white/80">
+              {day ? (
+                <>
+                  {shortDate(dateOf(period.start, day))}: <b className="text-white">{money(spentBy)}</b> spent · pace {money(paceBy)}
+                </>
+              ) : (
+                'Spending vs pace'
+              )}
+            </p>
+            {budgetCents > 0 && (
+              <span className={`tabular shrink-0 rounded-full bg-white px-2 py-0.5 text-[11.5px] font-bold ${over ? 'text-[#c26b00]' : 'text-gain'}`}>
+                {over ? `▲ ${money(diff)} over` : `▼ ${money(-diff)} under`}
+              </span>
+            )}
+          </div>
+          <svg
+            ref={chartRef}
+            viewBox={`-6 -8 ${W + 12} ${H + 16}`}
+            className="mt-1 w-full cursor-crosshair touch-none overflow-visible select-none"
+            onPointerDown={read}
+            onPointerMove={(e) => (e.buttons || e.pointerType === 'mouse') && read(e)}
+            onPointerLeave={() => setDay(null)}
+            onPointerUp={(e) => e.pointerType !== 'mouse' && setDay(null)}
+            role="img"
+            aria-label={`Spent ${formatCents(cumulative[today - 1] ?? 0)} of ${formatCents(budgetCents)} so far this period`}
+          >
+            <defs>
+              <linearGradient id="pace-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor="#fff" stopOpacity=".34" />
+                <stop offset="1" stopColor="#fff" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            {budgetCents > 0 && <line x1="0" y1={H} x2={W} y2={y(budgetCents)} stroke="#fff" strokeOpacity=".45" strokeWidth="1.5" strokeDasharray="4 5" />}
+            <line x1={x(shown)} x2={x(shown)} y1="-4" y2={H} stroke="#fff" strokeOpacity=".2" strokeWidth="1.5" />
+            <path d={area} fill="url(#pace-fill)" />
+            <path d={line} fill="none" stroke="#fff" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+            {budgetCents > 0 && <circle cx={x(shown)} cy={y(paceBy)} r="4" fill="#1f4fe0" stroke="#fff" strokeOpacity=".7" strokeWidth="2" />}
+            <circle cx={x(shown)} cy={y(spentBy)} r="9" fill="#fff" fillOpacity=".22" />
+            <circle cx={x(shown)} cy={y(spentBy)} r="5" fill="#fff" stroke="#1f4fe0" strokeWidth="2.5" />
+          </svg>
+          <div className="mt-1 flex justify-between text-[10.5px] leading-none text-white/65">
+            <span>{shortDate(period.start)}</span>
+            <span>- - even pace · touch the line</span>
+            <span>{shortDate(period.end)}</span>
+          </div>
         </div>
       </div>
     </section>
