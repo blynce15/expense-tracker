@@ -13,6 +13,7 @@ import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
 import { DEFAULT_CATEGORIES } from '../lib/defaults'
 import { EMOJIS } from '../lib/emojis'
 import { centsToPad, formatCents, parseToCents } from '../lib/money'
+import { cleanGetquinLink, fetchPortfolio } from '../lib/getquin'
 import { allowLeavingOnce } from '../lib/applock'
 import { fetchExistingCategories, saveOnboarding } from '../lib/onboarding'
 import { squareJpeg } from '../lib/profile'
@@ -30,6 +31,7 @@ const STEPS = [
   { key: 'cats', title: 'Categories' },
   { key: 'payments', title: 'Regular payments' },
   { key: 'goals', title: 'Savings goals' },
+  { key: 'invest', title: 'Investments' },
   { key: 'done' },
 ]
 const NUMBERED = STEPS.length - 2
@@ -126,6 +128,8 @@ export default function Onboarding({ email, onDone }) {
   const [paymentForm, setPaymentForm] = useState(null)
   const [goals, setGoals] = useState([])
   const [goalForm, setGoalForm] = useState(null)
+  // Investments: the pasted getquin link and what reading it gave (status idle | loading | ok | error)
+  const [invest, setInvest] = useState({ text: '', link: null, status: 'idle', portfolio: null })
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | failed
   const [saveError, setSaveError] = useState(null)
   const saved = useRef({})
@@ -146,7 +150,7 @@ export default function Onboarding({ email, onDone }) {
     setSaveState('saving')
     setSaveError(null)
     try {
-      await saveOnboarding({ profile, accounts, categories, payments, goals, startDay }, saved.current)
+      await saveOnboarding({ profile, accounts, categories, payments, goals, getquinUrl: invest.status === 'ok' ? invest.link : null, startDay }, saved.current)
       setSaveState('saved')
     } catch (e) {
       setSaveError(e.message)
@@ -284,7 +288,16 @@ export default function Onboarding({ email, onDone }) {
     ) : (
       <button onClick={() => go(1)} className="w-full rounded-2xl bg-card py-4 text-lg font-semibold text-ink ring-1 ring-line">Skip for now</button>
     )
-  } else if (key === 'payments')
+  } else if (key === 'invest')
+    footer =
+      invest.status === 'ok' ? (
+        <button onClick={() => go(1)} className={primaryClass}>Continue</button>
+      ) : invest.status === 'loading' ? (
+        <button disabled className={primaryClass}>Continue</button>
+      ) : (
+        <button onClick={() => go(1)} className="w-full rounded-2xl bg-card py-4 text-lg font-semibold text-ink ring-1 ring-line">Skip for now</button>
+      )
+  else if (key === 'payments')
     footer = paymentForm ? (
       <button onClick={addPayment} className={primaryClass}>{paymentForm.type === 'income' ? 'Add income' : 'Add payment'}</button>
     ) : payments.length ? (
@@ -354,6 +367,7 @@ export default function Onboarding({ email, onDone }) {
                 setForm={setCategoryForm}
               />
             )}
+            {key === 'invest' && <InvestStep invest={invest} setInvest={setInvest} />}
             {key === 'goals' && (
               <GoalsStep
                 today={today}
@@ -952,6 +966,304 @@ function CategoryCreator({ form, setForm }) {
         </div>
       </div>
       {form.error && <p className="mt-2 px-1 text-sm text-loss">{form.error}</p>}
+    </div>
+  )
+}
+
+// ---------- Investments (getquin) ----------
+// Paste the getquin share link; it's read right away through api/getquin.js (same as the Investments tab)
+const SPARK = 'M0 58 C30 54 45 48 70 50 S110 36 135 40 175 22 200 28 245 12 270 14 290 8 300 6'
+function Spark({ className = '' }) {
+  return (
+    <svg viewBox="0 0 300 70" preserveAspectRatio="none" className={`pointer-events-none absolute inset-x-0 bottom-0 w-full ${className}`} aria-hidden="true">
+      <defs>
+        <linearGradient id="spark-fill" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity=".28" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`${SPARK} V70 H0Z`} fill="url(#spark-fill)" />
+      <path d={SPARK} fill="none" stroke="#fff" strokeOpacity=".7" strokeWidth="2.2" vectorEffect="non-scaling-stroke" />
+    </svg>
+  )
+}
+const tealCard = 'relative overflow-clip rounded-[26px] text-white shadow-[0_22px_36px_-22px_rgba(12,133,153,0.95)]'
+const tealBg = { background: 'linear-gradient(140deg, #16b2c6 0%, #0c8599 48%, #075a68 100%)' }
+const GetquinIcon = ({ className }) => <img src="/getquin.png" alt="" className={`block shrink-0 overflow-hidden bg-white object-cover ${className}`} />
+const LINK_PATH = 'M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7'
+const LinkIcon = ({ className = 'size-5' }) => (
+  <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d={LINK_PATH} />
+  </svg>
+)
+const pct = (rate) => `${Math.abs(rate * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 })}%`
+
+function InvestStep({ invest, setInvest }) {
+  const [all, setAll] = useState(false)
+  const shown = invest.text.replace(/^https?:\/\//, '').replace(/\/$/, '')
+
+  async function read(text) {
+    const link = cleanGetquinLink(text)
+    if (!link) return setInvest({ text, link: null, status: text.trim() ? 'error' : 'idle', portfolio: null })
+    setInvest({ text, link, status: 'loading', portfolio: null })
+    try {
+      const portfolio = await fetchPortfolio(link)
+      setInvest((v) => (v.link === link ? { ...v, status: 'ok', portfolio } : v))
+    } catch {
+      setInvest((v) => (v.link === link ? { ...v, status: 'error' } : v))
+    }
+  }
+  async function paste() {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) return read(text)
+    } catch {
+      // No clipboard access: the box takes a normal paste instead
+    }
+    document.getElementById('getquin-link')?.focus()
+  }
+  const clear = () => setInvest({ text: '', link: null, status: 'idle', portfolio: null })
+
+  const steps = (highlight) => (
+    <div className="overflow-hidden rounded-[22px] bg-card px-4 py-1.5">
+      {[
+        ['Open getquin', 'Go to the portfolio you want to see here'],
+        ['Share it', 'Tap Share and turn on the public link'],
+        ['Paste it here', 'Copy the link and paste it above'],
+      ].map(([title, sub], i) => (
+        <div key={title} className={`relative flex gap-3 py-2.5 ${highlight === i ? '-mx-4 bg-warn-bg px-4' : ''}`}>
+          {i < 2 && highlight !== i && highlight !== i + 1 && <span className="absolute top-10 -bottom-2 left-[14px] w-0.5 bg-line" aria-hidden="true" />}
+          <span className={`relative grid size-[30px] shrink-0 place-items-center rounded-full text-[13.5px] font-extrabold ${highlight === i ? 'bg-[#f08c00] text-white' : 'bg-teal/12 text-teal'}`}>{i + 1}</span>
+          <span>
+            <b className="block text-[15px]">{title}</b>
+            <span className="block text-[12.5px] text-muted">{sub}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+
+  // 1 · Nothing pasted yet
+  if (invest.status === 'idle') {
+    return (
+      <div>
+        <div className={`${tealCard} px-5 pt-5 pb-[84px]`} style={tealBg}>
+          <span className="pointer-events-none absolute -top-[70px] -right-[60px] size-[210px] rounded-full bg-white/9" />
+          <Spark className="h-[78px] opacity-90" />
+          <div className="relative flex items-center gap-3">
+            <GetquinIcon className="size-[46px] rounded-[14px] shadow-[0_8px_18px_-10px_rgba(0,0,0,0.4)]" />
+            <span>
+              <b className="block font-display text-[19px]">Connect getquin</b>
+              <span className="block text-[12.5px] text-white/85">Optional · read-only</span>
+            </span>
+          </div>
+          <p className="relative mt-3.5 max-w-[260px] text-sm leading-snug text-white/95">See your portfolio's value, what you put in each month and every position.</p>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2.5 rounded-[20px] bg-card py-1.5 pr-1.5 pl-4 ring-[1.5px] ring-line ring-inset">
+          <LinkIcon className="size-5 shrink-0 text-muted/50" />
+          <input
+            id="getquin-link"
+            value={invest.text}
+            onChange={(e) => setInvest({ ...invest, text: e.target.value })}
+            onPaste={(e) => {
+              e.preventDefault()
+              read(e.clipboardData.getData('text'))
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && read(e.currentTarget.value)}
+            onBlur={(e) => e.target.value.trim() && read(e.target.value)}
+            placeholder="Paste your share link"
+            inputMode="url"
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck="false"
+            enterKeyHint="go"
+            className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-muted/50"
+          />
+          <button onClick={paste} className="h-11 shrink-0 rounded-[15px] bg-teal px-4 text-sm font-bold text-white active:opacity-85">
+            Paste
+          </button>
+        </div>
+
+        <p className={capClass}>Where to find it</p>
+        {steps(null)}
+      </div>
+    )
+  }
+
+  // The pasted link as a chip: reading / connected / couldn't read
+  const chip = (
+    <div
+      className={`flex items-center gap-3 rounded-[20px] bg-card py-2.5 pr-3 pl-3 ring-2 ring-inset ${invest.status === 'error' ? 'ring-loss' : invest.status === 'ok' ? 'ring-line' : 'ring-teal'}`}
+    >
+      {invest.status === 'error' ? (
+        <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-loss/10 text-loss">
+          <LinkIcon className="size-[18px]" />
+        </span>
+      ) : (
+        <GetquinIcon className="size-9 rounded-[11px] ring-1 ring-line" />
+      )}
+      <span className="min-w-0 flex-1">
+        <b className="block truncate text-[15px]">{shown}</b>
+        <span className={`block text-xs font-semibold ${invest.status === 'error' ? 'text-loss' : invest.status === 'ok' ? 'text-gain' : 'text-teal'}`}>
+          {invest.status === 'error' ? "Couldn't read this link" : invest.status === 'ok' ? 'Connected' : 'Reading your portfolio…'}
+        </span>
+      </span>
+      {invest.status === 'loading' ? (
+        <span className="size-[22px] shrink-0 animate-spin rounded-full border-[2.5px] border-teal/20 border-t-teal" />
+      ) : (
+        <button onClick={clear} className="shrink-0 rounded-full bg-paper px-3 py-1.5 text-[13px] font-bold text-muted">
+          {invest.status === 'ok' ? 'Change' : 'Clear'}
+        </button>
+      )}
+    </div>
+  )
+
+  // 4 · Couldn't read it
+  if (invest.status === 'error') {
+    return (
+      <div>
+        {chip}
+        <div className="mt-3 flex gap-3 rounded-[20px] bg-loss/8 p-4">
+          <span className="grid size-[38px] shrink-0 place-items-center rounded-[12px] bg-card font-display text-lg font-extrabold text-loss shadow-[0_6px_14px_-10px_rgba(194,59,34,0.6)]">!</span>
+          <span>
+            <b className="block text-[15px]">Is the share turned on?</b>
+            <span className="mt-0.5 block text-[13px] leading-snug text-muted">getquin only lets LynxOS read a portfolio whose public link is on. Turn it on, then paste the link again.</span>
+          </span>
+        </div>
+        <p className={capClass}>Where to find it</p>
+        {steps(1)}
+      </div>
+    )
+  }
+
+  // 2 · Reading
+  if (invest.status === 'loading' || !invest.portfolio) {
+    const bar = 'rounded-lg bg-gradient-to-r from-line/70 via-paper to-line/70'
+    return (
+      <div>
+        {chip}
+        <div className={`${tealCard} mt-3.5 p-5`} style={tealBg}>
+          <span className="pointer-events-none absolute -top-[70px] -right-[60px] size-[210px] rounded-full bg-white/9" />
+          <p className="relative text-[13px] font-semibold text-white/85">Portfolio value</p>
+          <div className="relative mt-2 h-9 w-48 animate-pulse rounded-xl bg-white/20" />
+          <div className="relative mt-2.5 h-3.5 w-28 animate-pulse rounded-md bg-white/14" />
+          <div className="relative mt-4 grid grid-cols-2 gap-2">
+            <div className="h-[50px] rounded-[15px] bg-white/12" />
+            <div className="h-[50px] rounded-[15px] bg-white/12" />
+          </div>
+        </div>
+        <p className={capClass}>Positions</p>
+        <div className="overflow-hidden rounded-[22px] bg-card">
+          {[70, 55, 62].map((w) => (
+            <div key={w} className="flex animate-pulse items-center gap-3 border-b border-line px-4 py-3 last:border-0">
+              <span className={`size-[42px] ${bar}`} />
+              <span className="flex-1">
+                <span className={`block h-3 ${bar}`} style={{ width: `${w}%` }} />
+                <span className={`mt-2 block h-2.5 w-[38%] ${bar}`} />
+              </span>
+              <span className={`h-3.5 w-16 ${bar}`} />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // 3 · Connected
+  const p = invest.portfolio
+  const gain = p.value_cents - p.invested_cents
+  const rate = p.invested_cents ? gain / p.invested_cents : 0
+  const [euros, decimals] = formatCents(p.value_cents).split(',')
+  const list = all ? p.positions : p.positions.slice(0, 3)
+  return (
+    <div>
+      <div className={`${tealCard} px-[18px] pt-[18px] pb-4`} style={tealBg}>
+        <span className="pointer-events-none absolute -top-[70px] -right-[60px] size-[210px] rounded-full bg-white/9" />
+        <div className="relative flex items-center justify-between">
+          <span className="text-[13px] font-semibold text-white/85">Portfolio value</span>
+          <span className="flex items-center gap-1.5 rounded-full bg-white/18 py-1 pr-2.5 pl-1 text-xs font-bold">
+            <GetquinIcon className="size-5 rounded-[6px]" />
+            getquin
+          </span>
+        </div>
+        <p className="tabular relative mt-0.5 font-display leading-tight font-extrabold tracking-tight">
+          <span className="text-[38px]">{euros}</span>
+          <span className="text-xl text-white/55">,{decimals}</span>
+        </p>
+        <span className={`tabular relative mt-1 inline-flex rounded-full bg-white/95 px-2.5 py-1 text-[12.5px] font-bold ${gain < 0 ? 'text-loss' : 'text-gain'}`}>
+          {gain < 0 ? '▼' : '▲'} {formatCents(Math.abs(gain)).replace(/,\d\d$/, '')} · {pct(rate)}
+        </span>
+        <div className="relative -mx-[18px] mt-1.5 h-10">
+          <Spark className="h-10" />
+        </div>
+        <div className="relative grid grid-cols-2 rounded-2xl bg-white/14">
+          <div className="px-3 py-2.5">
+            <span className="block text-[11px] font-semibold text-white/78">Invested</span>
+            <b className="tabular font-display text-[16.5px]">{formatCents(p.invested_cents).replace(/,\d\d$/, '')}</b>
+          </div>
+          <div className="border-l border-white/16 px-3 py-2.5">
+            <span className="block text-[11px] font-semibold text-white/78">Positions</span>
+            <b className="tabular font-display text-[16.5px]">{p.positions.length}</b>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 mb-2 flex items-center justify-between px-1">
+        <span className="text-xs font-bold tracking-[.07em] text-muted uppercase">{all ? 'Positions' : 'Top positions'}</span>
+        <span className="flex items-center gap-1 rounded-full bg-gain/12 px-2.5 py-1 text-[12.5px] font-bold text-gain">
+          <Glyph name="check" className="size-3.5" width={3} />
+          Connected
+        </span>
+      </div>
+      <div className="overflow-hidden rounded-[22px] bg-card">
+        {list.map((pos) => {
+          const share = p.value_cents ? pos.value_cents / p.value_cents : 0
+          return (
+            <div key={`${pos.ticker}-${pos.name}`} className="border-b border-line px-4 py-2.5 last:border-0">
+              <div className="flex items-center gap-3">
+                <span className="grid size-[42px] shrink-0 place-items-center overflow-hidden rounded-[13px] bg-white ring-1 ring-line">
+                  {pos.logo ? <img src={pos.logo} alt="" className="size-full object-cover" /> : <b className="text-xs text-teal">{(pos.ticker || pos.name).slice(0, 3).toUpperCase()}</b>}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <b className="block truncate text-[14.5px]">{pos.name}</b>
+                  <span className="block truncate text-xs text-muted">
+                    {[pos.ticker, pos.units != null && `${pos.units.toLocaleString('de-DE', { maximumFractionDigits: pos.units < 1 ? 4 : 2 })} units`].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <b className="tabular block font-display text-[15px]">{formatCents(pos.value_cents)}</b>
+                  <span className={`tabular block text-[11.5px] font-bold ${pos.gain_cents < 0 ? 'text-loss' : 'text-gain'}`}>
+                    {pos.gain_cents < 0 ? '−' : '+'}
+                    {formatCents(Math.abs(pos.gain_cents)).replace(/,\d\d$/, '')} · {pos.gain_rate < 0 ? '−' : '+'}
+                    {pct(pos.gain_rate)}
+                  </span>
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-2 pl-[54px]">
+                <span className="h-1 flex-1 overflow-hidden rounded-full bg-paper">
+                  <span className="block h-full rounded-full bg-gradient-to-r from-[#16b2c6] to-teal" style={{ width: `${Math.max(share * 100, 1)}%` }} />
+                </span>
+                <span className="tabular w-10 text-right text-[11px] font-semibold text-muted">{pct(share)}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-2.5 flex items-center justify-center gap-4 text-[13.5px] font-semibold text-teal">
+        {p.positions.length > 3 && (
+          <>
+            <button onClick={() => setAll((v) => !v)} className="py-2">
+              {all ? 'Show fewer' : `See all ${p.positions.length}`}
+            </button>
+            <span className="text-line">|</span>
+          </>
+        )}
+        <button onClick={clear} className="py-2">
+          Change link
+        </button>
+      </div>
     </div>
   )
 }

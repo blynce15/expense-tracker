@@ -23,8 +23,9 @@ export async function fetchExistingCategories() {
 //   categories: [{ id?, name, icon, color, kind, selected }]
 //   payments:   [{ type, name, icon, cents, frequency, nextDue, accountKey, categoryName }]  (type: expense | income)
 //   goals:      [{ key, name, icon, targetCents, deadline, startCents }]  (startCents comes out of General savings)
+//   getquinUrl: the getquin share link read in the Investments step, or null (kept in user_settings.answers)
 //   profile:    { name, photo }  (photo = small square JPEG data URL or null; kept in user_settings.answers)
-export async function saveOnboarding({ profile, accounts, categories, payments, goals = [], startDay }, done) {
+export async function saveOnboarding({ profile, accounts, categories, payments, goals = [], getquinUrl = null, startDay }, done) {
   if (!done.accountIds) {
     const ids = {}
     for (const a of accounts) {
@@ -114,7 +115,8 @@ export async function saveOnboarding({ profile, accounts, categories, payments, 
   // Name and photo live in user_settings.answers next to anything already there
   const existing = await fetchProfile().catch(() => null)
   const look = { name: profile.name.trim(), photo: profile.photo }
-  await saveProfile({ budget_start_day: startDay, answers: { ...(existing?.answers ?? {}), ...look }, onboarded_at: new Date().toISOString() })
+  const answers = { ...(existing?.answers ?? {}), ...look, ...(getquinUrl ? { getquinUrl } : {}) }
+  await saveProfile({ budget_start_day: startDay, answers, onboarded_at: new Date().toISOString() })
   window.dispatchEvent(new CustomEvent('profile:look', { detail: look }))
 
   // Refresh what the Add screen uses, so it opens with the new accounts and categories
