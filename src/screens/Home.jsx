@@ -8,6 +8,7 @@ import { budgetPeriod, computeBudget, startDayOf } from '../lib/budget'
 import { formatDayMonth, monthRange, todayISO } from '../lib/dates'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
+import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
 import { fetchProfile } from '../lib/profile'
 import { daysUntil, fetchRecurring } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
@@ -41,12 +42,22 @@ export default function Home({ onSeeAccount }) {
   const [openAccountId, setOpenAccountId] = useState(null)
   const [openPaymentId, setOpenPaymentId] = useState(null)
   const [editingPayment, setEditingPayment] = useState(null)
+  const [portfolio, setPortfolio] = useState(null) // getquin, when linked: part of the net worth
 
   const load = useCallback(async () => {
     try {
       const today = todayISO()
       const [monthStart] = monthRange(today)
-      const period = budgetPeriod(today, startDayOf(await fetchProfile()))
+      const profile = await fetchProfile()
+      const period = budgetPeriod(today, startDayOf(profile))
+      // Investments come from getquin: show the last value at once, then refresh it in the background
+      const link = profile?.answers?.getquinUrl
+      if (link) {
+        setPortfolio(cachedPortfolio(link))
+        fetchPortfolio(link)
+          .then(setPortfolio)
+          .catch(() => {}) // Keep the last value; the Investments tab shows what went wrong
+      } else setPortfolio(null)
       const [accounts, lookups, sinceMonthStart, periodExpenses, recent, recurring] = await Promise.all([
         fetchAccountsWithBalances(),
         fetchLookups(),
@@ -119,7 +130,7 @@ export default function Home({ onSeeAccount }) {
 
   return (
     <div className="space-y-3 pb-1">
-      <Balance accounts={data.accounts} hidden={hidden} onToggleHidden={toggleHidden} onOpenAccount={setOpenAccountId} />
+      <Balance accounts={data.accounts} portfolio={portfolio} hidden={hidden} onToggleHidden={toggleHidden} onOpenAccount={setOpenAccountId} />
       <BudgetCard budget={data.budget} hidden={hidden} />
       <ComingUp payments={data.upcoming} onPay={setPaying} onOpen={(p) => setOpenPaymentId(p.id)} />
       <Recent data={data} onSelect={setEditing} />
@@ -194,14 +205,15 @@ function BigAmount({ cents, hidden }) {
   )
 }
 
-// Total balance, with a fan of account cards that opens a list of all accounts.
-// Picking an account in the list opens its own page.
-function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
+// Net worth = every account (bank, cash, meal card, savings) + investments (getquin's portfolio value),
+// with a fan of account cards that opens a list of all accounts. Picking an account opens its own page.
+function Balance({ accounts, portfolio, hidden, onToggleHidden, onOpenAccount }) {
   const [open, setOpen] = useState(false)
-  // Investment accounts hold money that's been invested: listed, but not part of the total
+  // Old investment accounts (no longer offered) only count what was put in: left out, getquin has the real value
   const counted = accounts.filter((a) => a.type !== 'investment')
-  const invested = accounts.length - counted.length
-  const total = counted.reduce((s, a) => s + a.balance_cents, 0)
+  const accountsTotal = counted.reduce((s, a) => s + a.balance_cents, 0)
+  const investments = portfolio?.value_cents ?? 0
+  const total = accountsTotal + investments
   const fan = (counted.length ? counted : accounts).slice(0, 3)
   const offset = 3 - fan.length
 
@@ -222,7 +234,7 @@ function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
     <section className="relative flex min-h-[124px] items-center gap-3 px-5 py-2">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
-          <span className="truncate text-sm text-muted">Total balance</span>
+          <span className="truncate text-sm text-muted">Net worth</span>
           <button
             onClick={onToggleHidden}
             className="-my-2 grid size-9 shrink-0 place-items-center rounded-full text-muted"
@@ -271,8 +283,8 @@ function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
             <ul className="px-1.5 pb-1.5">
               <AccountOption
                 label="All accounts"
-                sub={invested ? 'Investments not included' : `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
-                cents={total}
+                sub={`${counted.length} ${counted.length === 1 ? 'account' : 'accounts'}`}
+                cents={accountsTotal}
                 hidden={hidden}
                 selected
                 onClick={() => pick(null)}
@@ -300,7 +312,31 @@ function Balance({ accounts, hidden, onToggleHidden, onOpenAccount }) {
                   chevron
                 />
               ))}
+              {portfolio && (
+                <AccountOption
+                  label="Investments"
+                  sub={`getquin · ${portfolio.positions.length} positions`}
+                  cents={investments}
+                  hidden={hidden}
+                  onClick={() => {
+                    setOpen(false)
+                    navigate('/investments')
+                  }}
+                  swatch={
+                    <span className="grid h-8 w-11 shrink-0 place-items-center rounded-lg text-white shadow-sm" style={{ background: 'linear-gradient(140deg,#16b2c6,#0c8599 55%,#075a68)' }}>
+                      <Icon name="invest" size={16} strokeWidth={2.4} />
+                    </span>
+                  }
+                  chevron
+                />
+              )}
             </ul>
+            {portfolio && (
+              <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-sm">
+                <span className="font-semibold">Net worth</span>
+                <span className="tabular font-display font-bold">{hidden ? HIDDEN : formatCents(total)}</span>
+              </div>
+            )}
             <button
               onClick={() => navigate('/settings/accounts')}
               className="flex w-full items-center justify-center gap-1 border-t border-line py-3 text-sm font-semibold text-cobalt"
