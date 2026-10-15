@@ -22,8 +22,9 @@ export async function fetchExistingCategories() {
 //   accounts:   [{ key, name, type, cents, color }]
 //   categories: [{ id?, name, icon, color, kind, selected }]
 //   payments:   [{ type, name, icon, cents, frequency, nextDue, accountKey, categoryName }]  (type: expense | income)
+//   goals:      [{ key, name, icon, targetCents, deadline, startCents }]  (startCents comes out of General savings)
 //   profile:    { name, photo }  (photo = small square JPEG data URL or null; kept in user_settings.answers)
-export async function saveOnboarding({ profile, accounts, categories, payments, startDay }, done) {
+export async function saveOnboarding({ profile, accounts, categories, payments, goals = [], startDay }, done) {
   if (!done.accountIds) {
     const ids = {}
     for (const a of accounts) {
@@ -87,6 +88,28 @@ export async function saveOnboarding({ profile, accounts, categories, payments, 
     if (error) throw error
   }
   done.payments = true
+
+  // Savings goals, then each one's starting money moved in from General savings (the savings
+  // accounts' starting balances), like a new goal on the Savings tab. Saved one by one so a retry
+  // after a dropped connection skips the ones already done.
+  done.goals = done.goals ?? {}
+  for (const g of goals) {
+    if (!done.goals[g.key]) {
+      const { data, error } = await supabase
+        .from('savings_goals')
+        .insert({ name: g.name, icon: g.icon, target_cents: g.targetCents, deadline: g.deadline })
+        .select('id')
+        .single()
+      if (error) throw error
+      done.goals[g.key] = { id: data.id, moved: false }
+    }
+    const saved = done.goals[g.key]
+    if (g.startCents > 0 && !saved.moved) {
+      const { error } = await supabase.from('goal_moves').insert({ from_goal_id: null, to_goal_id: saved.id, amount_cents: g.startCents })
+      if (error) throw error
+    }
+    saved.moved = true
+  }
 
   // Name and photo live in user_settings.answers next to anything already there
   const existing = await fetchProfile().catch(() => null)

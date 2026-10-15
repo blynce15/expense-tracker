@@ -12,7 +12,7 @@ import { budgetPeriod } from '../lib/budget'
 import { formatDayMonth, shiftDays, todayISO } from '../lib/dates'
 import { DEFAULT_CATEGORIES } from '../lib/defaults'
 import { EMOJIS } from '../lib/emojis'
-import { formatCents, parseToCents } from '../lib/money'
+import { centsToPad, formatCents, parseToCents } from '../lib/money'
 import { allowLeavingOnce } from '../lib/applock'
 import { fetchExistingCategories, saveOnboarding } from '../lib/onboarding'
 import { squareJpeg } from '../lib/profile'
@@ -28,6 +28,7 @@ const STEPS = [
   { key: 'accounts', title: 'Accounts' },
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
   { key: 'cats', title: 'Categories' },
+  { key: 'goals', title: 'Savings goals' },
   { key: 'payments', title: 'Regular payments' },
   { key: 'done' },
 ]
@@ -123,6 +124,8 @@ export default function Onboarding({ email, onDone }) {
   const [profile, setProfile] = useState({ name: '', photo: null })
   const [payments, setPayments] = useState([])
   const [paymentForm, setPaymentForm] = useState(null)
+  const [goals, setGoals] = useState([])
+  const [goalForm, setGoalForm] = useState(null)
   const [saveState, setSaveState] = useState('idle') // idle | saving | saved | failed
   const [saveError, setSaveError] = useState(null)
   const saved = useRef({})
@@ -137,13 +140,13 @@ export default function Onboarding({ email, onDone }) {
 
   useEffect(() => {
     window.scrollTo(0, 0)
-  }, [step, accountForm === null, categoryForm === null, paymentForm === null])
+  }, [step, accountForm === null, categoryForm === null, paymentForm === null, goalForm === null])
 
   async function save() {
     setSaveState('saving')
     setSaveError(null)
     try {
-      await saveOnboarding({ profile, accounts, categories, payments, startDay }, saved.current)
+      await saveOnboarding({ profile, accounts, categories, payments, goals, startDay }, saved.current)
       setSaveState('saved')
     } catch (e) {
       setSaveError(e.message)
@@ -162,6 +165,7 @@ export default function Onboarding({ email, onDone }) {
     if (key === 'accounts' && accountForm && accounts.length) return setAccountForm(null)
     if (key === 'cats' && categoryForm) return setCategoryForm(null)
     if (key === 'payments' && paymentForm) return setPaymentForm(null)
+    if (key === 'goals' && goalForm) return setGoalForm(null)
     go(-1)
   }
 
@@ -186,6 +190,30 @@ export default function Onboarding({ email, onDone }) {
       return setCategoryForm({ ...f, error: `You already have a category called ${name}.` })
     setCategories((list) => [...list, { name, icon: f.icon, color: f.color, kind: f.kind, selected: true }])
     setCategoryForm(null)
+  }
+
+  // Savings goals: the money in savings accounts (their starting balances) can be split into goals.
+  // What isn't given to a goal stays in General savings; goals can never take more than there is.
+  const savingsCents = accounts.filter((a) => a.type === 'savings').reduce((t, a) => t + a.cents, 0)
+  const hasSavings = accounts.some((a) => a.type === 'savings')
+  const goalsCents = (except) => goals.filter((g) => g.key !== except).reduce((t, g) => t + g.startCents, 0)
+  function openGoalForm(idea, goal) {
+    if (goal) {
+      return setGoalForm({ key: goal.key, name: goal.name, icon: goal.icon, target: centsToPad(goal.targetCents), deadline: goal.deadline, start: goal.startCents ? centsToPad(goal.startCents) : '', error: null })
+    }
+    setGoalForm({ key: null, name: idea?.name ?? '', icon: idea?.icon ?? '🎯', target: '', deadline: null, start: '', error: null })
+  }
+  function addGoal() {
+    const f = goalForm
+    const targetCents = parseToCents(f.target) ?? 0
+    const startCents = hasSavings ? (parseToCents(f.start) ?? 0) : 0
+    if (!f.name.trim()) return setGoalForm({ ...f, error: 'Give the goal a name.' })
+    if (!targetCents) return setGoalForm({ ...f, error: 'Set a target amount.' })
+    const free = savingsCents - goalsCents(f.key)
+    if (startCents > free) return setGoalForm({ ...f, error: `Only ${formatCents(Math.max(free, 0))} is free in savings.` })
+    const goal = { key: f.key ?? nextKey.current++, name: f.name.trim(), icon: f.icon, targetCents, deadline: f.deadline, startCents }
+    setGoals((list) => (f.key ? list.map((g) => (g.key === f.key ? goal : g)) : [...list, goal]))
+    setGoalForm(null)
   }
 
   function openPaymentForm(idea, type = 'expense') {
@@ -245,6 +273,17 @@ export default function Onboarding({ email, onDone }) {
     ) : (
       <button onClick={() => go(1)} disabled={!expenses} className={primaryClass}>{expenses ? 'Continue' : 'Pick at least one expense'}</button>
     )
+  } else if (key === 'goals') {
+    const over = goalsCents(null) > savingsCents
+    footer = goalForm ? (
+      <button onClick={addGoal} className={primaryClass}>{goalForm.key ? 'Save goal' : 'Add goal'}</button>
+    ) : over ? (
+      <button disabled className={primaryClass}>Goals are more than your savings</button>
+    ) : goals.length ? (
+      <button onClick={() => go(1)} className={primaryClass}>Continue</button>
+    ) : (
+      <button onClick={() => go(1)} className="w-full rounded-2xl bg-card py-4 text-lg font-semibold text-ink ring-1 ring-line">Skip for now</button>
+    )
   } else if (key === 'payments')
     footer = paymentForm ? (
       <button onClick={addPayment} className={primaryClass}>{paymentForm.type === 'income' ? 'Add income' : 'Add payment'}</button>
@@ -268,7 +307,7 @@ export default function Onboarding({ email, onDone }) {
       <div className="mx-auto max-w-lg px-5 pt-[calc(env(safe-area-inset-top)+1rem)] pb-[calc(env(safe-area-inset-bottom)+7.5rem)]">
         {key === 'welcome' && <Welcome />}
         {key === 'done' && (
-          <Finish accounts={accounts} startDay={startDay} categories={categories} payments={payments} saveState={saveState} saveError={saveError} />
+          <Finish accounts={accounts} startDay={startDay} categories={categories} goals={goals} payments={payments} saveState={saveState} saveError={saveError} />
         )}
         {key !== 'welcome' && key !== 'done' && (
           <>
@@ -282,8 +321,12 @@ export default function Onboarding({ email, onDone }) {
                 ))}
               </div>
             </div>
-            <h1 className={`mt-6 font-display text-[34px] leading-[1.02] font-extrabold tracking-tight ${STEPS[step].center ? 'text-center' : ''}`}>{STEPS[step].title}</h1>
-            {STEPS[step].sub ? <p className="mt-2 mb-5 text-muted">{STEPS[step].sub}</p> : <div className="mb-5" />}
+            {!(key === 'goals' && goalForm) && (
+              <>
+                <h1 className={`mt-6 font-display text-[34px] leading-[1.02] font-extrabold tracking-tight ${STEPS[step].center ? 'text-center' : ''}`}>{STEPS[step].title}</h1>
+                {STEPS[step].sub ? <p className="mt-2 mb-5 text-muted">{STEPS[step].sub}</p> : <div className="mb-5" />}
+              </>
+            )}
 
             {key === 'profile' && <ProfileStep email={email} profile={profile} setProfile={setProfile} />}
             {key === 'accounts' && (
@@ -309,6 +352,23 @@ export default function Onboarding({ email, onDone }) {
                 setKind={setCategoryKind}
                 form={categoryForm}
                 setForm={setCategoryForm}
+              />
+            )}
+            {key === 'goals' && (
+              <GoalsStep
+                today={today}
+                goals={goals}
+                form={goalForm}
+                setForm={setGoalForm}
+                savingsCents={savingsCents}
+                hasSavings={hasSavings}
+                savingsName={accounts.find((a) => a.type === 'savings')?.name}
+                freeFor={(except) => savingsCents - goalsCents(except)}
+                onOpen={openGoalForm}
+                onRemove={(k) => {
+                  setGoals((list) => list.filter((g) => g.key !== k))
+                  setGoalForm(null)
+                }}
               />
             )}
             {key === 'payments' && (
@@ -896,6 +956,257 @@ function CategoryCreator({ form, setForm }) {
   )
 }
 
+// ---------- Savings goals ----------
+// Goal ideas (tile label, goal name, emoji). A goal's card colour comes from its emoji (no colour is stored).
+const GOAL_IDEAS = [
+  ['Emergency', 'Emergency fund', '🛟'],
+  ['Travel', 'Travel', '✈️'],
+  ['House', 'House', '🏠'],
+  ['Car', 'Car', '🚗'],
+  ['Wedding', 'Wedding', '💍'],
+  ['Studies', 'Studies', '🎓'],
+  ['Gift', 'Gift', '🎁'],
+]
+const GOAL_EMOJIS = ['🎯', '🛟', '✈️', '🏠', '🚗', '💍', '🎓', '🎁', '💻', '🐶', '🏖️', '📱']
+const GOAL_COLORS = { '🎯': '#1f4fe0', '🛟': '#2b8a3e', '✈️': '#1c7ed6', '🏠': '#e8590c', '🚗': '#7048e8', '💍': '#d6336c', '🎓': '#0c8599', '🎁': '#f08c00', '💻': '#495057', '🐶': '#a0522d', '🏖️': '#e8a400', '📱': '#0b1b45' }
+const goalColor = (icon) => GOAL_COLORS[icon] ?? '#1f4fe0'
+// "Jun 2027"
+const monthYear = (iso) => {
+  const [y, m] = iso.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }).replace('Sept', 'Sep')
+}
+const wholeEuros = (cents) => formatCents(cents).replace(/,\d\d$/, '')
+
+// A goal as a coloured card: emoji, name, money in it, progress bar, % of target and deadline
+function GoalCard({ goal, className = '', style, onClick }) {
+  const color = goalColor(goal.icon)
+  const pct = goal.targetCents ? Math.min(100, Math.round((goal.startCents / goal.targetCents) * 100)) : 0
+  const Tag = onClick ? 'button' : 'div'
+  return (
+    <Tag
+      onClick={onClick}
+      className={`relative block w-full overflow-clip rounded-[22px] p-4 text-left text-white ${className}`}
+      style={{ background: `linear-gradient(140deg, ${color} 0%, ${shade(color, 0.72)} 100%)`, ...style }}
+    >
+      <span className="pointer-events-none absolute -top-12 -right-10 size-[150px] rounded-full bg-white/12" />
+      <span className="relative flex items-center gap-2.5">
+        <span className="grid size-[38px] shrink-0 place-items-center rounded-[12px] bg-white/90 text-xl">{goal.icon}</span>
+        <b className={`min-w-0 flex-1 truncate font-display text-[17px] ${goal.name ? '' : 'text-white/60'}`}>{goal.name || 'Goal name'}</b>
+        <b className="tabular shrink-0 font-display text-[19px]">{wholeEuros(goal.startCents)}</b>
+      </span>
+      <span className="relative mt-5 block h-1.5 overflow-hidden rounded-full bg-white/25">
+        <span className="block h-full rounded-full bg-white transition-[width] duration-300" style={{ width: `${Math.max(pct, 2)}%` }} />
+      </span>
+      <span className="tabular relative mt-2 flex justify-between text-[12.5px] text-white/90">
+        <span>{goal.targetCents ? `${pct}% of ${wholeEuros(goal.targetCents)}` : 'Set a target'}</span>
+        <span>{goal.deadline ? `by ${monthYear(goal.deadline)}` : 'No deadline'}</span>
+      </span>
+    </Tag>
+  )
+}
+
+function GoalsStep({ today, goals, form, setForm, savingsCents, hasSavings, savingsName, freeFor, onOpen, onRemove }) {
+  const [picking, setPicking] = useState(null) // null | 'target' | 'start' | 'date'
+
+  if (form) {
+    const targetCents = parseToCents(form.target) ?? 0
+    const startCents = hasSavings ? (parseToCents(form.start) ?? 0) : 0
+    const free = Math.max(freeFor(form.key), 0)
+    const color = goalColor(form.icon)
+    const emojis = GOAL_EMOJIS.includes(form.icon) ? GOAL_EMOJIS : [form.icon, ...GOAL_EMOJIS]
+    const close = () => setPicking(null)
+    return (
+      <div className="pt-6">
+        <div className="mb-3.5 flex items-center justify-between px-1">
+          <p className="text-sm font-semibold text-muted">{form.key ? 'Edit goal' : 'New goal'}</p>
+          <SectionAction label="Cancel" onClick={() => setForm(null)} />
+        </div>
+
+        {/* The goal's own card, as it will look in the list */}
+        <GoalCard goal={{ name: form.name.trim(), icon: form.icon, startCents, targetCents, deadline: form.deadline }} style={{ boxShadow: `0 18px 32px -18px ${color}` }} />
+
+        <div className="-mx-5 mt-4 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
+          {emojis.map((e) => (
+            <button
+              key={e}
+              onClick={() => setForm({ ...form, icon: e })}
+              aria-pressed={form.icon === e}
+              className="grid size-10 shrink-0 place-items-center rounded-[14px] bg-card text-xl transition-shadow"
+              style={form.icon === e ? { backgroundColor: `${goalColor(e)}22`, boxShadow: `0 0 0 2px ${goalColor(e)}` } : undefined}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3.5 overflow-hidden rounded-[20px] bg-card">
+          <Row label="Name">
+            <input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value, error: null })}
+              placeholder="e.g. Japan trip"
+              maxLength={40}
+              enterKeyHint="done"
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              className={`w-full ${plainInput}`}
+            />
+          </Row>
+          <Row label="Target">
+            <button onClick={() => setPicking('target')} className={`tabular text-base font-semibold ${targetCents ? 'text-ink' : 'text-muted/60'}`}>
+              {formatCents(targetCents)}
+            </button>
+          </Row>
+          <Row label="Deadline">
+            <button onClick={() => setPicking('date')} className={`flex items-center gap-1 text-base font-semibold ${form.deadline ? '' : 'font-normal text-muted/60'}`}>
+              {form.deadline ? monthYear(form.deadline) : 'Optional'}
+              <Icon name="chevronRight" size={16} className="text-muted/60" />
+            </button>
+          </Row>
+        </div>
+
+        {hasSavings ? (
+          <div className="mt-2.5 overflow-hidden rounded-[20px] bg-card">
+            <button onClick={() => setPicking('start')} className="flex min-h-[62px] w-full items-center gap-3 px-4 text-left">
+              <span className="flex-1">
+                <span className="block text-[15px] text-muted">Start with</span>
+                <span className="tabular block text-xs text-muted/80">{wholeEuros(free)} free in savings</span>
+              </span>
+              <span className={`tabular text-base font-semibold ${startCents ? 'text-ink' : 'text-muted/60'}`}>{formatCents(startCents)}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center gap-3 rounded-[20px] bg-gradient-to-br from-tint-from to-tint-to px-4 py-3.5">
+            <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-card text-cobalt shadow-[0_4px_10px_-6px_rgba(31,79,224,0.5)]">
+              <Glyph name="savings" className="size-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <b className="block text-[14.5px]">Starts at €0</b>
+              <span className="mt-0.5 block text-[12.5px] leading-snug text-muted">It fills up once you have a savings account and move money into it.</span>
+            </span>
+          </div>
+        )}
+
+        {form.error && <p className="mt-3 px-1 text-sm text-loss">{form.error}</p>}
+        {form.key && (
+          <button onClick={() => onRemove(form.key)} className="mx-auto mt-5 block py-2 text-sm font-semibold text-loss">
+            Remove goal
+          </button>
+        )}
+
+        {picking === 'target' && <AmountPad label="Target" amount={form.target} onChange={(target) => setForm({ ...form, target, error: null })} onDone={close} />}
+        {picking === 'start' && (
+          <AmountPad
+            label="Start with"
+            amount={form.start}
+            max={free}
+            maxText={`Only ${wholeEuros(free)} is free in savings`}
+            onChange={(start) => setForm({ ...form, start, error: null })}
+            onDone={close}
+          />
+        )}
+        {picking === 'date' && (
+          <Sheet
+            title="Deadline"
+            onClose={close}
+            action={
+              form.deadline && (
+                <button
+                  onClick={() => {
+                    setForm({ ...form, deadline: null })
+                    close()
+                  }}
+                  className="px-2 text-sm font-semibold text-loss"
+                >
+                  Remove
+                </button>
+              )
+            }
+          >
+            <DatePicker
+              value={form.deadline ?? today}
+              dimFuture={false}
+              quickPicks={false}
+              onChange={(iso) => {
+                setForm({ ...form, deadline: iso < today ? today : iso })
+                close()
+              }}
+            />
+          </Sheet>
+        )}
+      </div>
+    )
+  }
+
+  const free = freeFor(null)
+  const ideas = GOAL_IDEAS.filter(([, name]) => !goals.some((g) => g.name.toLowerCase() === name.toLowerCase()))
+  const STEP = 124
+  return (
+    <div>
+      {/* What's in savings, and how much of it isn't in a goal yet */}
+      <div className="flex items-end justify-between px-1 pb-3.5">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-semibold text-muted">{hasSavings ? `In savings · ${savingsName}` : 'In savings'}</p>
+          <b className={`tabular block font-display text-[30px] leading-tight tracking-tight ${hasSavings ? '' : 'text-muted'}`}>{wholeEuros(savingsCents)}</b>
+        </div>
+        <span className={`tabular shrink-0 rounded-full bg-card px-3 py-1.5 text-[13px] font-bold ${!hasSavings ? 'text-muted' : free < 0 ? 'text-loss' : 'text-cobalt'}`}>
+          {!hasSavings ? 'No savings account' : free < 0 ? `${wholeEuros(-free)} too much` : `${wholeEuros(free)} free`}
+        </span>
+      </div>
+
+      {goals.length === 0 ? (
+        <div className="rounded-[22px] bg-card px-5 pt-6 pb-5 text-center">
+          {/* A small stack of goal cards */}
+          <div className="relative mx-auto mb-3 h-24 w-[230px]" aria-hidden="true">
+            <span className="absolute inset-x-6 top-0 h-[70px] rounded-2xl opacity-45" style={{ background: 'linear-gradient(140deg,#94d82d,#7aa625)' }} />
+            <span className="absolute inset-x-3 top-3.5 h-[70px] rounded-2xl opacity-60" style={{ background: 'linear-gradient(140deg,#1c7ed6,#155ea0)' }} />
+            <span className="absolute inset-x-0 top-7 flex h-[68px] items-center gap-2.5 rounded-2xl px-3.5 text-white shadow-[0_10px_22px_-12px_rgba(11,27,69,0.5)]" style={{ background: 'linear-gradient(140deg,#2b8a3e,#22702f)' }}>
+              <span className="grid size-8 place-items-center rounded-[10px] bg-white/90 text-[17px]">🛟</span>
+              <b className="flex-1 text-left font-display text-sm">Your first goal</b>
+              <b className="font-display text-[15px]">€0</b>
+            </span>
+          </div>
+          <b className="font-display text-lg">{hasSavings ? 'Give your savings a purpose' : 'Goals start at €0'}</b>
+          <p className="mt-1.5 text-[13.5px] leading-snug text-muted">
+            {hasSavings
+              ? `Split the ${wholeEuros(savingsCents)} in your savings into goals. What you don't put in a goal stays in General savings.`
+              : "You didn't add a savings account. Create goals now; they fill up as you move money to savings."}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* The goals stacked like cards in a wallet; tap one to edit it */}
+          <div className="relative" style={{ height: STEP * (goals.length - 1) + 150 }}>
+            {goals.map((g, i) => (
+              <div key={g.key} className="absolute inset-x-0" style={{ top: i * STEP }}>
+                <GoalCard goal={g} onClick={() => onOpen(null, g)} className="h-[150px]" style={{ boxShadow: '0 -8px 20px -12px rgba(11,27,69,0.45)' }} />
+              </div>
+            ))}
+          </div>
+          {free < 0 && <p className="mt-3 px-1 text-sm text-loss">Your goals start with more than is in savings. Tap a goal and lower its Start with.</p>}
+        </>
+      )}
+
+      <p className={capClass}>{goals.length ? 'Add another' : 'Add a goal'}</p>
+      <div className="grid grid-cols-4 gap-2">
+        {ideas.map(([label, name, icon]) => (
+          <button key={name} onClick={() => onOpen({ name, icon })} className="flex min-w-0 flex-col items-center gap-1.5 rounded-[18px] bg-card px-1 pt-3 pb-2.5 active:scale-[.97]">
+            <span className="grid size-10 place-items-center rounded-[12px] text-[21px]" style={{ backgroundColor: `${goalColor(icon)}22` }}>
+              {icon}
+            </span>
+            <span className="w-full truncate text-center text-[11.5px] font-semibold text-muted">{label}</span>
+          </button>
+        ))}
+        <button onClick={() => onOpen(null)} className="flex flex-col items-center justify-center gap-1.5 rounded-[18px] border-[1.5px] border-dashed border-cobalt/40 px-1 py-2.5 text-cobalt">
+          <span className="grid size-10 place-items-center rounded-[12px] bg-cobalt/10">
+            <Glyph name="plus" className="size-5" width={2.4} />
+          </span>
+          <span className="text-[11.5px] font-semibold">Other</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ---------- Step 5: regular payments ----------
 // "In 5 days · Thu 16 Oct" / "Today" / "Tomorrow · Fri 17 Oct"
 function whenText(iso, today) {
@@ -1150,7 +1461,7 @@ function PaymentsStep({ today, accounts, categories, payments, form, setForm, on
 }
 
 // ---------- Finish ----------
-function Finish({ accounts, startDay, categories, payments, saveState, saveError }) {
+function Finish({ accounts, startDay, categories, goals, payments, saveState, saveError }) {
   const expenses = categories.filter((c) => c.kind === 'expense' && c.selected)
   const income = categories.filter((c) => c.kind === 'income' && c.selected)
   const period = budgetPeriod(todayISO(), startDay)
@@ -1172,6 +1483,12 @@ function Finish({ accounts, startDay, categories, payments, saveState, saveError
     ],
     [<Glyph key="i" name="calendar" />, 'Budget period', `Starts on the ${ordinal(startDay)} of each month`, <b key="v" className="text-sm">{formatDayMonth(period.start)} – {formatDayMonth(period.end)}</b>],
     [<Glyph key="i" name="tag" />, `${expenses.length} expense · ${income.length} income categories`, [...expenses, ...income].slice(0, 8).map((c) => c.icon).join(' ')],
+    [
+      <Glyph key="i" name="savings" />,
+      `${goals.length} savings goal${goals.length === 1 ? '' : 's'}`,
+      goals.length ? goals.map((g) => `${g.icon} ${g.name}`).join(', ') : 'You can add them later',
+      goals.some((g) => g.startCents) ? <b key="v" className="tabular text-sm">{formatCents(goals.reduce((t, g) => t + g.startCents, 0)).replace(/,\d\d$/, '')}</b> : null,
+    ],
     [
       <Glyph key="i" name="repeat" />,
       `${payments.length} regular payment${payments.length === 1 ? '' : 's'}`,
