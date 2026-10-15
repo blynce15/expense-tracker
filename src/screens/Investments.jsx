@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import EmptyLynx from '../components/EmptyLynx'
+import { FullEmpty } from '../components/EmptyLynx'
 import Icon from '../components/Icon'
 import LynxWatermark from '../components/LynxWatermark'
 import Sheet from '../components/Sheet'
@@ -86,14 +86,11 @@ export default function Investments() {
   if (!link) {
     return (
       <div className="px-4 pt-1 pb-6">
-        <div className="rounded-[22px] bg-card px-5 py-8 text-center">
-          <EmptyLynx />
-          <p className="mt-2 font-display text-lg font-bold">Track what you invest</p>
-          <p className="mt-1 text-muted">Connect your getquin portfolio to see its value, what you put in each month and your positions.</p>
-          <button onClick={() => setEditingLink(true)} className="mt-4 rounded-full bg-teal px-5 py-2.5 text-sm font-semibold text-card active:opacity-80">
+        <FullEmpty title="Track what you invest" text="Connect your getquin portfolio to see its value, what you put in each month and your positions.">
+          <button onClick={() => setEditingLink(true)} className="rounded-full bg-teal px-6 py-3 text-[15px] font-semibold text-white active:opacity-80">
             Connect getquin
           </button>
-        </div>
+        </FullEmpty>
         {linkSheet}
       </div>
     )

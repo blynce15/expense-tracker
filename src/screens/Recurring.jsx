@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import LynxWatermark from '../components/LynxWatermark'
-import EmptyLynx from '../components/EmptyLynx'
+import { FullEmpty } from '../components/EmptyLynx'
 import { AccountMark } from '../components/BankCard'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
@@ -101,11 +101,11 @@ export default function Recurring() {
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
       {payments.length === 0 ? (
-        <button onClick={() => setEditing('new')} className="w-full rounded-[26px] bg-card px-5 py-8 text-center">
-          <EmptyLynx />
-          <p className="mt-2 font-display text-lg font-bold">Add recurring payments and income</p>
-          <p className="mt-1 text-muted">Rent, subscriptions, your salary. See what's due and record each one with one tap.</p>
-        </button>
+        <FullEmpty title="Add recurring payments and income" text="Rent, subscriptions, your salary. See what's due and record each one with one tap.">
+          <button onClick={() => setEditing('new')} className="rounded-full bg-cobalt px-6 py-3 text-[15px] font-semibold text-white active:bg-cobalt-deep">
+            Add a payment
+          </button>
+        </FullEmpty>
       ) : (
         <>
           <Summary perMonth={perMonth} incomePerMonth={incomePerMonth} count={active.length} />
