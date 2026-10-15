@@ -28,8 +28,8 @@ const STEPS = [
   { key: 'accounts', title: 'Accounts' },
   { key: 'day', title: 'When does your month start?', sub: 'Pick your payday. Your budget starts over on this day.' },
   { key: 'cats', title: 'Categories' },
-  { key: 'goals', title: 'Savings goals' },
   { key: 'payments', title: 'Regular payments' },
+  { key: 'goals', title: 'Savings goals' },
   { key: 'done' },
 ]
 const NUMBERED = STEPS.length - 2
