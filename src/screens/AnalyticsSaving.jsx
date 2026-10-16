@@ -1,277 +1,566 @@
 import { useEffect, useState } from 'react'
-import { Card, Chip, Mini, pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
-import { BankLogo } from '../components/BankCard'
+import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
-import { fetchAnalytics, monthShort, periodLabel } from '../lib/analytics'
-import { bankFor } from '../lib/banks'
+import { fetchAnalytics, monthShort, periodLabel, shiftMonth } from '../lib/analytics'
+import { todayISO } from '../lib/dates'
+import { fetchGoalsState, savingsEffect } from '../lib/goals'
+import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
+import { navigate } from '../lib/useRoute'
 
 // Signed whole euros, e.g. "+€200" / "−€50"
 const signed = (cents) => (cents < 0 ? `−${whole(-cents)}` : `+${whole(cents)}`)
+const TEAL = '#0c8599'
+const BLUE = '#1f4fe0'
 
-// Analytics → Saving: how much of your income you save (net money into savings accounts),
-// month by month, your rate over time, year totals and which savings accounts the money went to.
+// Analytics → What you keep: money kept = saved (net into savings accounts) + invested (Invest − Take out).
+// One section per question: how much you kept, where it went, getting better, how consistent,
+// what it adds up to, what it's for (savings goals).
 export default function AnalyticsSaving() {
   const [period, setPeriod] = usePeriod()
   const [data, setData] = useState(null)
+  const [goals, setGoals] = useState(null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
     let cancelled = false
-    fetchAnalytics(period)
-      .then((a) => !cancelled && setData(a))
+    Promise.all([fetchAnalytics(period), fetchLookups()])
+      .then(([a, lookups]) => !cancelled && setData({ ...a, goalList: lookups.goals ?? [] }))
       .catch((e) => !cancelled && setError(e.message))
     return () => {
       cancelled = true
     }
   }, [period])
 
-  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your saving: {error}</p>
+  // Goals with their money today and their pace (not tied to the chosen period)
+  useEffect(() => {
+    fetchGoalsState()
+      .then(setGoals)
+      .catch(() => setGoals(null))
+  }, [])
+
+  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load what you keep: {error}</p>
   const a = data && data.period === period ? data : null
 
   return (
-    <div className="space-y-3 px-4 pt-1 pb-6">
+    <div className="px-4 pt-1 pb-6">
       <PeriodBar period={period} onChange={setPeriod} />
       {a && (
         <>
-          <Kept a={a} />
-          <IncomeVsKept a={a} />
-          <RateOverTime a={a} />
-          <YearTotals a={a} />
-          {(a.keepAccounts.length > 0 || a.totals.invested !== 0) && <Accounts a={a} />}
+          <Section n={1} title="How much you kept">
+            <Hero a={a} />
+          </Section>
+          <Section n={2} title="Where it went">
+            <WhereItWent a={a} />
+          </Section>
+          <Section n={3} title="Getting better?">
+            <Better a={a} />
+          </Section>
+          <Section n={4} title="How consistent">
+            <Consistent a={a} />
+          </Section>
+          <Section n={5} title="What it adds up to">
+            <AddsUp a={a} />
+          </Section>
+          {goals?.goals?.length > 0 && (
+            <Section n={6} title="What it's for">
+              <Goals state={goals} />
+            </Section>
+          )}
         </>
       )}
     </div>
   )
 }
 
-// The 12 months up to the period's end: income, saved, invested, kept (saved + invested) and the rate (kept ÷ income)
-function monthRows(a) {
-  const now = new Date()
-  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  return a.last12.map((k) => {
-    const m = a.byMonth.get(k) ?? { income: 0, saved: 0, invested: 0 }
-    const kept = m.saved + m.invested
-    return { key: k, income: m.income, saved: m.saved, invested: m.invested, kept, rate: m.income > 0 ? kept / m.income : null, partial: k === thisMonth, future: k > thisMonth }
-  })
-}
-
-function Kept({ a }) {
-  const { totals, saving } = a
-  const income = totals.income
-  const r = 34
-  const c = 2 * Math.PI * r
-  const savedShare = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
-  const investedShare = income > 0 ? Math.max(0, Math.min(1 - savedShare, totals.invested / income)) : 0
-  const [euros, decimals] = formatCents(saving.kept).split(',')
+function Section({ n, title, children }) {
   return (
-    <section className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-4 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-white/85">You kept in {periodLabel(a.period)}</p>
-        {saving.avgRate !== null && <Chip tone="light">Usual {pct(saving.avgRate)}</Chip>}
-      </div>
-      <div className="mt-2 flex items-center gap-4">
-        <div className="relative grid size-[84px] shrink-0 place-items-center">
-          <svg width="84" height="84" viewBox="0 0 84 84" className="absolute inset-0 -rotate-90" aria-hidden="true">
-            <circle cx="42" cy="42" r={r} fill="none" strokeWidth="10" stroke="rgba(255,255,255,0.2)" />
-            {savedShare > 0 && <circle cx="42" cy="42" r={r} fill="none" strokeWidth="10" stroke="#fff" strokeDasharray={`${savedShare * c} ${c}`} />}
-            {investedShare > 0 && (
-              <circle
-                cx="42"
-                cy="42"
-                r={r}
-                fill="none"
-                strokeWidth="10"
-                stroke="#7fe3ee"
-                strokeDasharray={`${investedShare * c} ${c}`}
-                strokeDashoffset={-savedShare * c}
-              />
-            )}
-          </svg>
-          <span className="tabular relative font-display text-lg font-extrabold">{saving.rate !== null ? pct(Math.max(0, saving.rate)) : '—'}</span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="tabular truncate font-display leading-tight font-bold">
-            <span className="text-[32px] tracking-tight">{euros}</span>
-            <span className="text-lg text-white/55">,{decimals}</span>
-          </p>
-          <p className="text-sm text-white/80">{income > 0 ? `of ${whole(income)} income` : 'No income recorded'}</p>
-          {totals.invested !== 0 && (
-            <p className="mt-1 flex flex-wrap gap-x-2.5 text-xs text-white/85">
-              <span className="flex items-center gap-1">
-                <span className="size-2 rounded-full bg-white" /> Saved {whole(totals.saved)}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="size-2 rounded-full bg-[#7fe3ee]" /> Invested {whole(totals.invested)}
-              </span>
-            </p>
-          )}
-        </div>
-      </div>
-      {saving.kept < 0 && <p className="mt-2 text-xs text-white/85">More came out of savings and investments than went in.</p>}
+    <section>
+      <h2 className="mt-5 mb-2.5 flex items-center gap-2 px-1 text-[11.5px] font-bold tracking-[0.08em] text-muted uppercase">
+        <span className="grid size-5 place-items-center rounded-full bg-teal text-[11px] tracking-normal text-white">{n}</span>
+        {title}
+      </h2>
+      {children}
     </section>
   )
 }
 
-// Income per month as a light bar, with the saved part (blue) and the invested part (teal) inside it. Tap a month.
-function IncomeVsKept({ a }) {
-  const rows = monthRows(a)
-  const [picked, setPicked] = useState(null)
-  const W = 300
-  const H = 110
-  const colW = W / 12
-  const barW = colW - 6
-  const max = Math.max(1, ...rows.map((r) => Math.max(r.income, r.kept)))
-  const h = (c) => (Math.max(0, c) / max) * H
-  const p = picked === null ? null : rows[picked]
+const card = 'rounded-[24px] bg-card p-4'
+
+// The 12 months up to the period's end: income, saved, invested, kept and the rate (kept ÷ income)
+function monthRows(a) {
+  const thisMonth = todayISO().slice(0, 7)
+  return a.last12.map((k) => {
+    const m = a.byMonth.get(k) ?? { income: 0, saved: 0, invested: 0, spent: 0 }
+    const kept = m.saved + m.invested
+    return { key: k, ...m, kept, rate: m.income > 0 ? kept / m.income : null, partial: k === thisMonth, future: k > thisMonth }
+  })
+}
+
+// ---------- 1 · How much you kept ----------
+function Hero({ a }) {
+  const { totals, saving } = a
+  const income = totals.income
+  const size = 118
+  const r = 48
+  const c = 2 * Math.PI * r
+  const saved = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
+  const invested = income > 0 ? Math.max(0, Math.min(1 - saved, totals.invested / income)) : 0
+  const usual = saving.avgRate
+  const ang = (usual ?? 0) * 2 * Math.PI - Math.PI / 2
+  const tick = (d) => [size / 2 + Math.cos(ang) * (r + d), size / 2 + Math.sin(ang) * (r + d)]
+  const diff = saving.rate !== null && usual !== null ? Math.round((saving.rate - usual) * 100) : null
+  const [euros, decimals] = formatCents(saving.kept).split(',')
+
   return (
-    <Card icon="bars" color="var(--color-cobalt)" title="Income vs kept">
-      <svg viewBox={`0 0 ${W} ${H + 16}`} className="block h-auto w-full overflow-visible" role="img" aria-label="Income and how much of it you saved and invested, per month">
-        {rows.map((r, i) => {
-          const x = i * colW + 3
-          const hs = h(r.saved)
-          const hi = h(r.invested)
-          return (
-            <g key={r.key} onClick={() => !r.future && setPicked(i)} className="cursor-pointer" opacity={r.future ? 0.3 : picked === null || picked === i ? 1 : 0.45}>
-              <rect x={i * colW} y="0" width={colW} height={H} fill="transparent" />
-              {r.income > 0 && <rect x={x} y={H - h(r.income)} width={barW} height={h(r.income)} rx="5" fill="var(--color-line)" />}
-              {hs > 0 && <rect x={x + 3} y={H - hs} width={barW - 6} height={hs} rx="3" fill="var(--color-cobalt)" />}
-              {hi > 0 && <rect x={x + 3} y={H - hs - hi} width={barW - 6} height={hi} rx="3" fill="var(--color-teal)" />}
-              <text x={x + barW / 2} y={H + 13} textAnchor="middle" fontSize="9.5" className={picked === i ? 'fill-ink font-bold' : 'fill-muted'}>
-                {monthShort(r.key)[0]}
-              </text>
+    <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#17b3c6] to-[#0a6f80] p-4 text-white shadow-[0_18px_30px_-20px_rgba(12,133,153,0.9)]">
+      <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/10" />
+      <div className="relative flex items-center gap-4">
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+          <svg width={size} height={size} aria-hidden="true">
+            <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+              <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,.2)" strokeWidth="12" />
+              {saved > 0 && <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#fff" strokeWidth="12" strokeDasharray={`${saved * c} ${c}`} />}
+              {invested > 0 && (
+                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#a5f0f7" strokeWidth="12" strokeDasharray={`${invested * c} ${c}`} strokeDashoffset={-saved * c} />
+              )}
             </g>
-          )
-        })}
-      </svg>
-      <div className="mt-2 flex flex-wrap justify-center gap-x-3 text-xs text-muted">
-        <span className="flex items-center gap-1">
-          <span className="size-2 rounded-sm bg-line" /> Income
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="size-2 rounded-sm bg-cobalt" /> Saved
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="size-2 rounded-sm bg-teal" /> Invested
-        </span>
+            {usual !== null && usual > 0 && <line x1={tick(12)[0]} y1={tick(12)[1]} x2={tick(-12)[0]} y2={tick(-12)[1]} stroke="#ffd43b" strokeWidth="3" strokeLinecap="round" />}
+          </svg>
+          <span className="absolute inset-0 grid place-items-center text-center">
+            <span>
+              <b className="tabular block font-display text-[26px] leading-none">{saving.rate !== null ? pct(Math.max(0, saving.rate)) : '—'}</b>
+              <span className="text-[11px] text-white/85">of income</span>
+            </span>
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-white/90">You kept</p>
+          <p className="tabular truncate font-display leading-tight font-bold">
+            <span className="text-[32px]">{euros}</span>
+            <span className="text-lg text-white/60">,{decimals}</span>
+          </p>
+          <p className="text-[12.5px] text-white/90">{income > 0 ? `of ${whole(income)} income` : 'No income recorded'}</p>
+          {diff !== null && (
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-white/90">
+              <span className={`rounded-full bg-white px-2 py-0.5 font-bold ${diff >= 0 ? 'text-[#0f8a5f]' : 'text-[#c26b00]'}`}>
+                {diff === 0 ? '= same' : `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)} pts`}
+              </span>
+              vs usual {pct(usual)}
+            </p>
+          )}
+        </div>
       </div>
-      <p className="mt-1.5 min-h-5 text-center text-[13px] text-muted">
-        {p ? (
-          <>
-            {monthShort(p.key)}
-            {p.partial && ' (so far)'}: income <b className="tabular text-ink">{whole(p.income)}</b>, kept{' '}
-            <b className="tabular text-ink">
-              {whole(p.kept)}
-              {p.rate !== null && ` (${pct(Math.max(0, p.rate))})`}
-            </b>
-          </>
-        ) : (
-          'Tap a month for details'
+      <div className="relative mt-3 flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-white/95">
+        <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-[3px] bg-white" /> Saved {whole(totals.saved)}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="size-2.5 rounded-[3px] bg-[#a5f0f7]" /> Invested {whole(totals.invested)}
+        </span>
+        {usual !== null && usual > 0 && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-[3px] rounded-[1px] bg-[#ffd43b]" /> Your usual
+          </span>
         )}
-      </p>
-    </Card>
-  )
-}
-
-// Share of income kept each month, with the usual (average) rate dashed
-function RateOverTime({ a }) {
-  const rows = monthRows(a).filter((r) => !r.future)
-  const points = rows.map((r, i) => ({ ...r, i })).filter((r) => r.rate !== null)
-  const avg = a.saving.avgRate
-  if (points.length < 2) return null
-  const W = 300
-  const H = 80
-  const top = Math.max(0.05, ...points.map((p) => p.rate), avg ?? 0) * 1.15
-  const bottom = Math.min(0, ...points.map((p) => p.rate))
-  const x = (i) => (i / Math.max(1, rows.length - 1)) * W
-  const y = (v) => H - ((v - bottom) / (top - bottom)) * H
-  const d = points.map((p, n) => `${n ? 'L' : 'M'}${x(p.i).toFixed(1)} ${y(p.rate).toFixed(1)}`).join(' ')
-  const last = points.at(-1)
-  return (
-    <Card icon="chart" color="var(--color-cobalt)" title="Savings rate">
-      <svg viewBox={`0 0 ${W} ${H + 16}`} className="block h-auto w-full overflow-visible" role="img" aria-label="Share of income saved each month">
-        {bottom < 0 && <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="var(--color-line)" />}
-        {avg !== null && <line x1="0" x2={W} y1={y(avg)} y2={y(avg)} stroke="var(--color-gain)" strokeOpacity=".7" strokeDasharray="4 4" />}
-        <path d={d} fill="none" stroke="var(--color-cobalt)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        {points.map((p) => (
-          <circle key={p.key} cx={x(p.i)} cy={y(p.rate)} r={p === last ? 4.5 : 2.5} fill="var(--color-cobalt)" stroke="var(--color-card)" strokeWidth={p === last ? 2 : 0} />
-        ))}
-        <text x="0" y={H + 14} fontSize="10" className="fill-muted">
-          {monthShort(rows[0].key)}
-        </text>
-        <text x={W} y={H + 14} textAnchor="end" fontSize="10" className="fill-muted">
-          {monthShort(rows.at(-1).key)}
-        </text>
-      </svg>
-      <p className="mt-1.5 text-center text-[13px] text-muted">
-        {monthShort(last.key)}
-        {last.partial && ' so far'}: <b className="tabular text-ink">{pct(Math.max(0, last.rate))}</b> of income saved
-        {avg !== null && (
-          <>
-            {' · '}
-            <span className="text-gain">usual {pct(avg)}</span> (dashed)
-          </>
-        )}
-      </p>
-    </Card>
-  )
-}
-
-function YearTotals({ a }) {
-  const year = a.saving.year
-  const keys = a.last12.filter((k) => k.slice(0, 4) === year)
-  const sum = (f) => keys.reduce((s, k) => s + (a.byMonth.get(k)?.[f] ?? 0), 0)
-  const best = a.saving.best
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      <Mini onPage label={`Saved in ${year}`} value={whole(sum('saved'))} />
-      <Mini onPage label={`Invested in ${year}`} value={whole(sum('invested'))} />
-      <Mini onPage label={best ? `Best month · ${monthShort(best.key)}` : 'Best month'} value={best ? whole(best.cents) : '—'} />
-      <Mini onPage label="Usual rate" value={a.saving.avgRate !== null ? pct(a.saving.avgRate) : '—'} />
+      </div>
+      {saving.kept < 0 && <p className="relative mt-2 text-xs text-white/90">More came out of savings and investments than went in.</p>}
     </div>
   )
 }
 
-// Each savings account: money in (or out) this period, and today's balance; then Investments (Invest − Take out)
-function Accounts({ a }) {
+// ---------- 2 · Where it went ----------
+function WhereItWent({ a }) {
+  const goalOf = (id) => a.goalList.find((g) => g.id === id)
+  const parts = []
+  if (a.totals.invested) {
+    parts.push({ key: 'invest', name: 'Investments', sub: 'Put in minus taken out', cents: a.totals.invested, color: TEAL, to: '/investments', getquin: true })
+  }
+  for (const [id, cents] of a.flowByGoal) {
+    if (!cents) continue
+    const g = id === 'general' ? null : goalOf(id)
+    parts.push({
+      key: id,
+      name: g ? g.name : 'General savings',
+      sub: g ? 'Savings goal' : 'Savings without a goal',
+      cents,
+      color: g ? BLUE : '#6c8cff',
+      emoji: g ? g.icon || '🎯' : '🏦',
+      to: '/savings',
+    })
+  }
+  parts.sort((x, y) => y.cents - x.cents)
+  const positive = parts.filter((p) => p.cents > 0)
+  const totalIn = positive.reduce((s, p) => s + p.cents, 0) || 1
+
+  if (!parts.length) {
+    return <p className={`${card} text-center text-sm text-muted`}>Nothing went into savings or investments in {periodLabel(a.period)}.</p>
+  }
   return (
-    <Card icon="coins" color="var(--color-cobalt)" title="Where it went">
-      <ul>
-        {a.keepAccounts.map((acc) => {
-          const bank = bankFor(acc.name)
-          return (
-            <li key={acc.id} className="flex items-center gap-3 border-b border-line py-2.5 last:border-0">
-              {bank ? (
-                <BankLogo bank={bank} className="size-10 rounded-xl shadow-[0_0_0_1px_var(--color-line)]" />
+    <div className={card}>
+      <div className="flex items-baseline justify-between gap-2">
+        <b className="tabular font-display text-[17px]">{a.saving.kept < 0 ? signed(a.saving.kept) : whole(a.saving.kept)} kept</b>
+        <span className="text-[12.5px] text-muted">{periodLabel(a.period)}</span>
+      </div>
+      {positive.length > 0 && (
+        <div className="mt-2.5 flex h-3.5 gap-[3px] overflow-hidden rounded-full">
+          {positive.map((p) => (
+            <span key={p.key} style={{ flex: p.cents, background: p.color }} />
+          ))}
+        </div>
+      )}
+      <ul className="mt-2.5">
+        {parts.map((p) => (
+          <li key={p.key} className="border-t border-line">
+            <button onClick={() => navigate(p.to)} className="flex w-full items-center gap-3 py-2.5 text-left">
+              {p.getquin ? (
+                <img src="/getquin.png" alt="" className="size-[34px] shrink-0 rounded-[10px] ring-1 ring-line" />
               ) : (
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl text-white" style={{ background: acc.color }}>
-                  <Icon name="coins" size={19} strokeWidth={2.1} />
+                <span className="grid size-[34px] shrink-0 place-items-center rounded-[10px] text-[17px]" style={{ background: `${p.color}1f` }}>
+                  {p.emoji}
                 </span>
               )}
               <span className="min-w-0 flex-1">
-                <b className="block truncate">{acc.name}</b>
-                <span className="block truncate text-xs text-muted">
-                  Savings · {whole(acc.balance)} today
-                </span>
+                <b className="block truncate text-[14.5px]">{p.name}</b>
+                <span className="block truncate text-xs text-muted">{p.sub}</span>
               </span>
-              <b className={`tabular font-display ${acc.flow > 0 ? 'text-gain' : acc.flow < 0 ? 'text-loss' : 'text-muted'}`}>{acc.flow ? signed(acc.flow) : '€0'}</b>
+              <span className="text-right">
+                <b className={`tabular block font-display text-[15px] ${p.cents < 0 ? 'text-loss' : ''}`}>{p.cents < 0 ? signed(p.cents) : whole(p.cents)}</b>
+                {p.cents > 0 && <span className="tabular text-[11.5px] text-muted">{pct(p.cents / totalIn)}</span>}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+// ---------- 3 · Getting better ----------
+// The keep rate each month as a line with a soft fill, your usual dashed; the headline compares the last
+// 3 full months with the 3 before them.
+function Better({ a }) {
+  const rows = monthRows(a).filter((r) => !r.future)
+  const [picked, setPicked] = useState(null)
+  const full = rows.filter((r) => !r.partial && r.rate !== null)
+  const avg = (list) => (list.length ? list.reduce((s, r) => s + r.rate, 0) / list.length : null)
+  const recent = avg(full.slice(-3))
+  const before = full.length >= 6 ? avg(full.slice(-6, -3)) : null
+  const change = recent !== null && before !== null ? Math.round((recent - before) * 100) : null
+  const headline = change === null ? 'Your keep rate' : change >= 3 ? 'Keep rate is rising' : change <= -3 ? 'Keep rate is falling' : 'Keep rate is steady'
+
+  const W = 300
+  const H = 110
+  const usual = a.saving.avgRate
+  const known = rows.map((r) => r.rate).filter((v) => v !== null)
+  const top = Math.max(0.1, usual ?? 0, ...known) * 1.15
+  const bottom = Math.min(0, ...known)
+  const step = W / Math.max(1, rows.length - 1)
+  const x = (i) => (rows.length > 1 ? i * step : W / 2)
+  const y = (v) => H - ((v - bottom) / (top - bottom)) * H
+  const pts = rows.map((r, i) => (r.rate === null ? null : [x(i), y(r.rate)]))
+  // Months without income break the line
+  const segs = []
+  let cur = []
+  for (const q of pts) {
+    if (q) cur.push(q)
+    else if (cur.length) {
+      segs.push(cur)
+      cur = []
+    }
+  }
+  if (cur.length) segs.push(cur)
+  const p = picked === null ? null : rows[picked]
+  const lastI = rows.length - 1
+
+  return (
+    <div className={card}>
+      <div className="flex items-center justify-between gap-2">
+        <b className="font-display text-[17px]">{headline}</b>
+        {change !== null && change !== 0 && (
+          <span className={`tabular shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${change > 0 ? 'bg-gain/12 text-gain' : 'bg-warn-bg text-orange-text'}`}>
+            {change > 0 ? '▲' : '▼'} {Math.abs(change)} pts
+          </span>
+        )}
+      </div>
+      <svg viewBox={`-6 -12 ${W + 12} ${H + 32}`} className="mt-3 block h-auto w-full overflow-visible" role="img" aria-label="Share of income kept each month">
+        <defs>
+          <linearGradient id="keep-fill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stopColor={TEAL} stopOpacity=".28" />
+            <stop offset="1" stopColor={TEAL} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {bottom < 0 && <line x1="0" x2={W} y1={y(0)} y2={y(0)} stroke="var(--color-line)" strokeWidth="1.2" />}
+        {usual !== null && <line x1="0" x2={W} y1={y(usual)} y2={y(usual)} stroke="#f08c00" strokeWidth="1.4" strokeDasharray="4 4" />}
+        {usual !== null && (
+          <text x="0" y={y(usual) - 5} fontSize="10" fontWeight="600" fill="#f08c00">
+            usual {pct(usual)}
+          </text>
+        )}
+        {segs.map((s, i) => {
+          const d = `M${s.map((q) => `${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' L')}`
+          return (
+            <g key={i}>
+              {s.length > 1 && <path d={`${d} L${s.at(-1)[0]},${H} L${s[0][0]},${H} Z`} fill="url(#keep-fill)" />}
+              <path d={d} fill="none" stroke={TEAL} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+            </g>
+          )
+        })}
+        {pts.map((q, i) =>
+          q ? (
+            <circle
+              key={i}
+              cx={q[0]}
+              cy={q[1]}
+              r={i === lastI || picked === i ? 5 : 3}
+              fill={i === lastI || picked === i ? TEAL : 'var(--color-card)'}
+              stroke={TEAL}
+              strokeWidth="2"
+            />
+          ) : null,
+        )}
+        {rows.map((r, i) => (
+          <g key={r.key} onClick={() => setPicked(i)} className="cursor-pointer">
+            <rect x={x(i) - step / 2} y="-12" width={step} height={H + 32} fill="transparent" />
+            <text x={x(i)} y={H + 16} textAnchor="middle" fontSize="10" className={picked === i || i === lastI ? 'fill-ink font-bold' : 'fill-muted'}>
+              {monthShort(r.key)[0]}
+            </text>
+          </g>
+        ))}
+      </svg>
+      <p className="mt-1 min-h-5 text-center text-[13px] text-muted">
+        {p ? (
+          <>
+            {monthShort(p.key)}
+            {p.partial && ' so far'}: kept <b className="tabular text-ink">{whole(p.kept)}</b>
+            {p.rate !== null && (
+              <>
+                {' '}
+                · <b className="tabular text-ink">{pct(Math.max(0, p.rate))}</b> of income
+              </>
+            )}
+          </>
+        ) : change !== null ? (
+          'Last 3 months vs the 3 before · tap a month'
+        ) : (
+          'Share of income kept · tap a month'
+        )}
+      </p>
+    </div>
+  )
+}
+
+// ---------- 4 · How consistent ----------
+function Consistent({ a }) {
+  const rows = monthRows(a).filter((r) => !r.future)
+  // Months in a row with money kept, counting back from the latest month (this one if it already has some)
+  let i = rows.length - 1
+  if (rows[i]?.partial && rows[i].kept <= 0) i -= 1
+  let streak = 0
+  while (i >= 0 && rows[i].kept > 0) {
+    streak += 1
+    i -= 1
+  }
+  const withIncome = rows.filter((r) => r.rate !== null && !r.partial)
+  const best = withIncome.length ? withIncome.reduce((b, r) => (r.rate > b.rate ? r : b)) : null
+  const low = withIncome.length > 1 ? withIncome.reduce((b, r) => (r.rate < b.rate ? r : b)) : null
+  const why = (r, isBest) => {
+    if (isBest) return r.invested >= r.saved ? `${whole(r.invested)} invested` : `${whole(r.saved)} saved`
+    if (r.saved < 0) return `took ${whole(-r.saved)} out of savings`
+    if (r.invested < 0) return `took ${whole(-r.invested)} out of investments`
+    return `${whole(r.spent)} spent`
+  }
+  const shade = (r) => (r.rate === null ? 'var(--color-line)' : r.rate <= 0 ? 'rgba(194,59,34,.18)' : `rgba(12,133,153,${Math.min(1, 0.18 + r.rate * 1.6)})`)
+
+  return (
+    <div className={card}>
+      <div className="flex items-center gap-3">
+        <span className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-gradient-to-br from-[#ffb84d] to-[#f08c00] text-white">
+          <Icon name="repeat" size={21} strokeWidth={2.3} />
+        </span>
+        <span className="min-w-0">
+          <b className="block font-display text-xl leading-tight">
+            {streak === 0 ? 'No streak right now' : `${streak} ${streak === 1 ? 'month' : 'months'} in a row`}
+          </b>
+          <span className="text-[12.5px] text-muted">
+            {streak === 0 ? 'Keep something this month to start one' : streak >= 12 ? 'you kept money every month this past year' : 'with money kept'}
+          </span>
+        </span>
+      </div>
+      <div className="mt-3.5 flex gap-[3px]">
+        {rows.map((r) => (
+          <div key={r.key} className="min-w-0 flex-1 text-center">
+            <div
+              className={`tabular grid h-[34px] place-items-center rounded-[9px] text-[10px] font-bold ${r.rate !== null && r.rate > 0.3 ? 'text-white' : 'text-ink'} ${r.partial ? 'ring-2 ring-ink ring-inset' : ''}`}
+              style={{ background: shade(r) }}
+            >
+              {r.rate === null ? '' : Math.round(r.rate * 100)}
+            </div>
+            <span className={`text-[9.5px] ${r.partial ? 'font-bold text-ink' : 'text-muted'}`}>{monthShort(r.key)[0]}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-muted">% of income kept · stronger teal = more</p>
+      {best && (
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-2xl bg-teal/12 px-3 py-2.5">
+            <span className="text-[11.5px] font-bold text-teal uppercase">Best · {monthShort(best.key)}</span>
+            <b className="tabular block font-display text-[17px]">
+              {whole(best.kept)} · {pct(best.rate)}
+            </b>
+            <span className="text-[11.5px] text-muted">{why(best, true)}</span>
+          </div>
+          {low && low.key !== best.key && (
+            <div className="rounded-2xl bg-warn-bg px-3 py-2.5">
+              <span className="text-[11.5px] font-bold text-orange-text uppercase">Lowest · {monthShort(low.key)}</span>
+              <b className="tabular block font-display text-[17px]">
+                {low.kept < 0 ? signed(low.kept) : whole(low.kept)} · {pct(low.rate)}
+              </b>
+              <span className="text-[11.5px] text-muted">{why(low, false)}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------- 5 · What it adds up to ----------
+// Kept so far in the year, month by month (running total), and where the year ends at this pace
+function AddsUp({ a }) {
+  const year = a.period.kind === 'year' ? a.period.key : a.period.key.slice(0, 4)
+  const thisMonth = todayISO().slice(0, 7)
+  const keys = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
+  const done = keys.filter((k) => k <= thisMonth)
+  let run = 0
+  const cum = done.map((k) => {
+    const m = a.byMonth.get(k)
+    run += m ? m.saved + m.invested : 0
+    return run
+  })
+  const total = cum.at(-1) ?? 0
+  const running = year === thisMonth.slice(0, 4)
+  const daysInMonth = new Date(Number(year), Number(thisMonth.slice(5)), 0).getDate()
+  const passed = running ? done.length - 1 + Number(todayISO().slice(8)) / daysInMonth : 12
+  const pace = running && passed > 0 ? Math.round((total / passed) * 12) : null
+
+  const W = 300
+  const H = 90
+  const top = Math.max(1, total, pace ?? 0, ...cum) * 1.08
+  const low = Math.min(0, ...cum)
+  const x = (i) => (i / 11) * W
+  const y = (v) => H - ((v - low) / (top - low)) * H
+  const line = cum.length ? `M${cum.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' L')}` : ''
+  const last = cum.length - 1
+
+  return (
+    <div className={card}>
+      <div className="flex items-start justify-between gap-2">
+        <span>
+          <span className="text-[12.5px] text-muted">
+            Kept in {year}
+            {running ? ' so far' : ''}
+          </span>
+          <b className="tabular block font-display text-[26px] leading-tight">{total < 0 ? signed(total) : whole(total)}</b>
+        </span>
+        {pace !== null && (
+          <span className="text-right">
+            <span className="text-[12.5px] text-muted">On pace for</span>
+            <b className="tabular block font-display text-lg text-teal">{whole(pace)}</b>
+          </span>
+        )}
+      </div>
+      {cum.length > 0 && (
+        <svg viewBox={`-6 -8 ${W + 12} ${H + 26}`} className="mt-2.5 block h-auto w-full overflow-visible" role="img" aria-label={`Money kept through ${year}`}>
+          <defs>
+            <linearGradient id="adds-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stopColor={TEAL} stopOpacity=".25" />
+              <stop offset="1" stopColor={TEAL} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {cum.length > 1 && <path d={`${line} L${x(last)},${H} L0,${H} Z`} fill="url(#adds-fill)" />}
+          <path d={line} fill="none" stroke={TEAL} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          {pace !== null && last < 11 && (
+            <>
+              <line x1={x(last)} y1={y(total)} x2={x(11)} y2={y(pace)} stroke={TEAL} strokeWidth="2.5" strokeDasharray="4 5" strokeLinecap="round" />
+              <circle cx={x(11)} cy={y(pace)} r="4" fill="var(--color-card)" stroke={TEAL} strokeWidth="2" />
+            </>
+          )}
+          <circle cx={x(last)} cy={y(total)} r="5" fill={TEAL} stroke="var(--color-card)" strokeWidth="2" />
+          {keys.map((k, i) => (
+            <text key={k} x={x(i)} y={H + 15} textAnchor="middle" fontSize="10" className={k === thisMonth ? 'fill-ink font-bold' : 'fill-muted'}>
+              {monthShort(k)[0]}
+            </text>
+          ))}
+        </svg>
+      )}
+    </div>
+  )
+}
+
+// ---------- 6 · What it's for ----------
+// Each savings goal: money today, progress, and when it's reached at the pace of the last 6 months
+function Goals({ state }) {
+  const since = `${shiftMonth(todayISO().slice(0, 7), -6)}-01`
+  const flow = new Map()
+  const add = (id, cents) => flow.set(id, (flow.get(id) ?? 0) + cents)
+  for (const t of state.transactions) {
+    if (t.date < since || !t.goal_id) continue
+    const cents = savingsEffect(state.accounts, t)
+    if (cents) add(t.goal_id, cents)
+  }
+  for (const m of state.moves) {
+    if (m.date < since) continue
+    if (m.to_goal_id) add(m.to_goal_id, m.amount_cents)
+    if (m.from_goal_id) add(m.from_goal_id, -m.amount_cents)
+  }
+  const eta = (g) => {
+    if (g.saved_cents >= g.target_cents) return 'Reached 🎉'
+    const perMonth = (flow.get(g.id) ?? 0) / 6
+    if (perMonth <= 0) return 'No money added lately'
+    const months = Math.ceil((g.target_cents - g.saved_cents) / perMonth)
+    if (months > 120) return 'More than 10 years at this pace'
+    const d = new Date()
+    d.setMonth(d.getMonth() + months)
+    return `Reached around ${d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`
+  }
+  const colors = [BLUE, '#0f8a5f', '#e8590c', '#7c4dff', TEAL, '#e0457b']
+
+  return (
+    <div className={card}>
+      <div className="flex items-center justify-between">
+        <b className="font-display text-[17px]">Your goals</b>
+        <button onClick={() => navigate('/savings')} className="flex items-center text-[13.5px] font-bold text-cobalt">
+          Savings
+          <Icon name="chevronRight" size={15} strokeWidth={2.6} />
+        </button>
+      </div>
+      <ul className="mt-1.5">
+        {state.goals.map((g, i) => {
+          const share = Math.max(0, Math.min(1, g.saved_cents / g.target_cents))
+          const color = colors[i % colors.length]
+          return (
+            <li key={g.id} className="border-t border-line py-2.5">
+              <div className="flex items-center gap-2.5">
+                <span className="grid size-[34px] shrink-0 place-items-center rounded-[10px] text-[17px]" style={{ background: `${color}1f` }}>
+                  {g.icon || '🎯'}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <b className="block truncate text-[14.5px]">{g.name}</b>
+                  <span className="block truncate text-xs text-muted">{eta(g)}</span>
+                </span>
+                <span className="tabular shrink-0 text-right text-[13px]">
+                  <b className="block">{whole(g.saved_cents)}</b>
+                  <span className="text-[11.5px] text-muted">of {whole(g.target_cents)}</span>
+                </span>
+              </div>
+              <div className="mt-2 h-[7px] overflow-hidden rounded-full bg-paper">
+                <div className="h-full rounded-full" style={{ width: `${share * 100}%`, background: color }} />
+              </div>
             </li>
           )
         })}
-        {a.totals.invested !== 0 && (
-          <li className="flex items-center gap-3 border-b border-line py-2.5 last:border-0">
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal/12 text-teal">
-              <Icon name="invest" size={19} strokeWidth={2.3} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <b className="block truncate">Investments</b>
-              <span className="block truncate text-xs text-muted">Put in minus taken out</span>
-            </span>
-            <b className={`tabular font-display ${a.totals.invested > 0 ? 'text-gain' : 'text-loss'}`}>{signed(a.totals.invested)}</b>
-          </li>
-        )}
       </ul>
-      <p className="mt-1 text-xs text-muted">Money in minus money out during {periodLabel(a.period)}.</p>
-    </Card>
+    </div>
   )
 }

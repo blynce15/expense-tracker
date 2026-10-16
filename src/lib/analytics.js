@@ -79,7 +79,7 @@ export async function fetchAnalytics(p) {
     fetchRecurring().catch(() => []),
     supabase
       .from('transactions')
-      .select('type, amount_cents, date, account_id, to_account_id, category_id, note')
+      .select('type, amount_cents, date, account_id, to_account_id, category_id, note, goal_id')
       .gte('date', `${from}-01`),
   ])
   if (tx.error) throw tx.error
@@ -114,15 +114,24 @@ function buildAnalytics(p, accounts, recurring, rows) {
   const catPrevSoFar = new Map()
 
   const flowByAccount = new Map() // savings/investment account id → net money in during this period
+  const flowByGoal = new Map() // savings goal id ('general' = General savings) → net money in during this period
+  let currentTx = null // the transaction being counted (for its goal)
   const moveInto = (m, accountId, cents, k) => {
     const t = typeOf.get(accountId)
     if (t === 'savings') m.saved += cents
     else if (t === 'investment') m.invested += cents
     else return
-    if (months.includes(k)) flowByAccount.set(accountId, (flowByAccount.get(accountId) ?? 0) + cents)
+    if (months.includes(k)) {
+      flowByAccount.set(accountId, (flowByAccount.get(accountId) ?? 0) + cents)
+      if (t === 'savings') {
+        const goal = currentTx?.goal_id ?? 'general'
+        flowByGoal.set(goal, (flowByGoal.get(goal) ?? 0) + cents)
+      }
+    }
   }
 
   for (const t of rows) {
+    currentTx = t
     const k = t.date.slice(0, 7)
     const m = month(k)
     if (t.type === 'income') {
@@ -258,6 +267,7 @@ function buildAnalytics(p, accounts, recurring, rows) {
       .filter((a) => a.type === 'savings')
       .map((a) => ({ id: a.id, name: a.name, type: a.type, color: a.color, archived: a.archived, balance: a.balance_cents, flow: flowByAccount.get(a.id) ?? 0 }))
       .filter((a) => !a.archived || a.flow !== 0 || a.balance !== 0),
+    flowByGoal,
     fixedNames,
     spentByDay,
     byMonth,
