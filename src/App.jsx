@@ -21,7 +21,7 @@ import AnalyticsSpending from './screens/AnalyticsSpending'
 import AnalyticsTrends from './screens/AnalyticsTrends'
 import Categories from './screens/Categories'
 import Home from './screens/Home'
-import Investments from './screens/Investments'
+import Investments, { InvestmentsRefresh } from './screens/Investments'
 import Login from './screens/Login'
 import Onboarding from './screens/Onboarding'
 import Recurring from './screens/Recurring'
@@ -170,7 +170,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/savings':
       return { title: 'Savings', body: <Savings key={dataVersion} /> }
     case '/investments':
-      return { title: 'Investments', body: <Investments key={dataVersion} /> }
+      return { title: 'Investments', action: <InvestmentsRefresh />, body: <Investments key={dataVersion} /> }
     case '/profile':
     case '/settings':
     case '/account':

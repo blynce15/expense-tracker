@@ -37,6 +37,37 @@ function lastMonths(months) {
   })
 }
 
+// The page tells the top-bar button (next to the profile photo) when getquin's numbers are from and how to refresh them
+let status = { time: null, refreshing: false, error: false, refresh: null }
+const listeners = new Set()
+function setStatus(patch) {
+  status = { ...status, ...patch }
+  listeners.forEach((listener) => listener(status))
+}
+
+// Top bar on Investments: "11:16" and a refresh icon; tap to fetch from getquin again
+export function InvestmentsRefresh() {
+  const [s, setS] = useState(status)
+  useEffect(() => {
+    listeners.add(setS)
+    return () => listeners.delete(setS)
+  }, [])
+  if (!s.refresh) return null
+  return (
+    <button
+      onClick={s.refresh}
+      disabled={s.refreshing}
+      className="flex h-9 items-center gap-1.5 rounded-full bg-card pr-1 pl-3 text-[13px] font-semibold text-muted shadow-[0_4px_12px_-8px_rgba(11,27,69,0.35)] active:opacity-80"
+      aria-label={s.time ? `Updated ${s.time}. Refresh from getquin` : 'Refresh from getquin'}
+    >
+      <span className={`tabular ${s.error ? 'text-loss' : ''}`}>{s.refreshing ? '…' : s.error ? 'Offline' : (s.time ?? '')}</span>
+      <span className="grid size-7 place-items-center rounded-full bg-teal/12 text-teal">
+        <Icon name="refresh" size={15} strokeWidth={2.4} className={s.refreshing ? 'animate-spin' : ''} />
+      </span>
+    </button>
+  )
+}
+
 // Investments come only from getquin (no investment accounts since 2026-10-14): the share link's value,
 // the money put in each month and the positions, read through api/getquin.js each time the page opens.
 export default function Investments() {
@@ -57,6 +88,13 @@ export default function Investments() {
       .catch((e) => setPortfolioError(e.message))
       .finally(() => setRefreshing(false))
   }, [])
+
+  // Keep the top-bar button up to date
+  useEffect(() => {
+    const time = portfolio?.updated_at ? new Date(portfolio.updated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : null
+    setStatus({ time, refreshing, error: !!portfolioError, refresh: link ? () => refresh(link) : null })
+  }, [portfolio, refreshing, portfolioError, link, refresh])
+  useEffect(() => () => setStatus({ refresh: null }), [])
 
   useEffect(() => {
     fetchProfile()
@@ -101,13 +139,7 @@ export default function Investments() {
 
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
-      <ValueCard
-        portfolio={portfolio}
-        monthCents={flow ? flow.at(-1).cents : null}
-        error={portfolioError}
-        refreshing={refreshing}
-        onRefresh={() => refresh(link)}
-      />
+      <ValueCard portfolio={portfolio} monthCents={flow ? flow.at(-1).cents : null} error={portfolioError} />
       {flow && <InvestChart flow={flow} />}
 
       <h2 className="px-1 pt-2 font-display text-lg font-bold">
@@ -128,26 +160,9 @@ export default function Investments() {
   )
 }
 
-// Today's value from getquin with the overall gain; Invested = what getquin says the positions cost.
-// Top right: when getquin's numbers are from, and a button to fetch them again.
-function ValueCard({ portfolio, monthCents, error, refreshing, onRefresh }) {
-  const time = portfolio?.updated_at && new Date(portfolio.updated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  const header = (
-    <div className="relative flex items-center justify-between gap-2">
-      <p className="text-sm font-semibold text-white/80">Portfolio value</p>
-      <button
-        onClick={onRefresh}
-        disabled={refreshing}
-        className="-my-1 flex items-center gap-1.5 rounded-full bg-white/15 py-1 pr-1 pl-2.5 text-xs font-semibold text-white/85 active:bg-white/25"
-        aria-label="Refresh from getquin"
-      >
-        <span className="tabular">{refreshing ? 'Updating…' : error ? 'Couldn’t update' : time ? `Updated ${time}` : 'getquin'}</span>
-        <span className="grid size-6 place-items-center rounded-full bg-white/20">
-          <Icon name="refresh" size={14} strokeWidth={2.4} className={refreshing ? 'animate-spin' : ''} />
-        </span>
-      </button>
-    </div>
-  )
+// Today's value from getquin with the overall gain; Invested = what getquin says the positions cost
+function ValueCard({ portfolio, monthCents, error }) {
+  const header = <p className="relative text-sm font-semibold text-white/80">Portfolio value</p>
   if (!portfolio) {
     return (
       <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#14a3b8] via-[#0c8599] to-[#08606f] p-[18px] text-white">
