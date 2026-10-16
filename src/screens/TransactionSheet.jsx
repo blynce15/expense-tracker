@@ -4,8 +4,8 @@ import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import GoalPicker from '../components/GoalPicker'
 import Sheet from '../components/Sheet'
-import { canPayFrom, checkOverdraft } from '../lib/balances'
-import { formatDay, todayISO } from '../lib/dates'
+import { canPayFrom, checkOverdraft, isInvest } from '../lib/balances'
+import { formatDay, monthRange, todayISO } from '../lib/dates'
 import { checkGoals, savingsEffect } from '../lib/goals'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
 import { centsToPad, formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
@@ -15,7 +15,22 @@ const TYPES = [
   { value: 'expense', label: 'Expense' },
   { value: 'income', label: 'Income' },
   { value: 'transfer', label: 'Transfer' },
+  { value: 'invest', label: 'Invest', icon: 'invest' },
 ]
+
+// Invest has two directions: put money in ('invest', it leaves the account) or take it out ('divest', it arrives)
+const DIRECTIONS = [
+  { value: 'in', label: 'Put in', icon: 'invest' },
+  { value: 'out', label: 'Take out', icon: 'investOut' },
+]
+
+// Invest − Take out so far this month (leaving out the transaction being edited)
+async function fetchInvestedThisMonth(exceptId) {
+  const [from, to] = monthRange(todayISO())
+  const { data, error } = await supabase.from('transactions').select('id, type, amount_cents').in('type', ['invest', 'divest']).gte('date', from).lte('date', to)
+  if (error) throw error
+  return data.filter((t) => t.id !== exceptId).reduce((s, t) => s + (t.type === 'invest' ? t.amount_cents : -t.amount_cents), 0)
+}
 
 // Past names → the category last used with them, to suggest a category while typing a name.
 // The name is stored in the transaction's note.
@@ -52,12 +67,16 @@ function suggestCategory(history, type, name) {
 // transaction: null to add a new one, or an existing row to edit it.
 // draft (new ones only): starting type and "to" account, e.g. a transfer into an investment account.
 // Step 1: amount (number pad). Step 2: a sheet with the name and categories, then Save.
+// Invest (teal): step 1 also has Put in / Take out; step 2 has only the name and this month's total.
 export default function TransactionSheet({ transaction, draft, onClose, onSaved }) {
   const isNew = !transaction
   const [lookups, setLookups] = useState(lookupCache.lookups)
   const [history, setHistory] = useState(null)
   const [step, setStep] = useState(1)
-  const [type, setType] = useState(transaction?.type ?? draft?.type ?? 'expense')
+  // The tab: 'divest' (Take out) is shown on the Invest tab
+  const [type, setType] = useState(isInvest(transaction) ? 'invest' : (transaction?.type ?? draft?.type ?? 'expense'))
+  const [direction, setDirection] = useState(transaction?.type === 'divest' ? 'out' : 'in')
+  const [investedSoFar, setInvestedSoFar] = useState(null)
   const [amount, setAmount] = useState(transaction ? centsToPad(transaction.amount_cents) : '')
   const [categoryId, setCategoryId] = useState(transaction?.category_id ?? null)
   const [accountId, setAccountId] = useState(() =>
@@ -108,7 +127,18 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
     return () => window.removeEventListener('keydown', onKey)
   })
 
-  const suggested = useMemo(() => (type === 'transfer' ? null : suggestCategory(history, type, name)), [history, type, name])
+  const suggested = useMemo(() => (type === 'transfer' || type === 'invest' ? null : suggestCategory(history, type, name)), [history, type, name])
+  const investing = type === 'invest'
+  // What gets saved: invest / divest for the Invest tab
+  const rowType = investing ? (direction === 'out' ? 'divest' : 'invest') : type
+
+  // This month's invested total, for step 2 of Invest
+  useEffect(() => {
+    if (!investing) return
+    fetchInvestedThisMonth(transaction?.id)
+      .then(setInvestedSoFar)
+      .catch(() => setInvestedSoFar(null))
+  }, [investing, transaction?.id])
 
   function changeType(nextType) {
     setType(nextType)
@@ -128,20 +158,20 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
     if (busy) return
     const cents = parseToCents(amount)
     // A suggested category counts as chosen until another one is tapped
-    const pick = type === 'transfer' ? toAccountId : (categoryId ?? suggested)
-    if (!pick) return setError(type === 'transfer' ? 'Choose the account the money goes to.' : 'Choose a category.')
+    const pick = investing ? null : type === 'transfer' ? toAccountId : (categoryId ?? suggested)
+    if (!pick && !investing) return setError(type === 'transfer' ? 'Choose the account the money goes to.' : 'Choose a category.')
     const toId = type === 'transfer' ? pick : null
     if (type === 'transfer' && toId === accountId) return setError('Choose a different account than the one the money comes from.')
 
     setBusy(true)
     setError(null)
     const row = {
-      type,
+      type: rowType,
       amount_cents: cents,
       date,
       account_id: accountId,
       to_account_id: toId,
-      category_id: type === 'transfer' ? null : pick,
+      category_id: type === 'transfer' || investing ? null : pick,
       note: name.trim() || null,
     }
     // Money into or out of savings belongs to a goal (General savings when none is picked)
@@ -224,11 +254,15 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
 
   const dayLabel = date === todayISO() ? 'Today' : formatDay(date)
   const sign = type === 'expense' ? '−' : type === 'income' ? '+' : ''
+  // Invest: this month's total after saving this one
+  const thisMonth = date.slice(0, 7) === todayISO().slice(0, 7)
+  const investedAfter =
+    investedSoFar === null ? null : investedSoFar + (thisMonth ? (direction === 'out' ? -1 : 1) * (parseToCents(amount) ?? 0) : 0)
   // The selected choice in step 2: what was tapped, else the suggestion
   const highlighted = type === 'transfer' ? toAccountId : (categoryId ?? suggested)
   // Into savings (+) or out of it (−): then the money belongs to a goal
   const goalDirection = Math.sign(
-    savingsEffect(lookups.accounts, { type, amount_cents: 1, account_id: accountId, to_account_id: type === 'transfer' ? toAccountId : null }),
+    savingsEffect(lookups.accounts, { type: rowType, amount_cents: 1, account_id: accountId, to_account_id: type === 'transfer' ? toAccountId : null }),
   )
 
   return (
@@ -258,26 +292,49 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
                 key={t.value}
                 onClick={() => changeType(t.value)}
                 aria-pressed={type === t.value}
-                className={`rounded-full px-4 py-2 text-sm font-semibold ${type === t.value ? 'bg-ink text-paper' : 'text-muted'}`}
+                className={`flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-semibold ${
+                  type === t.value ? (t.value === 'invest' ? 'bg-teal text-white' : 'bg-ink text-paper') : 'text-muted'
+                }`}
               >
+                {t.icon && <Icon name={t.icon} size={15} strokeWidth={2.4} />}
                 {t.label}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-11">
+        <div className={`flex min-h-0 flex-1 flex-col items-center justify-center ${investing ? 'gap-7' : 'gap-11'}`}>
           <p
-            className={`tabular text-center font-display text-[64px] leading-none font-extrabold tracking-tight ${amount ? 'text-ink' : 'text-muted/40'}`}
+            className={`tabular text-center font-display text-[64px] leading-none font-extrabold tracking-tight ${
+              !amount ? 'text-muted/40' : investing ? 'text-teal' : 'text-ink'
+            }`}
             aria-live="polite"
           >
             <span className="mr-1 align-[0.55em] text-[28px] font-bold text-muted">€</span>
             {formatTyping(amount)}
           </p>
+          {investing && (
+            <div className="flex gap-0.5 rounded-[14px] bg-teal/12 p-[3px]" role="radiogroup" aria-label="Direction">
+              {DIRECTIONS.map((d) => (
+                <button
+                  key={d.value}
+                  role="radio"
+                  aria-checked={direction === d.value}
+                  onClick={() => setDirection(d.value)}
+                  className={`flex items-center gap-1.5 rounded-[11px] px-3.5 py-[7px] text-[13.5px] font-bold ${
+                    direction === d.value ? 'bg-card text-teal shadow-[0_2px_8px_-4px_rgba(11,27,69,0.3)]' : 'text-teal/70'
+                  }`}
+                >
+                  <Icon name={d.icon} size={15} strokeWidth={2.4} />
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center rounded-full bg-card text-sm text-muted">
             <button onClick={() => setPicking('account')} className="flex h-10 items-center gap-1.5 pr-1.5 pl-4">
               <AccountMark account={account} className="size-2.5 rounded-sm" logoClass="size-[18px]" />
-              From <span className="font-semibold text-ink">{account?.name ?? 'Account'}</span>
+              {investing && direction === 'out' ? 'Into' : 'From'} <span className="font-semibold text-ink">{account?.name ?? 'Account'}</span>
             </button>
             <span aria-hidden="true">·</span>
             <button onClick={() => setPicking('date')} className="flex h-10 items-center gap-1 pr-3.5 pl-1.5">
@@ -306,9 +363,11 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
 
         <button
           onClick={next}
-          className="mt-3 flex w-full shrink-0 items-center justify-center gap-1 rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep"
+          className={`mt-3 flex w-full shrink-0 items-center justify-center gap-1 rounded-2xl py-4 text-base font-semibold text-white ${
+            investing ? 'bg-teal active:opacity-85' : 'bg-cobalt active:bg-cobalt-deep'
+          }`}
         >
-          {type === 'transfer' ? 'Next: to which account' : 'Next: name and category'}
+          {investing ? 'Next' : type === 'transfer' ? 'Next: to which account' : 'Next: name and category'}
           <Icon name="chevronRight" size={18} strokeWidth={2.4} />
         </button>
 
@@ -322,7 +381,9 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
                   <Icon name="chevronLeft" />
                 </button>
                 <div className="flex-1 text-center">
-                  <p className="text-xs font-semibold tracking-[0.1em] text-muted uppercase">{type}</p>
+                  <p className={`text-xs font-semibold tracking-[0.1em] uppercase ${investing ? 'text-teal' : 'text-muted'}`}>
+                    {investing ? `Invest · ${direction === 'out' ? 'Take out' : 'Put in'}` : type}
+                  </p>
                   <p className="tabular font-display text-3xl font-extrabold tracking-tight">
                     {sign}
                     {formatCents(parseToCents(amount))}
@@ -340,7 +401,7 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder={type === 'income' ? 'Salary' : type === 'transfer' ? 'To savings' : 'Pingo Doce'}
+                    placeholder={investing ? 'Investing' : type === 'income' ? 'Salary' : type === 'transfer' ? 'To savings' : 'Pingo Doce'}
                     autoComplete="off"
                     enterKeyHint="done"
                     onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
@@ -348,6 +409,24 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
                   />
                 </label>
 
+                {investing ? (
+                  <div className="flex items-center gap-3 rounded-2xl bg-teal/12 px-3.5 py-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-card text-teal">
+                      <Icon name={direction === 'out' ? 'investOut' : 'invest'} size={19} strokeWidth={2.4} />
+                    </span>
+                    <span className="min-w-0 flex-1 text-[13.5px] text-muted">
+                      {investedAfter !== null && thisMonth && (
+                        <b className="tabular block text-[14.5px] text-teal">
+                          {investedAfter >= 0
+                            ? `${formatCents(investedAfter).replace(/,00$/, '')} put in this month`
+                            : `${formatCents(-investedAfter).replace(/,00$/, '')} taken out this month`}
+                        </b>
+                      )}
+                      Not counted as spending
+                    </span>
+                  </div>
+                ) : (
+                <>
                 <div className="flex items-baseline justify-between px-1">
                   <h3 className="font-display text-base font-bold">{type === 'transfer' ? 'To account' : 'Category'}</h3>
                   <span className="text-xs text-muted">
@@ -402,6 +481,8 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
                     ))}
                   </div>
                 )}
+                </>
+                )}
 
                 {goalDirection !== 0 && (
                   <GoalPicker goals={lookups.goals ?? []} value={goalId} onChange={setGoalId} direction={goalDirection} />
@@ -412,7 +493,7 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
                 <button
                   onClick={save}
                   disabled={busy}
-                  className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep"
+                  className={`w-full rounded-2xl py-4 text-base font-semibold text-white ${investing ? 'bg-teal active:opacity-85' : 'bg-cobalt active:bg-cobalt-deep'}`}
                 >
                   Save
                 </button>
@@ -442,7 +523,7 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
       )}
 
       {picking === 'account' && (
-        <Sheet title={type === 'transfer' ? 'From account' : 'Account'} onClose={() => setPicking(null)} tall>
+        <Sheet title={type === 'transfer' ? 'From account' : investing && direction === 'out' ? 'Into account' : 'Account'} onClose={() => setPicking(null)} tall>
           <ul className="overflow-hidden rounded-2xl bg-card">
             {fromAccounts.map((a) => (
               <li key={a.id} className="border-b border-line last:border-0">

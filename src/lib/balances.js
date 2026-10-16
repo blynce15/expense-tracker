@@ -1,8 +1,13 @@
 import { formatCents } from './money'
 import { supabase } from './supabase'
 
-// Balance = starting balance + income − expenses − transfers out + transfers in.
-// Always calculated from transactions, never stored.
+// Balance = starting balance + income − expenses − transfers out + transfers in − money invested + money taken
+// back out of investments. Always calculated from transactions, never stored.
+
+// Investing: 'invest' puts money into investments (it leaves account_id), 'divest' takes money back out of them
+// (it arrives in account_id). Neither is spending or income (migration 015).
+export const INVEST_TYPES = ['invest', 'divest']
+export const isInvest = (t) => INVEST_TYPES.includes(t?.type)
 export async function fetchAccountsWithBalances() {
   const [accountsRes, txRes] = await Promise.all([
     supabase.from('accounts').select('*').order('created_at'),
@@ -17,8 +22,8 @@ export async function fetchAccountsWithBalances() {
 
   for (const t of txRes.data) {
     txCount.set(t.account_id, (txCount.get(t.account_id) ?? 0) + 1)
-    if (t.type === 'income') add(t.account_id, t.amount_cents)
-    else if (t.type === 'expense') add(t.account_id, -t.amount_cents)
+    if (t.type === 'income' || t.type === 'divest') add(t.account_id, t.amount_cents)
+    else if (t.type === 'expense' || t.type === 'invest') add(t.account_id, -t.amount_cents)
     else if (t.type === 'transfer') {
       add(t.account_id, -t.amount_cents)
       add(t.to_account_id, t.amount_cents)
@@ -44,8 +49,8 @@ export const canPayFrom = (account) => account?.type !== 'investment'
 function effect(t, sign = 1) {
   const out = new Map()
   if (!t) return out
-  if (t.type === 'income') out.set(t.account_id, sign * t.amount_cents)
-  else if (t.type === 'expense') out.set(t.account_id, -sign * t.amount_cents)
+  if (t.type === 'income' || t.type === 'divest') out.set(t.account_id, sign * t.amount_cents)
+  else if (t.type === 'expense' || t.type === 'invest') out.set(t.account_id, -sign * t.amount_cents)
   else {
     out.set(t.account_id, -sign * t.amount_cents)
     out.set(t.to_account_id, (out.get(t.to_account_id) ?? 0) + sign * t.amount_cents)

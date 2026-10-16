@@ -11,7 +11,7 @@ import { formatCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
 import TransactionSheet from './TransactionSheet'
 
-const TYPE_LABELS = { expense: 'Expense', income: 'Income', transfer: 'Transfer' }
+const TYPE_LABELS = { expense: 'Expense', income: 'Income', transfer: 'Transfer', invest: 'Invest · Put in', divest: 'Invest · Take out' }
 
 // "Wednesday 7 October 2026"
 function longDate(iso) {
@@ -39,8 +39,8 @@ function balanceImpact(t, balances) {
     const b = balances.get(id)
     if (b) out.push({ name: b.name, before: b.balance_cents, after: b.balance_cents + change })
   }
-  if (t.type === 'expense') add(t.account_id, t.amount_cents)
-  else if (t.type === 'income') add(t.account_id, -t.amount_cents)
+  if (t.type === 'expense' || t.type === 'invest') add(t.account_id, t.amount_cents)
+  else if (t.type === 'income' || t.type === 'divest') add(t.account_id, -t.amount_cents)
   else {
     add(t.account_id, t.amount_cents)
     add(t.to_account_id, -t.amount_cents)
@@ -115,10 +115,11 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
   const account = (id) => lookups?.accounts.find((a) => a.id === id)
   const category = lookups?.categories.find((c) => c.id === tx.category_id)
   const isTransfer = tx.type === 'transfer'
-  const name = tx.note || (isTransfer ? 'Transfer' : (category?.name ?? 'No category'))
+  const investing = tx.type === 'invest' || tx.type === 'divest'
+  const name = tx.note || (isTransfer ? 'Transfer' : investing ? 'Investing' : (category?.name ?? 'No category'))
   const amountText =
     tx.type === 'expense' ? formatCents(-tx.amount_cents) : tx.type === 'income' ? `+${formatCents(tx.amount_cents)}` : formatCents(tx.amount_cents)
-  const amountColor = tx.type === 'income' ? 'text-gain' : isTransfer ? 'text-muted' : 'text-ink'
+  const amountColor = tx.type === 'income' ? 'text-gain' : investing ? 'text-teal' : isTransfer ? 'text-muted' : 'text-ink'
   // Money into or out of savings belongs to a goal (General savings when untagged)
   const goal =
     lookups && savingsEffect(lookups.accounts, tx) !== 0 ? (tx.goal_id ? lookups.goals?.find((g) => g.id === tx.goal_id) : null) ?? GENERAL : null
@@ -132,10 +133,12 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
   )
   const rows = [
     ['Type', <span key="t" className="rounded-full bg-line/70 px-2.5 py-0.5 text-xs font-semibold text-muted">{TYPE_LABELS[tx.type]}</span>],
-    isTransfer
-      ? ['From', accountValue(tx.account_id)]
-      : ['Category', <span key="c" className="truncate">{category ? `${category.icon} ${category.name}` : 'No category'}</span>],
-    isTransfer ? ['To', accountValue(tx.to_account_id)] : ['Account', accountValue(tx.account_id)],
+    investing
+      ? [tx.type === 'divest' ? 'Into' : 'From', accountValue(tx.account_id)]
+      : isTransfer
+        ? ['From', accountValue(tx.account_id)]
+        : ['Category', <span key="c" className="truncate">{category ? `${category.icon} ${category.name}` : 'No category'}</span>],
+    investing ? null : isTransfer ? ['To', accountValue(tx.to_account_id)] : ['Account', accountValue(tx.account_id)],
     goal && ['Goal', <span key="g" className="truncate">{`${goal.icon || '🐷'} ${goal.name}`}</span>],
     ['Date', <span key="d" className="truncate">{longDate(tx.date)}</span>],
     ['Added', <span key="a" className="font-normal text-muted">{addedAt(tx.created_at)}</span>],
@@ -219,9 +222,15 @@ export default function TransactionDetails({ transaction, onClose, onChanged }) 
     <Sheet title="" onClose={onClose} action={menuButton}>
       <div className="space-y-4">
         <div className="flex flex-col items-center gap-1 text-center">
-          <MerchantIcon name={isTransfer ? null : tx.note} className="mb-1 size-14 rounded-2xl text-3xl" style={{ backgroundColor: iconBg }}>
-            {isTransfer ? '⇄' : category?.icon}
-          </MerchantIcon>
+          {investing ? (
+            <span className="mb-1 grid size-14 place-items-center rounded-2xl bg-teal/12 text-teal">
+              <Icon name={tx.type === 'divest' ? 'investOut' : 'invest'} size={28} strokeWidth={2.3} />
+            </span>
+          ) : (
+            <MerchantIcon name={isTransfer ? null : tx.note} className="mb-1 size-14 rounded-2xl text-3xl" style={{ backgroundColor: iconBg }}>
+              {isTransfer ? '⇄' : category?.icon}
+            </MerchantIcon>
+          )}
           <p className="font-display text-xl font-bold">{name}</p>
           <p className={`tabular font-display text-4xl font-extrabold tracking-tight ${amountColor}`}>{amountText}</p>
         </div>

@@ -86,8 +86,8 @@ export default function Home({ onSeeAccount }) {
         flow.set(id, f)
       }
       for (const t of sinceMonthStart.data) {
-        if (t.type === 'income') add(t.account_id, 'in', t.amount_cents)
-        else if (t.type === 'expense') add(t.account_id, 'out', t.amount_cents)
+        if (t.type === 'income' || t.type === 'divest') add(t.account_id, 'in', t.amount_cents)
+        else if (t.type === 'expense' || t.type === 'invest') add(t.account_id, 'out', t.amount_cents)
         else {
           add(t.account_id, 'out', t.amount_cents)
           add(t.to_account_id, 'in', t.amount_cents)

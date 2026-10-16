@@ -6,7 +6,8 @@ import Sheet from '../components/Sheet'
 import { todayISO } from '../lib/dates'
 import { cachedPortfolio, cleanGetquinLink, fetchPortfolio, forgetPortfolio } from '../lib/getquin'
 import { formatCents } from '../lib/money'
-import { fetchProfile, saveGetquinLink } from '../lib/profile'
+import { fetchProfile, saveGetquinLink, saveGetquinSince } from '../lib/profile'
+import { supabase } from '../lib/supabase'
 
 const MONTHS_SHOWN = 6
 
@@ -27,13 +28,26 @@ const signedWhole = (cents) => (cents < 0 ? `−${whole(-cents)}` : `+${whole(ce
 const percent = (rate) => `${rate < 0 ? '−' : '+'}${Math.abs(rate * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 })}%`
 const KINDS = { etf: 'ETF', stock: 'Stock', crypto: 'Crypto', bond: 'Bond', fund: 'Fund', commodity: 'Commodity' }
 
-// The last MONTHS_SHOWN months (oldest first) from getquin's [{ key: '2026-09', cents }]; missing months are 0
-function lastMonths(months) {
-  const byKey = new Map(months.map((m) => [m.key, m.cents]))
+const firstShownMonth = () => shiftMonth(todayISO().slice(0, 7), -(MONTHS_SHOWN - 1))
+
+// Money put in, the last MONTHS_SHOWN months (oldest first): getquin's trades before `since` (the day getquin
+// was first connected), your Invest − Take out transactions from that day on. Missing months are 0.
+// fromGetquin: the whole month is from getquin (drawn striped).
+function lastMonths(portfolio, since, own) {
   const thisMonth = todayISO().slice(0, 7)
+  const sinceMonth = since.slice(0, 7)
+  const amounts = new Map()
+  const add = (key, cents) => amounts.set(key, (amounts.get(key) ?? 0) + cents)
+  if (portfolio?.days) {
+    for (const d of portfolio.days) if (d.date < since) add(d.date.slice(0, 7), d.cents)
+  } else if (portfolio?.months) {
+    // An older answer without days: whole months before the one getquin was connected in
+    for (const m of portfolio.months) if (m.key < sinceMonth) add(m.key, m.cents)
+  }
+  for (const t of own) if (t.date >= since) add(t.date.slice(0, 7), t.type === 'invest' ? t.amount_cents : -t.amount_cents)
   return Array.from({ length: MONTHS_SHOWN }, (_, i) => {
     const key = shiftMonth(thisMonth, i - (MONTHS_SHOWN - 1))
-    return { key, cents: byKey.get(key) ?? 0, partial: key === thisMonth }
+    return { key, cents: amounts.get(key) ?? 0, partial: key === thisMonth, fromGetquin: key < sinceMonth }
   })
 }
 
@@ -76,6 +90,8 @@ export default function Investments() {
   const [portfolioError, setPortfolioError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
   const [editingLink, setEditingLink] = useState(false) // only from the empty page; changing the link is in Profile
+  const [since, setSince] = useState(null) // the day getquin was first connected
+  const [own, setOwn] = useState(null) // your Invest / Take out transactions in the months shown
 
   // Fresh numbers from getquin every time the page opens; the last ones show meanwhile
   const refresh = useCallback((url) => {
@@ -100,10 +116,23 @@ export default function Investments() {
     fetchProfile()
       .then((p) => {
         const url = p?.answers?.getquinUrl ?? null
+        // Linked before this existed: start counting your Invest transactions from today
+        let start = p?.answers?.getquinSince ?? null
+        if (url && !start) {
+          start = todayISO()
+          saveGetquinSince(start).catch(() => {})
+        }
+        setSince(start)
         setLink(url)
         refresh(url)
       })
       .catch(() => setLink(null))
+    supabase
+      .from('transactions')
+      .select('type, amount_cents, date')
+      .in('type', ['invest', 'divest'])
+      .gte('date', `${firstShownMonth()}-01`)
+      .then(({ data, error }) => setOwn(error ? [] : data))
   }, [refresh])
 
   if (link === undefined) return null
@@ -134,13 +163,13 @@ export default function Investments() {
     )
   }
 
-  // getquin's own monthly amounts (buys − sales)
-  const flow = portfolio?.months ? lastMonths(portfolio.months) : null
+  // Money put in per month: getquin before you connected it, your Invest transactions after
+  const flow = since && own ? lastMonths(portfolio, since, own) : null
 
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
       <ValueCard portfolio={portfolio} monthCents={flow ? flow.at(-1).cents : null} error={portfolioError} />
-      {flow && <InvestChart flow={flow} />}
+      {flow && (portfolio?.months || flow.some((d) => !d.fromGetquin)) && <InvestChart flow={flow} />}
 
       <h2 className="px-1 pt-2 font-display text-lg font-bold">
         Positions {portfolio && <span className="tabular text-base font-semibold text-muted">· {portfolio.positions.length}</span>}
@@ -303,7 +332,7 @@ function Fact({ label, value, divider }) {
   )
 }
 
-// One bar per month: how much went into the investment accounts
+// One bar per month: how much was put in (striped = from getquin, before you connected it)
 function InvestChart({ flow }) {
   const [picked, setPicked] = useState(null)
   const W = 300
@@ -330,6 +359,12 @@ function InvestChart({ flow }) {
         )}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 block h-auto w-full overflow-visible" role="img" aria-label="Money invested each month">
+        <defs>
+          <pattern id="gq-stripes" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+            <rect width="7" height="7" fill="var(--color-teal)" opacity=".38" />
+            <rect width="3.5" height="7" fill="var(--color-teal)" opacity=".62" />
+          </pattern>
+        </defs>
         <line x1="0" x2={W} y1={base} y2={base} strokeWidth="1" stroke="var(--color-ink)" strokeOpacity=".15" />
         {flow.map((d, i) => {
           const x = i * colW + (colW - barW) / 2
@@ -337,7 +372,17 @@ function InvestChart({ flow }) {
           return (
             <g key={d.key} onClick={() => setPicked(i)} className="cursor-pointer">
               <rect x={i * colW} y="0" width={colW} height={H} fill="transparent" />
-              {h > 0 && <rect x={x} y={base - h} width={barW} height={h} rx="7" fill="var(--color-teal)" opacity={d.partial ? 0.45 : 1} />}
+              {h > 0 && (
+                <rect
+                  x={x}
+                  y={base - h}
+                  width={barW}
+                  height={h}
+                  rx="7"
+                  fill={d.fromGetquin ? 'url(#gq-stripes)' : 'var(--color-teal)'}
+                  opacity={d.partial ? 0.45 : 1}
+                />
+              )}
               {d.cents > 0 && (
                 <text x={x + barW / 2} y={base - h - 5} textAnchor="middle" fontSize="10.5" fontWeight="600" fill="var(--color-ink)">
                   {Math.round(d.cents / 100)}
@@ -357,6 +402,20 @@ function InvestChart({ flow }) {
           )
         })}
       </svg>
+      {flow.some((d) => d.fromGetquin) && (
+        <div className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted">
+          <span className="flex items-center gap-1.5">
+            <svg width="12" height="12" aria-hidden="true">
+              <rect width="12" height="12" rx="3.5" fill="url(#gq-stripes)" />
+            </svg>
+            From getquin
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="size-3 rounded-[3.5px] bg-teal" />
+            Your Invest
+          </span>
+        </div>
+      )}
       <p className="mt-1 min-h-5 text-center text-[13px] text-muted">
         {p ? (
           <>

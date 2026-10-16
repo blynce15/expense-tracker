@@ -38,21 +38,21 @@ export default function AnalyticsSaving() {
           <IncomeVsKept a={a} />
           <RateOverTime a={a} />
           <YearTotals a={a} />
-          {a.keepAccounts.length > 0 && <Accounts a={a} />}
+          {(a.keepAccounts.length > 0 || a.totals.invested !== 0) && <Accounts a={a} />}
         </>
       )}
     </div>
   )
 }
 
-// The 12 months up to the period's end: income, saved and the rate (saved ÷ income)
+// The 12 months up to the period's end: income, saved, invested, kept (saved + invested) and the rate (kept ÷ income)
 function monthRows(a) {
   const now = new Date()
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   return a.last12.map((k) => {
-    const m = a.byMonth.get(k) ?? { income: 0, saved: 0 }
-    const kept = m.saved
-    return { key: k, income: m.income, saved: m.saved, kept, rate: m.income > 0 ? kept / m.income : null, partial: k === thisMonth, future: k > thisMonth }
+    const m = a.byMonth.get(k) ?? { income: 0, saved: 0, invested: 0 }
+    const kept = m.saved + m.invested
+    return { key: k, income: m.income, saved: m.saved, invested: m.invested, kept, rate: m.income > 0 ? kept / m.income : null, partial: k === thisMonth, future: k > thisMonth }
   })
 }
 
@@ -62,11 +62,12 @@ function Kept({ a }) {
   const r = 34
   const c = 2 * Math.PI * r
   const savedShare = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
+  const investedShare = income > 0 ? Math.max(0, Math.min(1 - savedShare, totals.invested / income)) : 0
   const [euros, decimals] = formatCents(saving.kept).split(',')
   return (
     <section className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-4 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-white/85">You saved in {periodLabel(a.period)}</p>
+        <p className="text-sm font-semibold text-white/85">You kept in {periodLabel(a.period)}</p>
         {saving.avgRate !== null && <Chip tone="light">Usual {pct(saving.avgRate)}</Chip>}
       </div>
       <div className="mt-2 flex items-center gap-4">
@@ -74,6 +75,18 @@ function Kept({ a }) {
           <svg width="84" height="84" viewBox="0 0 84 84" className="absolute inset-0 -rotate-90" aria-hidden="true">
             <circle cx="42" cy="42" r={r} fill="none" strokeWidth="10" stroke="rgba(255,255,255,0.2)" />
             {savedShare > 0 && <circle cx="42" cy="42" r={r} fill="none" strokeWidth="10" stroke="#fff" strokeDasharray={`${savedShare * c} ${c}`} />}
+            {investedShare > 0 && (
+              <circle
+                cx="42"
+                cy="42"
+                r={r}
+                fill="none"
+                strokeWidth="10"
+                stroke="#7fe3ee"
+                strokeDasharray={`${investedShare * c} ${c}`}
+                strokeDashoffset={-savedShare * c}
+              />
+            )}
           </svg>
           <span className="tabular relative font-display text-lg font-extrabold">{saving.rate !== null ? pct(Math.max(0, saving.rate)) : '—'}</span>
         </div>
@@ -83,14 +96,24 @@ function Kept({ a }) {
             <span className="text-lg text-white/55">,{decimals}</span>
           </p>
           <p className="text-sm text-white/80">{income > 0 ? `of ${whole(income)} income` : 'No income recorded'}</p>
+          {totals.invested !== 0 && (
+            <p className="mt-1 flex flex-wrap gap-x-2.5 text-xs text-white/85">
+              <span className="flex items-center gap-1">
+                <span className="size-2 rounded-full bg-white" /> Saved {whole(totals.saved)}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="size-2 rounded-full bg-[#7fe3ee]" /> Invested {whole(totals.invested)}
+              </span>
+            </p>
+          )}
         </div>
       </div>
-      {saving.kept < 0 && <p className="mt-2 text-xs text-white/85">More came out of savings than went in.</p>}
+      {saving.kept < 0 && <p className="mt-2 text-xs text-white/85">More came out of savings and investments than went in.</p>}
     </section>
   )
 }
 
-// Income per month as a light bar, with the saved part inside it. Tap a month.
+// Income per month as a light bar, with the saved part (blue) and the invested part (teal) inside it. Tap a month.
 function IncomeVsKept({ a }) {
   const rows = monthRows(a)
   const [picked, setPicked] = useState(null)
@@ -102,16 +125,18 @@ function IncomeVsKept({ a }) {
   const h = (c) => (Math.max(0, c) / max) * H
   const p = picked === null ? null : rows[picked]
   return (
-    <Card icon="bars" color="var(--color-cobalt)" title="Income vs saved">
-      <svg viewBox={`0 0 ${W} ${H + 16}`} className="block h-auto w-full overflow-visible" role="img" aria-label="Income and how much of it you saved, per month">
+    <Card icon="bars" color="var(--color-cobalt)" title="Income vs kept">
+      <svg viewBox={`0 0 ${W} ${H + 16}`} className="block h-auto w-full overflow-visible" role="img" aria-label="Income and how much of it you saved and invested, per month">
         {rows.map((r, i) => {
           const x = i * colW + 3
           const hs = h(r.saved)
+          const hi = h(r.invested)
           return (
             <g key={r.key} onClick={() => !r.future && setPicked(i)} className="cursor-pointer" opacity={r.future ? 0.3 : picked === null || picked === i ? 1 : 0.45}>
               <rect x={i * colW} y="0" width={colW} height={H} fill="transparent" />
               {r.income > 0 && <rect x={x} y={H - h(r.income)} width={barW} height={h(r.income)} rx="5" fill="var(--color-line)" />}
               {hs > 0 && <rect x={x + 3} y={H - hs} width={barW - 6} height={hs} rx="3" fill="var(--color-cobalt)" />}
+              {hi > 0 && <rect x={x + 3} y={H - hs - hi} width={barW - 6} height={hi} rx="3" fill="var(--color-teal)" />}
               <text x={x + barW / 2} y={H + 13} textAnchor="middle" fontSize="9.5" className={picked === i ? 'fill-ink font-bold' : 'fill-muted'}>
                 {monthShort(r.key)[0]}
               </text>
@@ -126,12 +151,15 @@ function IncomeVsKept({ a }) {
         <span className="flex items-center gap-1">
           <span className="size-2 rounded-sm bg-cobalt" /> Saved
         </span>
+        <span className="flex items-center gap-1">
+          <span className="size-2 rounded-sm bg-teal" /> Invested
+        </span>
       </div>
       <p className="mt-1.5 min-h-5 text-center text-[13px] text-muted">
         {p ? (
           <>
             {monthShort(p.key)}
-            {p.partial && ' (so far)'}: income <b className="tabular text-ink">{whole(p.income)}</b>, saved{' '}
+            {p.partial && ' (so far)'}: income <b className="tabular text-ink">{whole(p.income)}</b>, kept{' '}
             <b className="tabular text-ink">
               {whole(p.kept)}
               {p.rate !== null && ` (${pct(Math.max(0, p.rate))})`}
@@ -197,14 +225,14 @@ function YearTotals({ a }) {
   return (
     <div className="grid grid-cols-2 gap-2">
       <Mini onPage label={`Saved in ${year}`} value={whole(sum('saved'))} />
+      <Mini onPage label={`Invested in ${year}`} value={whole(sum('invested'))} />
       <Mini onPage label={best ? `Best month · ${monthShort(best.key)}` : 'Best month'} value={best ? whole(best.cents) : '—'} />
       <Mini onPage label="Usual rate" value={a.saving.avgRate !== null ? pct(a.saving.avgRate) : '—'} />
-      <Mini onPage label={`Income in ${year}`} value={whole(sum('income'))} />
     </div>
   )
 }
 
-// Each savings account: money in (or out) this period, and today's balance
+// Each savings account: money in (or out) this period, and today's balance; then Investments (Invest − Take out)
 function Accounts({ a }) {
   return (
     <Card icon="coins" color="var(--color-cobalt)" title="Where it went">
@@ -230,6 +258,18 @@ function Accounts({ a }) {
             </li>
           )
         })}
+        {a.totals.invested !== 0 && (
+          <li className="flex items-center gap-3 border-b border-line py-2.5 last:border-0">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal/12 text-teal">
+              <Icon name="invest" size={19} strokeWidth={2.3} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <b className="block truncate">Investments</b>
+              <span className="block truncate text-xs text-muted">Put in minus taken out</span>
+            </span>
+            <b className={`tabular font-display ${a.totals.invested > 0 ? 'text-gain' : 'text-loss'}`}>{signed(a.totals.invested)}</b>
+          </li>
+        )}
       </ul>
       <p className="mt-1 text-xs text-muted">Money in minus money out during {periodLabel(a.period)}.</p>
     </Card>

@@ -118,13 +118,13 @@ async function fetchTrades(code) {
 // "2026-09-23": the trade's day where the owner lives (getquin stores e.g. 2026-09-22T22:00:00Z)
 const lisbonDay = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Europe/Lisbon' })
 
-// Money put in each month = buys − sales. Trades in other currencies (US stocks are in dollars) are
-// converted at the European Central Bank rate of that day (Frankfurter, free, sees only dates).
+// Money put in each month (and each day) = buys − sales. Trades in other currencies (US stocks are in dollars)
+// are converted at the European Central Bank rate of that day (Frankfurter, free, sees only dates).
 async function monthlyAmounts(code, currencies) {
   const trades = (await fetchTrades(code))
     .filter((t) => t.transaction_type === 'BUYING' || t.transaction_type === 'SELLING')
     .map((t) => ({ ...t, day: lisbonDay(t.timestamp), currency: currencies[t.isin] || 'EUR' }))
-  if (!trades.length) return []
+  if (!trades.length) return { months: [], days: [] }
 
   const foreign = [...new Set(trades.map((t) => t.currency).filter((c) => c !== 'EUR'))]
   let rateDays = []
@@ -151,12 +151,18 @@ async function monthlyAmounts(code, currencies) {
   }
 
   const byMonth = new Map()
+  const byDay = new Map()
   for (const t of trades) {
     const euros = toEuros(t.units * t.price, t.currency, t.day) * (t.transaction_type === 'SELLING' ? -1 : 1)
     const key = t.day.slice(0, 7)
     byMonth.set(key, (byMonth.get(key) ?? 0) + euros)
+    byDay.set(t.day, (byDay.get(t.day) ?? 0) + euros)
   }
-  return [...byMonth].sort(([a], [b]) => (a < b ? -1 : 1)).map(([key, euros]) => ({ key, cents: cents(euros) }))
+  const sorted = (map) => [...map].sort(([a], [b]) => (a < b ? -1 : 1))
+  return {
+    months: sorted(byMonth).map(([key, euros]) => ({ key, cents: cents(euros) })),
+    days: sorted(byDay).map(([date, euros]) => ({ date, cents: cents(euros) })),
+  }
 }
 
 export default async function handler(req, res) {
@@ -177,11 +183,14 @@ export default async function handler(req, res) {
 
   try {
     const { portfolio, code, currencies } = readPortfolio(await fetchPage(link.href))
-    // Monthly amounts are extra: without them the page uses what LynxOS tracks (months = null)
+    // Monthly amounts are extra: without them the page uses only your Invest transactions (months = null)
     try {
-      portfolio.months = code ? await monthlyAmounts(code, currencies) : null
+      const flows = code ? await monthlyAmounts(code, currencies) : null
+      portfolio.months = flows?.months ?? null
+      portfolio.days = flows?.days ?? null
     } catch (e) {
       portfolio.months = null
+      portfolio.days = null
       portfolio.months_error = e.message
     }
     res.setHeader('cache-control', 'no-store')

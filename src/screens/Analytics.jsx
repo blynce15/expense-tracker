@@ -79,10 +79,11 @@ function WorthCard({ a }) {
           <path d={linePath(values, 300, 36, max, min)} transform="translate(0 2)" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         </svg>
       )}
-      <div className="relative mt-3 grid grid-cols-3 gap-1.5">
+      <div className="relative mt-3 grid grid-cols-4 gap-1.5">
         <Fact label="In" value={whole(totals.income)} />
         <Fact label="Spent" value={whole(totals.spent)} />
         <Fact label="Saved" value={whole(totals.saved)} />
+        <Fact label="Invested" value={whole(totals.invested)} />
       </div>
     </section>
   )
@@ -189,7 +190,9 @@ function SavingCard({ a }) {
   const r = 30
   const c = 2 * Math.PI * r
   const income = totals.income || 0
+  // Ring: saved (blue) then invested (teal), as shares of income
   const savedShare = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
+  const investedShare = income > 0 ? Math.max(0, Math.min(1 - savedShare, totals.invested / income)) : 0
   return (
     <Card icon="savings" color="var(--color-cobalt)" title="Saving" onMore={() => navigate('/analytics/saving')}>
       <div className="flex items-center gap-4">
@@ -197,18 +200,30 @@ function SavingCard({ a }) {
           <svg width="76" height="76" viewBox="0 0 76 76" className="absolute inset-0 -rotate-90" aria-hidden="true">
             <circle cx="38" cy="38" r={r} fill="none" strokeWidth="9" stroke="var(--color-line)" />
             {savedShare > 0 && <circle cx="38" cy="38" r={r} fill="none" strokeWidth="9" stroke="var(--color-cobalt)" strokeDasharray={`${savedShare * c} ${c}`} />}
+            {investedShare > 0 && (
+              <circle
+                cx="38"
+                cy="38"
+                r={r}
+                fill="none"
+                strokeWidth="9"
+                stroke="var(--color-teal)"
+                strokeDasharray={`${investedShare * c} ${c}`}
+                strokeDashoffset={-savedShare * c}
+              />
+            )}
           </svg>
           <span className="tabular relative font-display text-base font-extrabold">{saving.rate !== null ? pct(Math.max(0, saving.rate)) : '—'}</span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted">You saved</p>
+          <p className="text-xs text-muted">You kept · saved and invested</p>
           <p className="tabular truncate font-display text-[24px] leading-tight font-bold">
             {whole(saving.kept)} {income > 0 && <span className="font-sans text-sm font-medium text-muted">of {whole(income)}</span>}
           </p>
         </div>
       </div>
       <div className="mt-3 flex gap-2">
-        <Mini label={`Saved in ${saving.year}`} value={whole(saving.yearKept)} />
+        <Mini label={`Kept in ${saving.year}`} value={whole(saving.yearKept)} />
         <Mini label="Average rate" value={saving.avgRate !== null ? pct(saving.avgRate) : '—'} />
         <Mini label="Best month" value={saving.best ? monthShort(saving.best.key) : '—'} />
       </div>

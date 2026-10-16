@@ -1,7 +1,7 @@
 import { monthRange, todayISO } from './dates'
 
 // Transactions filter, kept by App so it survives tab switches:
-// { type: 'all' | 'income' | 'expense' | 'transfer', categoryIds: [], accountIds: [],
+// { type: 'all' | 'income' | 'expense' | 'transfer' | 'invest' (Put in and Take out), categoryIds: [], accountIds: [],
 //   date: { preset: 'all' | 'thisMonth' | 'lastMonth' | 'last3' | 'thisYear' | 'custom', from, to },
 //   recurring: 'all' | 'only' | 'not', recurringIds: [] (which recurring entries for 'only'; empty = all of them) }
 export const EMPTY_FILTER = { type: 'all', categoryIds: [], accountIds: [], date: { preset: 'all' }, recurring: 'all', recurringIds: [] }
@@ -68,7 +68,7 @@ export function activeFilterCount(filter) {
 
 // The recurring filter doesn't apply to transfers either
 export function usesRecurring(filter) {
-  return filter.type !== 'transfer' && (filter.recurring ?? 'all') !== 'all'
+  return filter.type !== 'transfer' && filter.type !== 'invest' && (filter.recurring ?? 'all') !== 'all'
 }
 
 // A transaction is recurring when its name is the name of a recurring payment or income
@@ -78,7 +78,7 @@ export function recurringNameSet(recurring) {
 }
 
 export function isRecurring(t, names) {
-  return t.type !== 'transfer' && !!t.note && names.has(t.note.trim().toLowerCase())
+  return (t.type === 'expense' || t.type === 'income') && !!t.note && names.has(t.note.trim().toLowerCase())
 }
 
 // Names of the recurring entries the filter is about
@@ -90,15 +90,16 @@ function recurringNames(filter, recurring) {
 // A value inside a PostgREST or(...) list, quoted so commas and brackets in names are safe
 const quoted = (text) => `"${text.replace(/["\\]/g, '\\$&')}"`
 
-// Categories don't apply to transfers
+// Categories don't apply to transfers or investing
 export function usesCategories(filter) {
-  return filter.type !== 'transfer' && filter.categoryIds.length > 0
+  return filter.type !== 'transfer' && filter.type !== 'invest' && filter.categoryIds.length > 0
 }
 
 // Adds the filter's conditions to a Supabase transactions query (`recurring` = the recurring entries, for that filter)
 export function applyFilter(query, filter, recurring = []) {
   let q = query
-  if (filter.type !== 'all') q = q.eq('type', filter.type)
+  if (filter.type === 'invest') q = q.in('type', ['invest', 'divest'])
+  else if (filter.type !== 'all') q = q.eq('type', filter.type)
   if (usesCategories(filter)) q = q.in('category_id', filter.categoryIds)
   if (filter.accountIds.length) {
     // A transfer counts for a card if the money left or arrived there
@@ -111,10 +112,10 @@ export function applyFilter(query, filter, recurring = []) {
     // Names match ignoring upper/lower case, like isRecurring
     const names = recurringNames(filter, recurring)
     if (filter.recurring === 'only') {
-      q = q.neq('type', 'transfer')
+      q = q.in('type', ['expense', 'income'])
       q = names.length ? q.or(names.map((n) => `note.ilike.${quoted(n)}`).join(',')) : q.is('id', null)
     } else if (names.length) {
-      q = q.or(`type.eq.transfer,note.is.null,and(${names.map((n) => `note.not.ilike.${quoted(n)}`).join(',')})`)
+      q = q.or(`type.in.(transfer,invest,divest),note.is.null,and(${names.map((n) => `note.not.ilike.${quoted(n)}`).join(',')})`)
     }
   }
   return q

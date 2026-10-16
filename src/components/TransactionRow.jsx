@@ -4,8 +4,26 @@ import MerchantIcon from './MerchantIcon'
 
 // One transaction line: shop logo or category icon, title, account, and signed amount.
 // `recurring`: a small violet ↻ badge on the icon (the name matches a recurring payment or income).
+// Invest rows: teal ↗ (put in) or ↘ (taken out) tile, teal amount without a sign (it isn't spending or income).
 export default function TransactionRow({ t, category, accountName, recurring = false }) {
   const isTransfer = t.type === 'transfer'
+  const investing = t.type === 'invest' || t.type === 'divest'
+  if (investing) {
+    return (
+      <>
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-teal/12 text-teal">
+          <Icon name={t.type === 'divest' ? 'investOut' : 'invest'} size={20} strokeWidth={2.3} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-base font-medium">{t.note || 'Investing'}</span>
+          <span className="block truncate text-sm text-muted">
+            {t.type === 'divest' ? `Taken out · to ${accountName(t.account_id)}` : `Invested · ${accountName(t.account_id)}`}
+          </span>
+        </span>
+        <span className="tabular shrink-0 font-display text-base font-semibold text-teal">{formatCents(t.amount_cents)}</span>
+      </>
+    )
+  }
   const title = isTransfer ? 'Transfer' : (category?.name ?? 'No category')
   const subtitle = isTransfer
     ? `${accountName(t.account_id)} → ${accountName(t.to_account_id)}`

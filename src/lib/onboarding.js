@@ -1,3 +1,4 @@
+import { todayISO } from './dates'
 import { fetchLastUsedAccountId, fetchLookups } from './lookups'
 import { fetchProfile, saveProfile } from './profile'
 import { supabase } from './supabase'
@@ -115,7 +116,9 @@ export async function saveOnboarding({ profile, accounts, categories, payments, 
   // Name and photo live in user_settings.answers next to anything already there
   const existing = await fetchProfile().catch(() => null)
   const look = { name: profile.name.trim(), photo: profile.photo }
-  const answers = { ...(existing?.answers ?? {}), ...look, ...(getquinUrl ? { getquinUrl } : {}) }
+  // getquinSince: from this day on, money put in comes from your Invest transactions instead of getquin's trades
+  const since = existing?.answers?.getquinSince ?? todayISO()
+  const answers = { ...(existing?.answers ?? {}), ...look, ...(getquinUrl ? { getquinUrl, getquinSince: since } : {}) }
   await saveProfile({ budget_start_day: startDay, answers, onboarded_at: new Date().toISOString() })
   window.dispatchEvent(new CustomEvent('profile:look', { detail: look }))
 

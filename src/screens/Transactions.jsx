@@ -32,6 +32,7 @@ const TYPE_TABS = [
   { value: 'income', label: 'Income' },
   { value: 'expense', label: 'Expense' },
   { value: 'transfer', label: 'Transfer' },
+  { value: 'invest', label: 'Invest' },
 ]
 
 // filter: see lib/filters.js — kept by App so it survives tab switches
@@ -71,7 +72,7 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
 
   function changeType(type) {
     // Keep only the selected categories that belong to the new type (transfers have none)
-    const kinds = type === 'all' ? ['expense', 'income'] : [type]
+    const kinds = type === 'all' ? ['expense', 'income'] : type === 'invest' ? [] : [type]
     const categoryIds = filter.categoryIds.filter((id) => kinds.includes(lookups?.categories.find((c) => c.id === id)?.kind))
     onFilterChange({ ...filter, type, categoryIds })
   }
@@ -81,13 +82,13 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
   return (
     <div className="px-4 pb-6">
       <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 -mx-4 bg-paper/90 px-4 pt-1 pb-3 backdrop-blur">
-        <div className="grid grid-cols-4 gap-1 rounded-2xl bg-card p-1">
+        <div className="grid grid-cols-5 gap-0.5 rounded-2xl bg-card p-1">
           {TYPE_TABS.map((t) => (
             <button
               key={t.value}
               onClick={() => changeType(t.value)}
               aria-pressed={filter.type === t.value}
-              className={`rounded-xl py-2.5 text-sm font-semibold transition ${
+              className={`rounded-xl py-2.5 text-[13px] font-semibold transition ${
                 filter.type === t.value ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'
               }`}
             >
@@ -276,7 +277,7 @@ function FilterSheet({ filter, lookups, recurring, onApply, onClose }) {
   }, [draft])
 
   const accounts = lookups.accounts.filter((a) => !a.archived || draft.accountIds.includes(a.id))
-  const kinds = draft.type === 'all' ? ['expense', 'income'] : [draft.type]
+  const kinds = draft.type === 'all' ? ['expense', 'income'] : draft.type === 'invest' ? [] : [draft.type]
   const categories = lookups.categories.filter((c) => kinds.includes(c.kind) && (!c.archived || draft.categoryIds.includes(c.id)))
   const toggle = (key, id) =>
     setDraft((d) => ({ ...d, [key]: d[key].includes(id) ? d[key].filter((x) => x !== id) : [...d[key], id] }))
@@ -322,10 +323,10 @@ function FilterSheet({ filter, lookups, recurring, onApply, onClose }) {
         <ul className="overflow-hidden rounded-2xl bg-card">
           <FilterRow emoji="📅" tint="bg-cobalt/10" label="Date range" value={describeDate(draft.date)} set={draft.date.preset !== 'all'} onClick={() => setPage('date')} />
           <FilterRow emoji="💳" tint="bg-[#6741d9]/10" label="Cards" value={accountText} set={draft.accountIds.length > 0} onClick={() => setPage('cards')} />
-          {draft.type !== 'transfer' && (
+          {draft.type !== 'transfer' && draft.type !== 'invest' && (
             <FilterRow emoji="🏷️" tint="bg-gain/10" label="Categories" value={categoryText} set={draft.categoryIds.length > 0} onClick={() => setPage('cats')} />
           )}
-          {draft.type !== 'transfer' && (
+          {draft.type !== 'transfer' && draft.type !== 'invest' && (
             <FilterRow
               emoji={<Icon name="repeat" size={17} strokeWidth={2.4} />}
               tint="bg-violet/12 text-violet"

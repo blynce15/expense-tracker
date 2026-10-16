@@ -1,3 +1,4 @@
+import { todayISO } from './dates'
 import { supabase } from './supabase'
 
 // The user's settings row (table user_settings): budget start day, "About you" answers, onboarding status.
@@ -33,8 +34,15 @@ export const saveName = (name) => saveAnswers({ name: name.trim() })
 export const savePhoto = (dataUrl) => saveAnswers({ photo: dataUrl })
 // The account new transactions start on; null = the last one used
 export const saveDefaultAccount = (id) => saveAnswers({ defaultAccountId: id })
-// The getquin share link the Investments page reads (src/lib/getquin.js); null = not linked
-export const saveGetquinLink = (url) => saveAnswers({ getquinUrl: url })
+// The getquin share link the Investments page reads (src/lib/getquin.js); null = not linked.
+// The first time a link is saved, getquinSince = that day: money put in before it comes from getquin's
+// trades, from that day on from your Invest transactions (it stays if you disconnect and connect again).
+export async function saveGetquinLink(url) {
+  const profile = await fetchProfile()
+  const since = profile?.answers?.getquinSince
+  await saveAnswers({ getquinUrl: url, ...(url && !since ? { getquinSince: todayISO() } : {}) })
+}
+export const saveGetquinSince = (iso) => saveAnswers({ getquinSince: iso })
 
 // Center-crops a picked image to a square and shrinks it to `size` px
 export function squareJpeg(file, size = 256) {

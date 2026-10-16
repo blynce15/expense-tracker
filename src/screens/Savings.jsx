@@ -90,8 +90,8 @@ async function fetchSavingsFlow() {
     const k = t.date.slice(0, 7)
     if (!net.has(k)) continue
     let change = 0
-    if (t.type === 'income') change = t.amount_cents
-    else if (t.type === 'expense') change = -t.amount_cents
+    if (t.type === 'income' || t.type === 'divest') change = ids.has(t.account_id) ? t.amount_cents : 0
+    else if (t.type === 'expense' || t.type === 'invest') change = ids.has(t.account_id) ? -t.amount_cents : 0
     else if (t.type === 'transfer')
       change = (ids.has(t.to_account_id) ? t.amount_cents : 0) - (ids.has(t.account_id) ? t.amount_cents : 0)
     net.set(k, net.get(k) + change)

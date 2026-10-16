@@ -97,8 +97,9 @@ function buildAnalytics(p, accounts, recurring, rows) {
   const endMonth = months.length ? months[months.length - 1] : p.kind === 'year' ? `${p.key}-12` : p.key
   const last12 = Array.from({ length: 12 }, (_, i) => shiftMonth(endMonth, i - 11))
 
-  // Per month: income, spending, money into savings and into investments (net), and net worth change
-  const blank = () => ({ income: 0, spent: 0, saved: 0, invested: 0 })
+  // Per month: income, spending, money into savings and into investments (net), and net worth change.
+  // investNet = Invest − Take out transactions only (that money leaves your accounts for getquin)
+  const blank = () => ({ income: 0, spent: 0, saved: 0, invested: 0, investNet: 0 })
   const byMonth = new Map()
   const month = (k) => byMonth.get(k) ?? byMonth.set(k, blank()).get(k)
   const spentByDay = new Map() // date → cents
@@ -141,6 +142,12 @@ function buildAnalytics(p, accounts, recurring, rows) {
         const [y, mo, d] = t.date.split('-').map(Number)
         weekday[(new Date(y, mo - 1, d).getDay() + 6) % 7] += t.amount_cents
       }
+    } else if (t.type === 'invest' || t.type === 'divest') {
+      // Not spending or income: money between your accounts and your investments
+      const cents = t.type === 'invest' ? t.amount_cents : -t.amount_cents
+      m.invested += cents
+      m.investNet += cents
+      moveInto(m, t.account_id, -cents, k)
     } else {
       moveInto(m, t.account_id, -t.amount_cents, k)
       moveInto(m, t.to_account_id, t.amount_cents, k)
@@ -153,11 +160,12 @@ function buildAnalytics(p, accounts, recurring, rows) {
   const before = totals(prevMonths)
 
   // Net worth: today's total, then backwards: at the end of month M it was today's total minus all
-  // income and spending after M (transfers move money between your own accounts, so they don't count).
+  // income and spending after M (transfers move money between your own accounts, so they don't count;
+  // money invested left the accounts, so it's added back).
   const nowTotal = accounts.reduce((s, a) => s + a.balance_cents, 0)
   const afterMonth = (k) => {
     let change = 0
-    for (const [key, m] of byMonth) if (key > k) change += m.income - m.spent
+    for (const [key, m] of byMonth) if (key > k) change += m.income - m.spent - m.investNet
     return nowTotal - change
   }
   const worthLine = last12.filter((k) => k <= now).map((k) => ({ key: k, cents: afterMonth(k) }))
@@ -203,9 +211,8 @@ function buildAnalytics(p, accounts, recurring, rows) {
     .map(([id, cents]) => ({ id: id === 'null' ? null : id, cents, prev: catPrevSoFar.get(id) ?? 0 }))
     .sort((a, b) => b.cents - a.cents)
 
-  // Saving: what you kept (net money into savings accounts) out of your income. Investments aren't
-  // counted any more (no investment accounts since 2026-10-14; they'll come from getquin later).
-  const keptOf = (m) => m.saved
+  // Saving: what you kept out of your income = net money into savings accounts + money invested
+  const keptOf = (m) => m.saved + m.invested
   const fullMonths = last12.filter((k) => k < now || !current) // leave out a month still in progress
   const rateMonths = fullMonths.filter((k) => (byMonth.get(k)?.income ?? 0) > 0)
   const rateIncome = sum(rateMonths, 'income')
