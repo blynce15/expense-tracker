@@ -43,7 +43,10 @@ export default function Analytics() {
         if (!link) return setInvest({})
         const cached = cachedPortfolio(link)
         setInvest({ portfolio: cached, since })
-        if (!cached) fetchPortfolio(link).then((portfolio) => setInvest({ portfolio, since }))
+        // Fresh numbers (and the value history) in the background
+        fetchPortfolio(link)
+          .then((portfolio) => setInvest({ portfolio, since }))
+          .catch(() => {})
       })
       .catch(() => setInvest({}))
   }, [])
@@ -74,9 +77,9 @@ export default function Analytics() {
 
 // ---------- 1 · Where you stand ----------
 
-// Net worth = accounts + the getquin portfolio. Back in time the portfolio is today's value minus what was put
-// in after that month (getquin's trades before getquinSince, your Invest transactions after), so the line
-// follows your own money; market ups and downs before today aren't known.
+// Net worth = accounts + the getquin portfolio. Back in time the portfolio is its real value at the end of each
+// month (getquin's value history). If getquin can't give the history: today's value minus what was put in after
+// that month (getquin's trades before getquinSince, your Invest transactions after).
 function standingOf(a, invest) {
   const value = invest.portfolio?.value_cents ?? 0
   const put = new Map()
@@ -87,8 +90,17 @@ function standingOf(a, invest) {
     else if (p.months) for (const m of p.months) m.key < invest.since.slice(0, 7) && add(m.key, m.cents)
   }
   for (const [k, m] of a.byMonth) if (m.investNet) add(k, m.investNet)
+  const history = p?.history?.length ? p.history : null
+  const thisMonth = a.worth.line.at(-1)?.key
   const investedAt = (k) => {
     if (!value) return 0
+    if (history) {
+      if (k >= thisMonth) return value
+      // The value at the end of month k (the last one known up to then; before the first one, nothing)
+      let found = 0
+      for (const h of history) if (h.date.slice(0, 7) <= k) found = h.cents
+      return found
+    }
     let after = 0
     for (const [key, cents] of put) if (key > k) after += cents
     return Math.max(0, value - after)

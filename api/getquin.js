@@ -115,6 +115,28 @@ async function fetchTrades(code) {
   return trades
 }
 
+// The portfolio's value over time, as getquin's share page draws it (getSharedAggregatedDashboardTimeSeriesV2,
+// period "all", in euros): the last value of each month, [{ date: '2026-09-30', cents }], oldest first.
+async function valueHistory(code) {
+  const res = await fetch('https://api-gql-v2.getquin.com/', {
+    method: 'POST',
+    headers: GQL_HEADERS,
+    body: JSON.stringify({
+      query: `query($code: String!, $tz: String!) { t: getSharedAggregatedDashboardTimeSeriesV2(code: $code, period: "all", currency: "EUR", tz: $tz) { values { value timestamp } } }`,
+      variables: { code, tz: 'Europe/Lisbon' },
+    }),
+  })
+  const body = await res.json()
+  const values = body?.data?.t?.values
+  if (!values) throw new Error(body?.errors?.[0]?.message || `getquin answered ${res.status}.`)
+  const byMonth = new Map()
+  for (const v of [...values].sort((x, y) => (x.timestamp < y.timestamp ? -1 : 1))) {
+    const date = lisbonDay(v.timestamp)
+    byMonth.set(date.slice(0, 7), { date, cents: cents(v.value) })
+  }
+  return [...byMonth.values()]
+}
+
 // "2026-09-23": the trade's day where the owner lives (getquin stores e.g. 2026-09-22T22:00:00Z)
 const lisbonDay = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Europe/Lisbon' })
 
@@ -192,6 +214,13 @@ export default async function handler(req, res) {
       portfolio.months = null
       portfolio.days = null
       portfolio.months_error = e.message
+    }
+    // Value history is extra too: without it net worth in the past is estimated from money put in
+    try {
+      portfolio.history = code ? await valueHistory(code) : null
+    } catch (e) {
+      portfolio.history = null
+      portfolio.history_error = e.message
     }
     res.setHeader('cache-control', 'no-store')
     return res.status(200).json(portfolio)
