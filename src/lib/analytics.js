@@ -71,7 +71,7 @@ export async function fetchAnalytics(p) {
   const prev = shiftPeriod(p, -1)
   const endMonth = p.kind === 'year' ? `${p.key}-12` : p.key
   const prevStart = prev.kind === 'year' ? `${prev.key}-01` : prev.key
-  const twelveBack = shiftMonth(endMonth, -11)
+  const twelveBack = shiftMonth(endMonth, -12) // the 12 months shown + the same month last year
   const from = prevStart < twelveBack ? prevStart : twelveBack
 
   const [accounts, recurring, tx] = await Promise.all([
@@ -110,6 +110,12 @@ function buildAnalytics(p, accounts, recurring, rows) {
   // While a period is still running, compare with the one before only up to the same day
   // (e.g. 1–12 Oct with 1–12 Sep), else a part month always looks cheaper than a full one
   const cutoff = isCurrentPeriod(p) ? sameDayBefore(p) : null
+  // The same month last year, up to the same day while this month is running (Better or worse)
+  const lyKey = p.kind === 'month' ? shiftMonth(p.key, -12) : null
+  const lyCutoff = lyKey && isCurrentPeriod(p) ? `${lyKey}-${todayISO().slice(8, 10)}` : null
+  const lastYear = { income: 0, spent: 0, kept: 0, any: false }
+  // Expenses named like a recurring payment, by name: [{ date, cents }] (to spot price changes)
+  const fixedHistory = new Map()
   let prevSpentSoFar = 0
   const catPrevSoFar = new Map()
 
@@ -134,6 +140,8 @@ function buildAnalytics(p, accounts, recurring, rows) {
     currentTx = t
     const k = t.date.slice(0, 7)
     const m = month(k)
+    const keptBefore = m.saved + m.invested
+    const inLastYear = k === lyKey && (!lyCutoff || t.date <= lyCutoff)
     if (t.type === 'income') {
       m.income += t.amount_cents
       moveInto(m, t.account_id, t.amount_cents, k)
@@ -146,7 +154,12 @@ function buildAnalytics(p, accounts, recurring, rows) {
         prevSpentSoFar += t.amount_cents
         catPrevSoFar.set(String(t.category_id), (catPrevSoFar.get(String(t.category_id)) ?? 0) + t.amount_cents)
       }
-      if (t.note && fixedNames.has(t.note.trim().toLowerCase())) fixedBy.set(k, (fixedBy.get(k) ?? 0) + t.amount_cents)
+      if (t.note && fixedNames.has(t.note.trim().toLowerCase())) {
+        fixedBy.set(k, (fixedBy.get(k) ?? 0) + t.amount_cents)
+        const name = t.note.trim().toLowerCase()
+        if (!fixedHistory.has(name)) fixedHistory.set(name, [])
+        fixedHistory.get(name).push({ date: t.date, cents: t.amount_cents })
+      }
       if (k >= last12[0] && k <= endMonth) {
         const [y, mo, d] = t.date.split('-').map(Number)
         weekday[(new Date(y, mo - 1, d).getDay() + 6) % 7] += t.amount_cents
@@ -160,6 +173,12 @@ function buildAnalytics(p, accounts, recurring, rows) {
     } else {
       moveInto(m, t.account_id, -t.amount_cents, k)
       moveInto(m, t.to_account_id, t.amount_cents, k)
+    }
+    if (inLastYear) {
+      lastYear.any = true
+      if (t.type === 'income') lastYear.income += t.amount_cents
+      if (t.type === 'expense') lastYear.spent += t.amount_cents
+      lastYear.kept += m.saved + m.invested - keptBefore
     }
   }
 
@@ -260,6 +279,8 @@ function buildAnalytics(p, accounts, recurring, rows) {
     activeMonths: active.map((t) => t.key),
     // Spending on recurring payments per month, and what the active ones cost per month today
     fixedBy,
+    fixedHistory,
+    lastYear: lyKey && lastYear.any ? { ...lastYear, key: lyKey } : null,
     recurringMonthly: recurring.filter((r) => r.active && r.type !== 'income').reduce((s, r) => s + monthlyCents(r), 0),
     recurring,
     // Savings accounts (today's balance) with the net money in during this period
