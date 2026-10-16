@@ -16,6 +16,10 @@ export function usePeriod() {
   }
   return [period, set]
 }
+// Back to this month (the overview always shows now; its details pages then start there)
+export function resetPeriod() {
+  rememberedPeriod = null
+}
 
 // "€2.400" (no cents), for compact numbers
 export const whole = (cents) => formatCents(Math.round(cents)).replace(/,\d\d$/, '')

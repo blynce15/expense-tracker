@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
+import { pct, resetPeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
-import { fetchAnalytics, monthShort, noticings, periodLabel, prevLabel, shiftMonth, verdictOf } from '../lib/analytics'
+import { currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, prevLabel, shiftMonth, verdictOf } from '../lib/analytics'
 import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
@@ -10,15 +10,17 @@ import { navigate } from '../lib/useRoute'
 
 // Analytics answers five questions, top to bottom: where you stand (net worth with investments), how this
 // period is going against your usual (verdict), what's worth noticing, then Explore: where it goes, what you
-// keep and better or worse, each opening its details page. Month or Year, with arrows between periods.
+// keep and better or worse, each opening its details page. Always this month: other months and years are
+// on the details pages (net worth in the past can only be estimated for investments).
 export default function Analytics() {
-  const [period, setPeriod] = usePeriod()
+  const [period] = useState(() => currentPeriod('month'))
   const [data, setData] = useState(null)
   const [categories, setCategories] = useState(null)
   const [invest, setInvest] = useState(null) // { portfolio, since } from getquin, or {} when not linked
   const [error, setError] = useState(null)
 
   useEffect(() => {
+    resetPeriod()
     let cancelled = false
     Promise.all([fetchAnalytics(period), fetchLookups()])
       .then(([a, lookups]) => {
@@ -53,7 +55,6 @@ export default function Analytics() {
 
   return (
     <div className="px-4 pt-1 pb-6">
-      <PeriodBar period={period} onChange={setPeriod} />
       {ready && (
         <>
           <Standing a={data} invest={invest} />
@@ -123,7 +124,7 @@ function Standing({ a, invest }) {
   const total = s.parts.reduce((sum, x) => sum + x.cents, 0) || 1
 
   return (
-    <section className="relative mt-3 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep px-[18px] pt-[18px] pb-4 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
+    <section className="relative mt-1 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep px-[18px] pt-[18px] pb-4 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
       <span className="pointer-events-none absolute -top-16 -right-14 size-48 rounded-full bg-white/[.08]" />
       <div className="relative flex items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-white/85">
