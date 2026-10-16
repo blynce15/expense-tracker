@@ -46,6 +46,7 @@ const paths = {
   cash: 'M4.5 6h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM9.5 12a2.5 2.5 0 1 0 5 0a2.5 2.5 0 1 0-5 0M6 12h.01M18 12h.01',
   sparkles: 'M12 3.5l1.8 4.7 4.7 1.8-4.7 1.8L12 16.5l-1.8-4.7L5.5 10l4.7-1.8zM18.5 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z',
   invest: 'M3 17l6-6 4 4 8-8M15 7h6v6',
+  refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
 }
 
 export default function Icon({ name, size = 24, strokeWidth = 1.8, className = '' }) {

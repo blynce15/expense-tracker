@@ -44,7 +44,7 @@ export default function Investments() {
   const [portfolio, setPortfolio] = useState(null)
   const [portfolioError, setPortfolioError] = useState(null)
   const [refreshing, setRefreshing] = useState(false)
-  const [editingLink, setEditingLink] = useState(false)
+  const [editingLink, setEditingLink] = useState(false) // only from the empty page; changing the link is in Profile
 
   // Fresh numbers from getquin every time the page opens; the last ones show meanwhile
   const refresh = useCallback((url) => {
@@ -101,7 +101,13 @@ export default function Investments() {
 
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
-      <ValueCard portfolio={portfolio} monthCents={flow ? flow.at(-1).cents : null} error={portfolioError} />
+      <ValueCard
+        portfolio={portfolio}
+        monthCents={flow ? flow.at(-1).cents : null}
+        error={portfolioError}
+        refreshing={refreshing}
+        onRefresh={() => refresh(link)}
+      />
       {flow && <InvestChart flow={flow} />}
 
       <h2 className="px-1 pt-2 font-display text-lg font-bold">
@@ -118,18 +124,34 @@ export default function Investments() {
           {portfolioError ? `Couldn't load your positions: ${portfolioError}` : 'Loading your positions…'}
         </p>
       )}
-      <SourceRow portfolio={portfolio} refreshing={refreshing} error={portfolioError} onRefresh={() => refresh(link)} onEdit={() => setEditingLink(true)} />
-      {linkSheet}
     </div>
   )
 }
 
-// Today's value from getquin with the overall gain; Invested = what getquin says the positions cost
-function ValueCard({ portfolio, monthCents, error }) {
+// Today's value from getquin with the overall gain; Invested = what getquin says the positions cost.
+// Top right: when getquin's numbers are from, and a button to fetch them again.
+function ValueCard({ portfolio, monthCents, error, refreshing, onRefresh }) {
+  const time = portfolio?.updated_at && new Date(portfolio.updated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  const header = (
+    <div className="relative flex items-center justify-between gap-2">
+      <p className="text-sm font-semibold text-white/80">Portfolio value</p>
+      <button
+        onClick={onRefresh}
+        disabled={refreshing}
+        className="-my-1 flex items-center gap-1.5 rounded-full bg-white/15 py-1 pr-1 pl-2.5 text-xs font-semibold text-white/85 active:bg-white/25"
+        aria-label="Refresh from getquin"
+      >
+        <span className="tabular">{refreshing ? 'Updating…' : error ? 'Couldn’t update' : time ? `Updated ${time}` : 'getquin'}</span>
+        <span className="grid size-6 place-items-center rounded-full bg-white/20">
+          <Icon name="refresh" size={14} strokeWidth={2.4} className={refreshing ? 'animate-spin' : ''} />
+        </span>
+      </button>
+    </div>
+  )
   if (!portfolio) {
     return (
       <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#14a3b8] via-[#0c8599] to-[#08606f] p-[18px] text-white">
-        <p className="text-sm font-semibold text-white/80">Portfolio value</p>
+        {header}
         <p className="mt-2 text-sm text-white/80">{error ? 'Couldn’t reach getquin right now.' : 'Checking getquin…'}</p>
       </section>
     )
@@ -140,7 +162,7 @@ function ValueCard({ portfolio, monthCents, error }) {
   return (
     <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#14a3b8] via-[#0c8599] to-[#08606f] p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(12,133,153,0.9)]">
       <LynxWatermark className="-bottom-14 -left-10" />
-      <p className="relative text-sm font-semibold text-white/80">Portfolio value</p>
+      {header}
       <div className="relative mt-0.5 flex items-end justify-between gap-2">
         <p className="tabular min-w-0 truncate font-display leading-none font-bold">
           <span className="text-[38px] tracking-tight">{euros}</span>
@@ -196,25 +218,6 @@ function PositionLogo({ position }) {
     <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-teal text-sm font-bold text-white">
       {(position.ticker || position.name).slice(0, 3).toUpperCase()}
     </span>
-  )
-}
-
-// "From getquin · Updated 14:32", with Refresh and Link (change or disconnect)
-function SourceRow({ portfolio, refreshing, error, onRefresh, onEdit }) {
-  const time = portfolio?.updated_at && new Date(portfolio.updated_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  const text = refreshing ? 'Updating…' : error && time ? `Couldn’t update · from ${time}` : time ? `Updated ${time}` : ''
-  return (
-    <div className="flex items-center gap-1 px-1 text-[13px] text-muted">
-      <span className="min-w-0 flex-1 truncate">
-        From getquin{text && ` · ${text}`}
-      </span>
-      <button onClick={onRefresh} disabled={refreshing} className="rounded-full px-2.5 py-2 font-semibold text-teal disabled:opacity-50">
-        Refresh
-      </button>
-      <button onClick={onEdit} className="rounded-full px-2.5 py-2 font-semibold text-teal">
-        Link
-      </button>
-    </div>
   )
 }
 
