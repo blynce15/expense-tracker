@@ -19,7 +19,7 @@ Single user (the owner). Currency: EUR only.
 ## Navigation
 Bottom tab bar: Home · Transactions · Analytics · Savings · Investments, with the [+] button on its own at the right (changed 2026-10-14).
 - [+] opens "Add transaction".
-- Top bar (main tabs): an AI button (sparkles icon; placeholder "Coming soon" sheet for now), then the profile avatar; the avatar opens Profile (settings live there).
+- Top bar (main tabs): the profile avatar, which opens Profile (settings live there). The AI button placeholder was removed (owner, 2026-10-16).
 - Mobile-first. Respect iPhone safe areas (notch, home indicator). Large tap targets.
 
 ## Data model (Supabase tables)

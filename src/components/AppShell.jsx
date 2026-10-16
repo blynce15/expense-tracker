@@ -1,8 +1,5 @@
-import { useState } from 'react'
-import { createPortal } from 'react-dom'
 import Avatar, { useProfileLook } from './Avatar'
 import Icon from './Icon'
-import Sheet from './Sheet'
 import { goBack, navigate } from '../lib/useRoute'
 
 const TABS = [
@@ -15,7 +12,6 @@ const TABS = [
 
 export function TopBar({ title, back, action, center, email }) {
   const look = useProfileLook()
-  const [aiOpen, setAiOpen] = useState(false)
   return (
     <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="relative flex h-14 items-center gap-1 px-2">
@@ -31,32 +27,11 @@ export function TopBar({ title, back, action, center, email }) {
         <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
         {action}
         {!back && (
-          // AI assistant: a placeholder for now
-          <button onClick={() => setAiOpen(true)} className="grid h-11 w-9 place-items-center rounded-full" aria-label="AI assistant">
-            <span className="grid size-8 place-items-center rounded-full bg-card text-cobalt shadow-[0_6px_14px_-8px_rgba(11,27,69,0.45)] ring-1 ring-line">
-              <Icon name="sparkles" size={18} strokeWidth={2} />
-            </span>
-          </button>
-        )}
-        {!back && (
           <button onClick={() => navigate('/profile')} className="grid size-11 place-items-center rounded-full" aria-label="Profile">
             <Avatar name={look.name} email={email} photo={look.photo} size={34} className="shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]" />
           </button>
         )}
       </div>
-      {/* Outside the header: its blur would otherwise keep the sheet inside the bar */}
-      {aiOpen &&
-        createPortal(
-          <Sheet title="AI assistant" onClose={() => setAiOpen(false)}>
-            <div className="flex flex-col items-center pt-2 pb-4 text-center">
-              <span className="grid size-16 place-items-center rounded-[22px] bg-cobalt/10 text-cobalt">
-                <Icon name="sparkles" size={32} strokeWidth={1.8} />
-              </span>
-              <p className="mt-3 font-display text-xl font-bold">Coming soon</p>
-            </div>
-          </Sheet>,
-          document.body,
-        )}
     </header>
   )
 }
