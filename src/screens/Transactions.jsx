@@ -2,13 +2,26 @@ import { useCallback, useEffect, useState } from 'react'
 import { FullEmpty } from '../components/EmptyLynx'
 import { MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import RangeCalendar from '../components/RangeCalendar'
 import Sheet from '../components/Sheet'
 import TransactionRow from '../components/TransactionRow'
 import { formatDay, todayISO } from '../lib/dates'
-import { activeFilterCount, applyFilter, DATE_PRESETS, describeDate, describeRange, EMPTY_FILTER, usesCategories } from '../lib/filters'
+import {
+  activeFilterCount,
+  applyFilter,
+  DATE_PRESETS,
+  describeDate,
+  describeRange,
+  EMPTY_FILTER,
+  isRecurring,
+  recurringNameSet,
+  usesCategories,
+  usesRecurring,
+} from '../lib/filters'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
+import { fetchRecurring, isIncome } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import TransactionDetails from './TransactionDetails'
 
@@ -25,6 +38,7 @@ const TYPE_TABS = [
 export default function Transactions({ filter, onFilterChange, filterOpen, onFilterClose }) {
   const [rows, setRows] = useState(null)
   const [lookups, setLookups] = useState(null)
+  const [recurring, setRecurring] = useState(null)
   const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
@@ -33,14 +47,14 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
   const load = useCallback(
     async (count) => {
       try {
-        const query = applyFilter(supabase.from('transactions').select('*'), filter)
+        const [data, entries] = await Promise.all([fetchLookups(), fetchRecurring()])
+        const tx = await applyFilter(supabase.from('transactions').select('*'), filter, entries)
           .order('date', { ascending: false })
           .order('created_at', { ascending: false })
           .range(0, count)
-
-        const [data, tx] = await Promise.all([fetchLookups(), query])
         if (tx.error) throw tx.error
         setLookups(data)
+        setRecurring(entries)
         // We ask for one extra row to know whether there are more
         setHasMore(tx.data.length > count)
         setRows(tx.data.slice(0, count))
@@ -81,14 +95,17 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
             </button>
           ))}
         </div>
-        {activeFilterCount(filter) > 0 && lookups && <ActiveFilters filter={filter} lookups={lookups} onChange={onFilterChange} />}
+        {activeFilterCount(filter) > 0 && lookups && recurring && (
+          <ActiveFilters filter={filter} lookups={lookups} recurring={recurring} onChange={onFilterChange} />
+        )}
       </div>
 
       {error && <p className="pt-4 text-loss">Couldn't load transactions: {error}</p>}
-      {rows && lookups && (
+      {rows && lookups && recurring && (
         <TransactionList
           rows={rows}
           lookups={lookups}
+          recurringNames={recurringNameSet(recurring)}
           filtered={filtered}
           onSelect={setEditing}
         />
@@ -100,10 +117,11 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
         </button>
       )}
 
-      {filterOpen && lookups && (
+      {filterOpen && lookups && recurring && (
         <FilterSheet
           filter={filter}
           lookups={lookups}
+          recurring={recurring}
           onApply={(next) => {
             onFilterChange(next)
             onFilterClose()
@@ -120,7 +138,7 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
 }
 
 // Chips for the filters that are on; tapping one removes it
-function ActiveFilters({ filter, lookups, onChange }) {
+function ActiveFilters({ filter, lookups, recurring, onChange }) {
   const chips = []
   if (filter.date.preset !== 'all') {
     chips.push({ key: 'date', label: `📅 ${describeDate(filter.date)}`, remove: () => onChange({ ...filter, date: EMPTY_FILTER.date }) })
@@ -145,18 +163,30 @@ function ActiveFilters({ filter, lookups, onChange }) {
     }
   }
 
+  if (usesRecurring(filter)) {
+    chips.push({
+      key: 'recurring',
+      label: recurringText(filter, recurring),
+      swatch: <Icon name="repeat" size={14} strokeWidth={2.5} />,
+      violet: true,
+      remove: () => onChange({ ...filter, recurring: 'all', recurringIds: [] }),
+    })
+  }
+
   return (
     <div className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
       {chips.map((c) => (
         <button
           key={c.key}
           onClick={c.remove}
-          className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-cobalt/10 pr-1.5 pl-3 text-[13px] font-semibold whitespace-nowrap text-cobalt"
+          className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full pr-1.5 pl-3 text-[13px] font-semibold whitespace-nowrap ${
+            c.violet ? 'bg-violet/12 text-violet' : 'bg-cobalt/10 text-cobalt'
+          }`}
           aria-label={`Remove filter ${c.label}`}
         >
           {c.swatch}
           {c.label}
-          <span className="grid size-[18px] place-items-center rounded-full bg-cobalt text-white">
+          <span className={`grid size-[18px] place-items-center rounded-full text-white ${c.violet ? 'bg-violet' : 'bg-cobalt'}`}>
             <Icon name="close" size={11} strokeWidth={3} />
           </span>
         </button>
@@ -165,7 +195,7 @@ function ActiveFilters({ filter, lookups, onChange }) {
   )
 }
 
-function TransactionList({ rows, lookups, filtered, onSelect }) {
+function TransactionList({ rows, lookups, recurringNames, filtered, onSelect }) {
   if (rows.length === 0) {
     return (
       <FullEmpty
@@ -203,7 +233,7 @@ function TransactionList({ rows, lookups, filtered, onSelect }) {
           {day.items.map((t) => (
             <li key={t.id} className="border-b border-line last:border-0">
               <button onClick={() => onSelect(t)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-                <TransactionRow t={t} category={category(t.category_id)} accountName={accountName} />
+                <TransactionRow t={t} category={category(t.category_id)} accountName={accountName} recurring={isRecurring(t, recurringNames)} />
               </button>
             </li>
           ))}
@@ -213,10 +243,20 @@ function TransactionList({ rows, lookups, filtered, onSelect }) {
   })
 }
 
-const PAGE_TITLES = { main: 'Filters', date: 'Date range', cards: 'Cards', cats: 'Categories', range: 'Custom dates' }
+const PAGE_TITLES = { main: 'Filters', date: 'Date range', cards: 'Cards', cats: 'Categories', range: 'Custom dates', recurring: 'Recurring' }
+
+// "Recurring", "Not recurring", "Netflix" or "3 recurring"
+function recurringText(filter, recurring) {
+  if ((filter.recurring ?? 'all') === 'all') return 'All'
+  if (filter.recurring === 'not') return 'Not recurring'
+  const ids = filter.recurringIds ?? []
+  if (!ids.length) return 'Recurring'
+  if (ids.length === 1) return recurring.find((r) => r.id === ids[0])?.name ?? '1 recurring'
+  return `${ids.length} recurring`
+}
 
 // Filter sheet: a short list (date range, cards, categories); each row opens its own page
-function FilterSheet({ filter, lookups, onApply, onClose }) {
+function FilterSheet({ filter, lookups, recurring, onApply, onClose }) {
   const [draft, setDraft] = useState(filter)
   const [page, setPage] = useState('main')
   const [count, setCount] = useState(null)
@@ -226,7 +266,7 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
     let cancelled = false
     setCount(null)
     const timer = setTimeout(async () => {
-      const { count, error } = await applyFilter(supabase.from('transactions').select('id', { count: 'exact', head: true }), draft)
+      const { count, error } = await applyFilter(supabase.from('transactions').select('id', { count: 'exact', head: true }), draft, recurring)
       if (!cancelled && !error) setCount(count)
     }, 250)
     return () => {
@@ -285,6 +325,16 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
           {draft.type !== 'transfer' && (
             <FilterRow emoji="🏷️" tint="bg-gain/10" label="Categories" value={categoryText} set={draft.categoryIds.length > 0} onClick={() => setPage('cats')} />
           )}
+          {draft.type !== 'transfer' && (
+            <FilterRow
+              emoji={<Icon name="repeat" size={17} strokeWidth={2.4} />}
+              tint="bg-violet/12 text-violet"
+              label="Recurring"
+              value={recurringText(draft, recurring)}
+              set={usesRecurring(draft)}
+              onClick={() => setPage('recurring')}
+            />
+          )}
         </ul>
         {showButton}
       </div>
@@ -328,6 +378,13 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
         <button onClick={() => setPage('main')} className="w-full rounded-2xl bg-cobalt py-4 text-base font-semibold text-white active:bg-cobalt-deep">
           Done
         </button>
+      </div>
+    )
+  } else if (page === 'recurring') {
+    body = (
+      <div className="space-y-3">
+        <RecurringPage draft={draft} setDraft={setDraft} recurring={recurring} />
+        {showButton}
       </div>
     )
   } else if (page === 'cards') {
@@ -404,7 +461,15 @@ function FilterSheet({ filter, lookups, onApply, onClose }) {
       title={PAGE_TITLES[page]}
       onClose={onClose}
       onBack={page === 'main' ? undefined : () => setPage(back)}
-      action={page === 'main' ? resetButton : undefined}
+      action={
+        page === 'main' ? (
+          resetButton
+        ) : page === 'recurring' && usesRecurring(draft) ? (
+          <button onClick={() => setDraft((d) => ({ ...d, recurring: 'all', recurringIds: [] }))} className="px-2 py-2 text-[15px] font-semibold text-cobalt">
+            Clear
+          </button>
+        ) : undefined
+      }
     >
       {body}
     </Sheet>
@@ -435,5 +500,115 @@ function Check({ on, round = false }) {
     >
       {on && (round ? <span className="size-2 rounded-full bg-white" /> : <Icon name="check" size={13} strokeWidth={3} />)}
     </span>
+  )
+}
+
+const MODES = [
+  { value: 'all', label: 'All', icon: 'list' },
+  { value: 'only', label: 'Recurring', icon: 'repeat' },
+  { value: 'not', label: 'Not recurring', icon: 'close' },
+]
+const PER = { weekly: 'wk', monthly: 'mo', yearly: 'yr' }
+
+// Filters → Recurring: three cards with how many transactions each shows (with the other filters),
+// then, for "Recurring", the recurring payments and income as logo tiles to pick from (none picked = all of them).
+function RecurringPage({ draft, setDraft, recurring }) {
+  const [counts, setCounts] = useState({})
+  const mode = draft.recurring ?? 'all'
+  const ids = draft.recurringIds ?? []
+  const picked = (r) => !ids.length || ids.includes(r.id)
+
+  // Counts for the three cards; "Recurring" counts only the picked ones
+  const key = JSON.stringify({ ...draft, recurring: null })
+  useEffect(() => {
+    let cancelled = false
+    for (const m of MODES) {
+      applyFilter(supabase.from('transactions').select('id', { count: 'exact', head: true }), { ...draft, recurring: m.value }, recurring).then(
+        ({ count, error }) => !cancelled && !error && setCounts((c) => ({ ...c, [m.value]: count })),
+      )
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [key, recurring]) // `key` stands for the draft without its recurring choice
+
+  function toggle(id) {
+    const now = ids.length ? ids : recurring.map((r) => r.id)
+    const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id]
+    if (!next.length) return // keep at least one
+    setDraft((d) => ({ ...d, recurring: 'only', recurringIds: next.length === recurring.length ? [] : next }))
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Recurring">
+        {MODES.map((m) => {
+          const on = mode === m.value
+          return (
+            <button
+              key={m.value}
+              role="radio"
+              aria-checked={on}
+              onClick={() => setDraft((d) => ({ ...d, recurring: m.value, recurringIds: m.value === 'only' ? (d.recurringIds ?? []) : [] }))}
+              className={`rounded-[18px] p-2.5 text-left transition active:scale-[0.97] ${
+                on ? 'bg-gradient-to-br from-[#8d63ff] to-[#6a3df0] text-white shadow-[0_12px_22px_-14px_rgba(124,77,255,0.9)]' : 'bg-card'
+              }`}
+            >
+              <span className={`grid size-7 place-items-center rounded-[9px] ${on ? 'bg-white/20' : 'bg-paper text-muted'}`}>
+                <Icon name={m.icon} size={15} strokeWidth={2.4} />
+              </span>
+              <b className="tabular mt-2 block font-display text-[19px] leading-none">{counts[m.value] ?? '–'}</b>
+              <span className={`text-xs font-semibold ${on ? 'text-white/85' : 'text-muted'}`}>{m.label}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {mode === 'only' && (
+        <>
+          <div className="flex items-baseline justify-between px-1 pt-2">
+            <span className="text-xs font-semibold tracking-[0.08em] text-muted uppercase">Which ones</span>
+            {recurring.length > 0 && (
+              <span className="text-[13px] font-semibold text-muted">
+                {recurring.filter(picked).length} of {recurring.length}
+              </span>
+            )}
+          </div>
+          {recurring.length === 0 ? (
+            <p className="rounded-[18px] bg-card px-4 py-5 text-center text-sm text-muted">No recurring payments yet</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {recurring.map((r) => {
+                const on = picked(r)
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => toggle(r.id)}
+                    aria-pressed={on}
+                    className={`relative rounded-[18px] bg-card px-1.5 pt-3 pb-2.5 text-center transition active:scale-[0.97] ${
+                      on ? 'ring-2 ring-violet ring-inset' : 'opacity-55'
+                    }`}
+                  >
+                    {on && (
+                      <span className="absolute top-2 right-2 grid size-[18px] place-items-center rounded-full bg-violet text-white">
+                        <Icon name="check" size={11} strokeWidth={3.2} />
+                      </span>
+                    )}
+                    <MerchantIcon name={r.name} className="mx-auto size-[38px] rounded-xl bg-paper text-lg">
+                      {r.icon}
+                    </MerchantIcon>
+                    <b className="mt-1.5 block truncate text-[13.5px]">{r.name}</b>
+                    <span className={`tabular block truncate text-[11.5px] font-semibold ${isIncome(r) ? 'text-gain' : 'text-muted'}`}>
+                      {isIncome(r) ? '+' : ''}
+                      {formatCents(r.amount_cents).replace(/,00$/, '')}/{PER[r.frequency] ?? 'mo'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </>
   )
 }

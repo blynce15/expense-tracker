@@ -26,6 +26,8 @@
   --color-teal: #0c8599;
   --color-teal-from: #e6f6f8;
   --color-teal-to: #cdeef2;
+  /* Recurring payments and income (badge on transactions, Recurring filter) */
+  --color-violet: #7c4dff;
 }
 
 /* Dark mode: chosen in Profile → Appearance (data-theme set in index.html before the app draws) */
@@ -49,6 +51,7 @@
   --color-teal: #3bc0d4;
   --color-teal-from: #0f2a33;
   --color-teal-to: #123845;
+  --color-violet: #9b7bff;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -72,6 +75,7 @@
   --color-teal: #3bc0d4;
   --color-teal-from: #0f2a33;
   --color-teal-to: #123845;
+  --color-violet: #9b7bff;
     color-scheme: dark;
   }
 }

@@ -2,8 +2,9 @@ import { monthRange, todayISO } from './dates'
 
 // Transactions filter, kept by App so it survives tab switches:
 // { type: 'all' | 'income' | 'expense' | 'transfer', categoryIds: [], accountIds: [],
-//   date: { preset: 'all' | 'thisMonth' | 'lastMonth' | 'last3' | 'thisYear' | 'custom', from, to } }
-export const EMPTY_FILTER = { type: 'all', categoryIds: [], accountIds: [], date: { preset: 'all' } }
+//   date: { preset: 'all' | 'thisMonth' | 'lastMonth' | 'last3' | 'thisYear' | 'custom', from, to },
+//   recurring: 'all' | 'only' | 'not', recurringIds: [] (which recurring entries for 'only'; empty = all of them) }
+export const EMPTY_FILTER = { type: 'all', categoryIds: [], accountIds: [], date: { preset: 'all' }, recurring: 'all', recurringIds: [] }
 
 export const DATE_PRESETS = [
   { value: 'thisMonth', label: 'This month' },
@@ -62,16 +63,40 @@ export function describeRange(date) {
 }
 
 export function activeFilterCount(filter) {
-  return (filter.date.preset !== 'all' ? 1 : 0) + (filter.accountIds.length ? 1 : 0) + (usesCategories(filter) ? 1 : 0)
+  return (filter.date.preset !== 'all' ? 1 : 0) + (filter.accountIds.length ? 1 : 0) + (usesCategories(filter) ? 1 : 0) + (usesRecurring(filter) ? 1 : 0)
 }
+
+// The recurring filter doesn't apply to transfers either
+export function usesRecurring(filter) {
+  return filter.type !== 'transfer' && (filter.recurring ?? 'all') !== 'all'
+}
+
+// A transaction is recurring when its name is the name of a recurring payment or income
+// (the same rule Analytics uses for fixed bills). Lower-case names, for isRecurring.
+export function recurringNameSet(recurring) {
+  return new Set(recurring.map((r) => r.name.trim().toLowerCase()).filter(Boolean))
+}
+
+export function isRecurring(t, names) {
+  return t.type !== 'transfer' && !!t.note && names.has(t.note.trim().toLowerCase())
+}
+
+// Names of the recurring entries the filter is about
+function recurringNames(filter, recurring) {
+  const ids = filter.recurring === 'only' ? (filter.recurringIds ?? []) : []
+  return [...new Set(recurring.filter((r) => !ids.length || ids.includes(r.id)).map((r) => r.name.trim()).filter(Boolean))]
+}
+
+// A value inside a PostgREST or(...) list, quoted so commas and brackets in names are safe
+const quoted = (text) => `"${text.replace(/["\\]/g, '\\$&')}"`
 
 // Categories don't apply to transfers
 export function usesCategories(filter) {
   return filter.type !== 'transfer' && filter.categoryIds.length > 0
 }
 
-// Adds the filter's conditions to a Supabase transactions query
-export function applyFilter(query, filter) {
+// Adds the filter's conditions to a Supabase transactions query (`recurring` = the recurring entries, for that filter)
+export function applyFilter(query, filter, recurring = []) {
   let q = query
   if (filter.type !== 'all') q = q.eq('type', filter.type)
   if (usesCategories(filter)) q = q.in('category_id', filter.categoryIds)
@@ -82,5 +107,15 @@ export function applyFilter(query, filter) {
   }
   const range = dateRange(filter.date)
   if (range) q = q.gte('date', range[0]).lte('date', range[1])
+  if (usesRecurring(filter)) {
+    // Names match ignoring upper/lower case, like isRecurring
+    const names = recurringNames(filter, recurring)
+    if (filter.recurring === 'only') {
+      q = q.neq('type', 'transfer')
+      q = names.length ? q.or(names.map((n) => `note.ilike.${quoted(n)}`).join(',')) : q.is('id', null)
+    } else if (names.length) {
+      q = q.or(`type.eq.transfer,note.is.null,and(${names.map((n) => `note.not.ilike.${quoted(n)}`).join(',')})`)
+    }
+  }
   return q
 }
