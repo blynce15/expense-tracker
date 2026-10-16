@@ -218,7 +218,7 @@ function SourceRow({ portfolio, refreshing, error, onRefresh, onEdit }) {
   )
 }
 
-function LinkSheet({ link, onClose, onSaved }) {
+export function LinkSheet({ link, onClose, onSaved }) {
   const [value, setValue] = useState(link ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)

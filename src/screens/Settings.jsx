@@ -14,6 +14,8 @@ import { fetchRecurring, monthlyCents } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { getTheme, setTheme } from '../lib/theme'
 import DeleteAllData from './DeleteAllData'
+import { LinkSheet } from './Investments'
+import { cachedPortfolio, forgetPortfolio } from '../lib/getquin'
 import { isStandalone, pushSupported, remindersOn, turnOffReminders, turnOnReminders } from '../lib/push'
 import { navigate } from '../lib/useRoute'
 
@@ -35,6 +37,8 @@ export default function Settings({ session }) {
   const [reminderNote, setReminderNote] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [pinFlow, setPinFlow] = useState(null) // null | 'enable' | 'change' | 'disable'
+  const [getquin, setGetquin] = useState(undefined) // the share link; null = not connected, undefined = loading
+  const [editingGetquin, setEditingGetquin] = useState(false)
 
   useEffect(() => {
     const refresh = () => setLock(lockSettings())
@@ -76,6 +80,7 @@ export default function Settings({ session }) {
       .then((p) => {
         setStartDay(startDayOf(p))
         setPinnedId(p?.answers?.defaultAccountId ?? null)
+        setGetquin(p?.answers?.getquinUrl ?? null)
       })
       .catch((e) => setError(e.message))
     // A short summary under each row; the rows work without it
@@ -212,6 +217,31 @@ export default function Settings({ session }) {
         {error && <p className="px-2 pt-1.5 text-sm text-loss">{error}</p>}
       </section>
 
+      {/* Investments: the getquin share link the Investments tab and Net worth read */}
+      <section className="px-4">
+        <button onClick={() => setEditingGetquin(true)} className="flex w-full items-center gap-3 rounded-[22px] bg-card px-4 py-3 text-left active:opacity-90">
+          <img src="/getquin.png" alt="" className="size-10 shrink-0 rounded-[13px] ring-1 ring-line" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold">Investments</span>
+            <span className="block truncate text-xs text-muted">
+              {getquin === undefined
+                ? ' '
+                : getquin
+                  ? `getquin · ${cachedPortfolio(getquin) ? formatCents(cachedPortfolio(getquin).value_cents).replace(/,\d\d$/, '') : 'connected'}`
+                  : 'Connect your getquin portfolio'}
+            </span>
+          </span>
+          {getquin ? (
+            <span className="flex items-center gap-1 rounded-full bg-gain/12 px-2.5 py-1 text-xs font-bold text-gain">
+              <Icon name="check" size={12} strokeWidth={3} />
+              Connected
+            </span>
+          ) : (
+            getquin === null && <span className="rounded-full bg-teal px-3 py-1.5 text-xs font-bold text-white">Connect</span>
+          )}
+        </button>
+      </section>
+
       {/* Appearance: three little previews of the app */}
       <TopicCard icon="sun" color="#f08c00" title="Appearance">
         <div className="grid grid-cols-3 gap-2.5" role="radiogroup" aria-label="Theme">
@@ -296,6 +326,18 @@ export default function Settings({ session }) {
       </div>
 
       {deleting && <DeleteAllData onClose={() => setDeleting(false)} />}
+
+      {editingGetquin && (
+        <LinkSheet
+          link={getquin}
+          onClose={() => setEditingGetquin(false)}
+          onSaved={(url) => {
+            if (!url) forgetPortfolio()
+            setGetquin(url)
+            setEditingGetquin(false)
+          }}
+        />
+      )}
 
       {pinFlow && <PinSheet flow={pinFlow} canFaceId={faceIdSupported()} onFaceId={toggleFaceId} onClose={() => setPinFlow(null)} />}
 
