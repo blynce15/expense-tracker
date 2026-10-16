@@ -252,6 +252,7 @@ function buildAnalytics(p, accounts, recurring, rows) {
     // Spending on recurring payments per month, and what the active ones cost per month today
     fixedBy,
     recurringMonthly: recurring.filter((r) => r.active && r.type !== 'income').reduce((s, r) => s + monthlyCents(r), 0),
+    recurring,
     // Savings accounts (today's balance) with the net money in during this period
     keepAccounts: accounts
       .filter((a) => a.type === 'savings')
@@ -354,4 +355,160 @@ export function highlights(a, name, euros) {
     out.push({ key: 'kept', good: r >= avg, icon: 'invest', text: ['You saved ', `${r}%`, ` of your income, ${how} your ${avg}% average.`] })
   }
   return out
+}
+
+// ---------- The Analytics overview ----------
+
+// "October so far" / "2026 so far": this period against your usual. Month: your usual month (average of full
+// months with any activity), scaled to the days passed while the month is running. Year: the year before up to
+// the same day. Changes: spending and income as a share, kept as percentage points of income.
+export function verdictOf(a) {
+  const year = a.period.kind === 'year'
+  const share = a.current ? a.days.passed / a.days.total : 1
+  const spendUsual = year ? a.compare.spent || null : a.avgOut !== null ? Math.round(a.avgOut * share) : null
+  const incomeUsual = year ? Math.round(a.previous.income * share) || null : a.avgIn !== null ? Math.round(a.avgIn) : null
+  const change = (now, usual) => (usual ? now / usual - 1 : null)
+  const spending = { now: a.totals.spent, usual: spendUsual, change: change(a.totals.spent, spendUsual) }
+  const income = { now: a.totals.income, usual: incomeUsual, change: change(a.totals.income, incomeUsual) }
+  const kept = {
+    rate: a.saving.rate,
+    usual: a.saving.avgRate,
+    change: a.saving.rate !== null && a.saving.avgRate !== null ? a.saving.rate - a.saving.avgRate : null,
+  }
+
+  const unit = year ? 'year' : 'month'
+  const less = spending.change !== null && spending.change <= -0.03
+  const more = spending.change !== null && spending.change >= 0.03
+  const keptMore = kept.change !== null && kept.change >= 0.02
+  const keptLess = kept.change !== null && kept.change <= -0.02
+  let sentence
+  if (!a.totals.spent && !a.totals.income) sentence = 'Nothing recorded yet.'
+  else if (less && keptMore) sentence = `A good ${unit}: you spent less and kept more than usual.`
+  else if (less) sentence = `A lighter ${unit}: you spent less than usual.`
+  else if (more && keptLess) sentence = `A pricier ${unit}: you spent more and kept less than usual.`
+  else if (more) sentence = `A pricier ${unit}: you spent more than usual.`
+  else if (keptMore) sentence = `You kept more than usual this ${unit}.`
+  else sentence = `A usual ${unit} so far.`
+  return { spending, income, kept, sentence }
+}
+
+const dayMonth = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
+}
+const addDays = (iso, n) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  const t = new Date(y, m - 1, d + n)
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`
+}
+
+// "Worth noticing": things that stand out this period, most useful first (at most 5).
+// Each: { key, icon, tone ('up' | 'down' | 'new' | 'week' | 'invest' | 'big'), title, sub, to? (address to open) }
+export function noticings(a, category, euros) {
+  const out = []
+  const year = a.period.kind === 'year'
+  const share = a.current ? a.days.passed / a.days.total : 1
+  const name = (id) => category(id)?.name ?? 'No category'
+
+  // Categories well above (or below) their usual: month = your usual month; year = the year before by now
+  const usualOf = (id) => {
+    const months = a.activeMonths.filter((k) => k !== a.period.key)
+    if (!months.length) return null
+    const total = months.reduce((s, k) => s + (a.catBy.get(`${k}|${id}`) ?? 0), 0)
+    return Math.round((total / months.length) * share)
+  }
+  const moves = a.categories
+    .map((c) => ({ ...c, usual: year ? c.prev : usualOf(c.id) }))
+    .filter((c) => c.usual > 0)
+    .map((c) => ({ ...c, diff: c.cents - c.usual, rise: c.cents / c.usual - 1 }))
+  const versus = (usual) => (year ? `${euros(usual)} in ${prevLabel(a.period)} by now` : `usually ${euros(usual)}`)
+  const up = moves.filter((c) => c.rise >= 0.3 && c.diff >= 2000).sort((x, y) => y.diff - x.diff)[0]
+  if (up) {
+    const how = up.rise >= 2 ? `${Math.round(up.cents / up.usual)}× your usual` : `${Math.round(up.rise * 100)}% above your usual`
+    out.push({
+      key: 'up',
+      icon: 'tag',
+      tone: 'up',
+      title: `${name(up.id)} is ${how} ${year ? 'year' : 'month'}`,
+      sub: `${euros(up.cents)} vs ${versus(up.usual)}`,
+      to: `/analytics/categories/${up.id ?? 'none'}`,
+    })
+  }
+
+  // New recurring payments or income added during this period (at most 2)
+  let added = 0
+  for (const r of a.recurring ?? []) {
+    const day = (r.created_at ?? '').slice(0, 10)
+    if (!day || !r.active || added >= 2) continue
+    if (year ? day.slice(0, 4) !== a.period.key : day.slice(0, 7) !== a.period.key) continue
+    const per = { weekly: 'a week', monthly: 'a month', yearly: 'a year' }[r.frequency] ?? 'a month'
+    out.push({ key: `rec-${r.id}`, icon: 'repeat', tone: 'new', title: `New recurring: ${r.name}`, sub: `${euros(r.amount_cents)} ${per} since ${dayMonth(day)}`, to: '/recurring' })
+    added += 1
+  }
+
+  // The priciest week (Monday to Sunday) of the month, and what most of it went on
+  if (!year && a.expenses.length) {
+    const weeks = new Map()
+    for (const t of a.expenses) {
+      const [y, m, d] = t.date.split('-').map(Number)
+      const monday = addDays(t.date, -((new Date(y, m - 1, d).getDay() + 6) % 7))
+      const w = weeks.get(monday) ?? { start: monday, cents: 0, cats: new Map() }
+      w.cents += t.amount_cents
+      w.cats.set(t.category_id, (w.cats.get(t.category_id) ?? 0) + t.amount_cents)
+      weeks.set(monday, w)
+    }
+    if (weeks.size >= 2) {
+      const top = [...weeks.values()].sort((x, y) => y.cents - x.cents)[0]
+      const mainCat = [...top.cats].sort((x, y) => y[1] - x[1])[0]?.[0]
+      out.push({
+        key: 'week',
+        icon: 'calendar',
+        tone: 'week',
+        title: `Your priciest week: ${dayMonth(top.start).split(' ')[0]}–${dayMonth(addDays(top.start, 6))}`,
+        sub: `${euros(top.cents)} spent, mostly ${name(mainCat)}`,
+      })
+    }
+  }
+
+  // Investing several months in a row (Invest transactions)
+  const endMonth = year ? `${a.period.key}-12` : a.period.key
+  let k = endMonth > todayISO().slice(0, 7) ? todayISO().slice(0, 7) : endMonth
+  if (!((a.byMonth.get(k)?.invested ?? 0) > 0)) k = shiftMonth(k, -1)
+  let streak = 0
+  let streakCents = 0
+  while ((a.byMonth.get(k)?.invested ?? 0) > 0) {
+    streak += 1
+    streakCents += a.byMonth.get(k).invested
+    k = shiftMonth(k, -1)
+  }
+  if (streak >= 2) {
+    out.push({
+      key: 'invest',
+      icon: 'invest',
+      tone: 'invest',
+      title: `You invested ${streak} months in a row`,
+      sub: `${euros(streakCents)} put in since ${monthShort(shiftMonth(k, 1))}`,
+      to: '/investments',
+    })
+  }
+
+  // A category well below its usual (good news)
+  const down = moves.filter((c) => c.rise <= -0.3 && -c.diff >= 2000 && c.usual >= 5000).sort((x, y) => x.diff - y.diff)[0]
+  if (down) {
+    out.push({
+      key: 'down',
+      icon: 'tag',
+      tone: 'down',
+      title: `${name(down.id)} is ${Math.round(-down.rise * 100)}% below your usual`,
+      sub: `${euros(down.cents)} vs ${versus(down.usual)}`,
+      to: `/analytics/categories/${down.id ?? 'none'}`,
+    })
+  }
+
+  // When there's little else: the biggest purchase
+  if (out.length < 2 && a.expenses.length) {
+    const big = [...a.expenses].sort((x, y) => y.amount_cents - x.amount_cents)[0]
+    out.push({ key: 'big', icon: 'card', tone: 'big', title: `Biggest purchase: ${big.note?.trim() || name(big.category_id)}`, sub: `${euros(big.amount_cents)} on ${dayMonth(big.date)}` })
+  }
+  return out.slice(0, 5)
 }
