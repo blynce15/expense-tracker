@@ -183,7 +183,13 @@ function ValueCard({ portfolio, monthCents, error }) {
           <span className="text-[38px] tracking-tight">{euros}</span>
           <span className="text-lg text-white/55">,{decimals}</span>
         </p>
-        <span className="tabular mb-1 shrink-0 rounded-full bg-white/20 px-2.5 py-1 text-[13px] font-bold">
+        {/* Gain in green, loss in red, on a white pill so it stands out on the teal */}
+        <span
+          className={`tabular mb-1 flex shrink-0 items-center gap-1 rounded-full bg-white px-2.5 py-1 text-[13px] font-bold shadow-[0_6px_14px_-8px_rgba(0,0,0,0.4)] ${
+            gain < 0 ? 'text-[#c23b22]' : 'text-[#0f8a5f]'
+          }`}
+        >
+          <span className="text-[10px]">{gain < 0 ? '▼' : '▲'}</span>
           {signedWhole(gain)} · {percent(rate)}
         </span>
       </div>
