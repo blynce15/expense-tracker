@@ -43,6 +43,7 @@ async function run() {
 
     const stamp = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Lisbon' }) // 2026-10-17
     const folder = join(backupsDir, `LynxOS backup ${stamp}`)
+    rmSync(folder, { recursive: true, force: true }) // a second run the same day starts fresh
     mkdirSync(folder, { recursive: true })
 
     const data = {}
