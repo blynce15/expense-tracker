@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
-import { fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel, verdictOf } from '../lib/analytics'
+import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel, verdictOf } from '../lib/analytics'
 import { todayISO } from '../lib/dates'
-import { fetchLookups } from '../lib/lookups'
+import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { monthlyCents } from '../lib/recurring'
 import { navigate } from '../lib/useRoute'
@@ -22,8 +22,8 @@ const dayMonth = (iso) => {
 // fixed or not, when you spend, the big ones. Month view works in days; Year view in months.
 export default function AnalyticsSpending() {
   const [period, setPeriod] = usePeriod()
-  const [data, setData] = useState(null)
-  const [categories, setCategories] = useState(null)
+  const [data, setData] = useState(() => cachedAnalytics(period))
+  const [categories, setCategories] = useState(() => lookupCache.lookups?.categories ?? null)
   const [error, setError] = useState(null)
 
   useEffect(() => {

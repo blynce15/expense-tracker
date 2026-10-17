@@ -1,5 +1,6 @@
 import { todayISO } from './dates'
 import { supabase } from './supabase'
+import { shared } from './shared'
 
 // The user's settings row (table user_settings): budget start day, "About you" answers, onboarding status.
 // Created on first save; until then fetchProfile() returns null.
@@ -7,11 +8,11 @@ import { supabase } from './supabase'
 // The table doesn't exist yet (migration 005_user_settings not run): behave as if there's no profile
 const isMissingTable = (error) => error?.code === '42P01' || error?.code === 'PGRST205'
 
-export async function fetchProfile() {
+export const fetchProfile = shared(async function fetchProfile() {
   const { data, error } = await supabase.from('user_settings').select('*').maybeSingle()
   if (error && !isMissingTable(error)) throw error
   return data ?? null
-}
+})
 
 // Creates the row if needed and updates only the given fields
 export async function saveProfile(patch) {

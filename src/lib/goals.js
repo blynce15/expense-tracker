@@ -1,4 +1,5 @@
 import { balanceChanges, fetchAccountsWithBalances } from './balances'
+import { fetchAll } from './fetchAll'
 import { formatCents } from './money'
 import { supabase } from './supabase'
 
@@ -37,15 +38,24 @@ function holdings(accounts, transactions, moves) {
   return out
 }
 
-export async function fetchGoalsState() {
-  const [accounts, goalsRes, txRes, movesRes] = await Promise.all([
-    fetchAccountsWithBalances(),
-    supabase.from('savings_goals').select('*').order('created_at'),
-    supabase.from('transactions').select('id, type, amount_cents, date, account_id, to_account_id, goal_id'),
-    supabase.from('goal_moves').select('*'),
-  ])
-  for (const r of [goalsRes, txRes, movesRes]) if (r.error) throw r.error
-  const state = { accounts, transactions: txRes.data, moves: movesRes.data }
+// Only transactions that touch a savings account matter here (a small share of all of them).
+// `alsoAccountIds`: other accounts whose transactions are needed too (an account about to become savings).
+export async function fetchGoalsState(alsoAccountIds = []) {
+  const goalsReq = supabase.from('savings_goals').select('*').order('created_at')
+  const movesReq = fetchAll(() => supabase.from('goal_moves').select('*'))
+  const accounts = await fetchAccountsWithBalances()
+  const ids = [...new Set([...accounts.filter((a) => a.type === 'savings').map((a) => a.id), ...alsoAccountIds])]
+  const txReq = ids.length
+    ? fetchAll(() =>
+        supabase
+          .from('transactions')
+          .select('id, type, amount_cents, date, account_id, to_account_id, goal_id')
+          .or(`account_id.in.(${ids.join(',')}),to_account_id.in.(${ids.join(',')})`),
+      )
+    : []
+  const [goalsRes, transactions, moves] = await Promise.all([goalsReq, txReq, movesReq])
+  if (goalsRes.error) throw goalsRes.error
+  const state = { accounts, transactions, moves }
   const held = holdings(accounts, state.transactions, state.moves)
   const goals = goalsRes.data.map((g) => ({ ...g, saved_cents: held.get(g.id) ?? 0 }))
   const general = { ...GENERAL, saved_cents: held.get(null) }

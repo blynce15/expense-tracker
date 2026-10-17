@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
-import { fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel } from '../lib/analytics'
+import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel } from '../lib/analytics'
 import { todayISO } from '../lib/dates'
-import { fetchLookups } from '../lib/lookups'
+import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { navigate } from '../lib/useRoute'
 
@@ -28,8 +28,8 @@ function darker(hex, by = 0.3) {
 // Loads the chosen period's analytics plus the category list
 function useCategoryData() {
   const [period, setPeriod] = usePeriod()
-  const [data, setData] = useState(null)
-  const [categories, setCategories] = useState(null)
+  const [data, setData] = useState(() => cachedAnalytics(period))
+  const [categories, setCategories] = useState(() => lookupCache.lookups?.categories ?? null)
   const [error, setError] = useState(null)
 
   useEffect(() => {

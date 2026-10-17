@@ -2,6 +2,7 @@
 // payments; nothing is stored. A period is a month ({ kind: 'month', key: '2026-10' }) or a year
 // ({ kind: 'year', key: '2026' }).
 import { fetchAccountsWithBalances } from './balances'
+import { fetchAll } from './fetchAll'
 import { todayISO } from './dates'
 import { fetchRecurring, monthlyCents } from './recurring'
 import { supabase } from './supabase'
@@ -67,6 +68,14 @@ const BANK_TYPES = ['debit', 'cash', 'meal']
 // Loads what the page needs for `p`: the period itself, the one before it (to compare), and the
 // 12 months up to the period's end (trends, averages). Transactions after that are loaded too,
 // because net worth in the past is worked out backwards from today's balances.
+// The last answer for each period (shown at once next time, while a fresh one loads)
+const lastAnalytics = new Map()
+const periodId = (p) => `${p.kind}:${p.key}`
+export function cachedAnalytics(p) {
+  const a = lastAnalytics.get(periodId(p))
+  return a ? { ...a, period: p } : null
+}
+
 export async function fetchAnalytics(p) {
   const prev = shiftPeriod(p, -1)
   const endMonth = p.kind === 'year' ? `${p.key}-12` : p.key
@@ -77,13 +86,17 @@ export async function fetchAnalytics(p) {
   const [accounts, recurring, tx] = await Promise.all([
     fetchAccountsWithBalances(),
     fetchRecurring().catch(() => []),
-    supabase
-      .from('transactions')
-      .select('type, amount_cents, date, account_id, to_account_id, category_id, note, goal_id')
-      .gte('date', `${from}-01`),
+    // In pages of 1.000, so a long history is never cut short
+    fetchAll(() =>
+      supabase
+        .from('transactions')
+        .select('type, amount_cents, date, account_id, to_account_id, category_id, note, goal_id')
+        .gte('date', `${from}-01`),
+    ),
   ])
-  if (tx.error) throw tx.error
-  return buildAnalytics(p, accounts, recurring, tx.data)
+  const a = buildAnalytics(p, accounts, recurring, tx)
+  lastAnalytics.set(periodId(p), a)
+  return a
 }
 
 // ---------- Calculations ----------

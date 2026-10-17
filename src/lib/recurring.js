@@ -1,5 +1,6 @@
 import { todayISO } from './dates'
 import { supabase } from './supabase'
+import { shared } from './shared'
 
 export const FREQUENCIES = [
   { value: 'weekly', label: 'Weekly', per: 'week' },
@@ -52,11 +53,11 @@ export function dueLabel(iso) {
   return n === -1 ? '1 day late' : `${-n} days late`
 }
 
-export async function fetchRecurring() {
+export const fetchRecurring = shared(async function fetchRecurring() {
   const { data, error } = await supabase.from('recurring_payments').select('*').order('next_due').order('name')
   if (error) throw error
   return data
-}
+})
 
 // Records one payment as an expense (income for income entries) and moves the due date forward, both in one step
 // (database function from migrations 010/011). The expense is dated on the due date, or today if paying early.

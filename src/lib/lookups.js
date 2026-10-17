@@ -1,12 +1,13 @@
 import { fetchProfile } from './profile'
 import { supabase } from './supabase'
+import { shared } from './shared'
 
 // Last fetched values, so the Add screen can open instantly with them
 // while a fresh copy loads in the background.
 export const lookupCache = { lookups: null, lastUsedAccountId: null, pinnedAccountId: null }
 
 // Accounts, categories and savings goals, used to fill pickers and label transactions.
-export async function fetchLookups() {
+export const fetchLookups = shared(async function fetchLookups() {
   const [accounts, categories, goals] = await Promise.all([
     supabase.from('accounts').select('id, name, type, color, archived').order('created_at'),
     supabase
@@ -21,7 +22,7 @@ export async function fetchLookups() {
   if (goals.error) throw goals.error
   lookupCache.lookups = { accounts: accounts.data, categories: categories.data, goals: goals.data }
   return lookupCache.lookups
-}
+})
 
 // The account used by the most recently added transaction, if any.
 // Also loads the account pinned in Profile → Default account.

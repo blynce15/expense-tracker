@@ -10,6 +10,7 @@ import { checkOverdraft } from '../lib/balances'
 import { todayISO } from '../lib/dates'
 import { fetchGoalsState, goalProblem, moveBetweenGoals, savingsAccounts, transactionGoalProblem } from '../lib/goals'
 import { centsToPad, formatCents, parseToCents } from '../lib/money'
+import { recall, remember } from '../lib/memory'
 import { supabase } from '../lib/supabase'
 
 const DEFAULT_ICON = '🐷'
@@ -100,21 +101,26 @@ async function fetchSavingsFlow() {
 }
 
 export default function Savings() {
-  const [state, setState] = useState(null) // accounts, goals with their money, General savings (src/lib/goals.js)
-  const [flow, setFlow] = useState(undefined) // undefined = loading, null = no savings account
+  // accounts, goals with their money, General savings (src/lib/goals.js)
+  const [state, setStateNow] = useState(() => recall('savings'))
+  const setState = (value) => setStateNow(remember('savings', value))
+  // undefined = loading, null = no savings account
+  const [flow, setFlowNow] = useState(() => recall('savings:flow') ?? undefined)
+  const setFlow = (value) => setFlowNow(remember('savings:flow', value))
   const [error, setError] = useState(null)
   const [openId, setOpenId] = useState(undefined) // undefined = closed, null = General savings, else a goal id
   const [editing, setEditing] = useState(null) // null | 'new' | goal
 
+  // Both at once (the chart doesn't wait for the goals)
   const load = useCallback(async () => {
+    fetchSavingsFlow()
+      .then(setFlow)
+      .catch((e) => setError(e.message))
     try {
       setState(await fetchGoalsState())
     } catch (e) {
       setError(e.message)
     }
-    fetchSavingsFlow()
-      .then(setFlow)
-      .catch((e) => setError(e.message))
   }, [])
 
   useEffect(() => {

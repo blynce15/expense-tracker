@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { pct, resetPeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
-import { currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, prevLabel, shiftMonth, verdictOf } from '../lib/analytics'
+import { cachedAnalytics, currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, prevLabel, shiftMonth, verdictOf } from '../lib/analytics'
 import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
-import { fetchLookups } from '../lib/lookups'
+import { fetchLookups, lookupCache } from '../lib/lookups'
+import { recall, remember } from '../lib/memory'
 import { formatCents } from '../lib/money'
 import { fetchProfile } from '../lib/profile'
 import { navigate } from '../lib/useRoute'
@@ -14,9 +15,11 @@ import { navigate } from '../lib/useRoute'
 // on the details pages (net worth in the past can only be estimated for investments).
 export default function Analytics() {
   const [period] = useState(() => currentPeriod('month'))
-  const [data, setData] = useState(null)
-  const [categories, setCategories] = useState(null)
-  const [invest, setInvest] = useState(null) // { portfolio, since } from getquin, or {} when not linked
+  const [data, setData] = useState(() => cachedAnalytics(period))
+  const [categories, setCategories] = useState(() => lookupCache.lookups?.categories ?? null)
+  // { portfolio, since } from getquin, or {} when not linked
+  const [invest, setInvestState] = useState(() => recall('analytics:invest'))
+  const setInvest = (value) => setInvestState(remember('analytics:invest', value))
   const [error, setError] = useState(null)
 
   useEffect(() => {

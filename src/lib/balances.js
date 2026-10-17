@@ -1,5 +1,6 @@
 import { formatCents } from './money'
 import { supabase } from './supabase'
+import { shared } from './shared'
 
 // Balance = starting balance + income − expenses − transfers out + transfers in − money invested + money taken
 // back out of investments. Always calculated from transactions, never stored.
@@ -8,35 +9,24 @@ import { supabase } from './supabase'
 // (it arrives in account_id). Neither is spending or income (migration 015).
 export const INVEST_TYPES = ['invest', 'divest']
 export const isInvest = (t) => INVEST_TYPES.includes(t?.type)
-export async function fetchAccountsWithBalances() {
-  const [accountsRes, txRes] = await Promise.all([
+
+// The adding up happens in the database (migration 019, account_balances): one row per account instead of
+// every transaction, so it stays fast and complete however long the history gets.
+export const fetchAccountsWithBalances = shared(async function fetchAccountsWithBalances() {
+  const [accountsRes, changesRes] = await Promise.all([
     supabase.from('accounts').select('*').order('created_at'),
-    supabase.from('transactions').select('type, amount_cents, account_id, to_account_id'),
+    supabase.rpc('account_balances'),
   ])
   if (accountsRes.error) throw accountsRes.error
-  if (txRes.error) throw txRes.error
-
-  const delta = new Map()
-  const add = (id, cents) => delta.set(id, (delta.get(id) ?? 0) + cents)
-  const txCount = new Map()
-
-  for (const t of txRes.data) {
-    txCount.set(t.account_id, (txCount.get(t.account_id) ?? 0) + 1)
-    if (t.type === 'income' || t.type === 'divest') add(t.account_id, t.amount_cents)
-    else if (t.type === 'expense' || t.type === 'invest') add(t.account_id, -t.amount_cents)
-    else if (t.type === 'transfer') {
-      add(t.account_id, -t.amount_cents)
-      add(t.to_account_id, t.amount_cents)
-      txCount.set(t.to_account_id, (txCount.get(t.to_account_id) ?? 0) + 1)
-    }
-  }
+  if (changesRes.error) throw changesRes.error
+  const changes = new Map(changesRes.data.map((r) => [r.account_id, r]))
 
   return accountsRes.data.map((a) => ({
     ...a,
-    balance_cents: a.starting_balance_cents + (delta.get(a.id) ?? 0),
-    transaction_count: txCount.get(a.id) ?? 0,
+    balance_cents: a.starting_balance_cents + Number(changes.get(a.id)?.change_cents ?? 0),
+    transaction_count: Number(changes.get(a.id)?.transaction_count ?? 0),
   }))
-}
+})
 
 // How a transaction moves each account's balance: Map account id → cents
 function effect(t, sign = 1) {

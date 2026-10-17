@@ -116,7 +116,7 @@ function AccountList({ accounts, onSelect }) {
 // General savings, and its transactions to their goals. Changing or removing an account (`next`: the
 // account as it will be, or null when deleting) is refused if it would leave a goal below €0.
 async function goalsProblem(account, next) {
-  const state = await fetchGoalsState()
+  const state = await fetchGoalsState(account ? [account.id] : [])
   const accounts = state.accounts.filter((a) => a.id !== account?.id)
   if (next) accounts.push({ ...account, ...next })
   const problem = goalProblem(state, { accounts })

@@ -10,6 +10,7 @@ import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
 import { fetchProfile } from '../lib/profile'
+import { recall, remember } from '../lib/memory'
 import { daysUntil, fetchRecurring } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
@@ -34,7 +35,7 @@ function readHidden() {
 const shortDate = formatDayMonth
 
 export default function Home({ onSeeAccount }) {
-  const [data, setData] = useState(null)
+  const [data, setData] = useState(() => recall('home'))
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
   const [paying, setPaying] = useState(null)
@@ -42,12 +43,28 @@ export default function Home({ onSeeAccount }) {
   const [openAccountId, setOpenAccountId] = useState(null)
   const [openPaymentId, setOpenPaymentId] = useState(null)
   const [editingPayment, setEditingPayment] = useState(null)
-  const [portfolio, setPortfolio] = useState(null) // getquin, when linked: part of the net worth
+  // getquin, when linked: part of the net worth
+  const [portfolio, setPortfolioState] = useState(() => recall('home:portfolio'))
+  const setPortfolio = (value) => setPortfolioState(remember('home:portfolio', value))
 
   const load = useCallback(async () => {
     try {
       const today = todayISO()
       const [monthStart] = monthRange(today)
+      // Everything that doesn't need the profile starts right away, alongside it
+      const others = Promise.all([
+        fetchAccountsWithBalances(),
+        fetchLookups(),
+        supabase.from('transactions').select('type, amount_cents, account_id, to_account_id').gte('date', monthStart),
+        supabase
+          .from('transactions')
+          .select('*')
+          .order('date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(RECENT_COUNT),
+        fetchRecurring(),
+      ])
+      others.catch(() => {}) // reported below, when awaited
       const profile = await fetchProfile()
       const period = budgetPeriod(today, startDayOf(profile))
       // Investments come from getquin: show the last value at once, then refresh it in the background
@@ -58,23 +75,14 @@ export default function Home({ onSeeAccount }) {
           .then(setPortfolio)
           .catch(() => {}) // Keep the last value; the Investments tab shows what went wrong
       } else setPortfolio(null)
-      const [accounts, lookups, sinceMonthStart, periodExpenses, recent, recurring] = await Promise.all([
-        fetchAccountsWithBalances(),
-        fetchLookups(),
-        supabase.from('transactions').select('type, amount_cents, account_id, to_account_id').gte('date', monthStart),
+      const [periodExpenses, [accounts, lookups, sinceMonthStart, recent, recurring]] = await Promise.all([
         supabase
           .from('transactions')
           .select('amount_cents, date, account_id')
           .eq('type', 'expense')
           .gte('date', period.start)
           .lte('date', today),
-        supabase
-          .from('transactions')
-          .select('*')
-          .order('date', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(RECENT_COUNT),
-        fetchRecurring(),
+        others,
       ])
       for (const res of [sinceMonthStart, periodExpenses, recent]) if (res.error) throw res.error
 
@@ -94,7 +102,7 @@ export default function Home({ onSeeAccount }) {
         }
       }
 
-      setData({
+      setData(remember('home', {
         accounts: accounts
           .filter((a) => !a.archived)
           .map((a) => ({ ...a, flow: flow.get(a.id) ?? { in: 0, out: 0 } })),
@@ -102,7 +110,7 @@ export default function Home({ onSeeAccount }) {
         lookups,
         recent: recent.data,
         upcoming: recurring.filter((p) => p.active).slice(0, UPCOMING_COUNT),
-      })
+      }))
     } catch (e) {
       setError(e.message)
     }

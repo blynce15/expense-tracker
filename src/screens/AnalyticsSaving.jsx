@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
-import { fetchAnalytics, monthShort, periodLabel, shiftMonth } from '../lib/analytics'
+import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, shiftMonth } from '../lib/analytics'
 import { todayISO } from '../lib/dates'
 import { fetchGoalsState, savingsEffect } from '../lib/goals'
-import { fetchLookups } from '../lib/lookups'
+import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { navigate } from '../lib/useRoute'
 
@@ -18,7 +18,10 @@ const BLUE = '#1f4fe0'
 // what it adds up to, what it's for (savings goals).
 export default function AnalyticsSaving() {
   const [period, setPeriod] = usePeriod()
-  const [data, setData] = useState(null)
+  const [data, setData] = useState(() => {
+    const a = cachedAnalytics(period)
+    return a && { ...a, goalList: lookupCache.lookups?.goals ?? [] }
+  })
   const [goals, setGoals] = useState(null)
   const [error, setError] = useState(null)
 

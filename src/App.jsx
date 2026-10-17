@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { TabBar, TopBar } from './components/AppShell'
 import Icon from './components/Icon'
 import LockScreen from './components/LockScreen'
@@ -13,22 +13,48 @@ import { fetchProfile } from './lib/profile'
 import { navigate, useRoute } from './lib/useRoute'
 import { useOnline } from './lib/useOnline'
 import { useSession } from './lib/useSession'
-import Accounts from './screens/Accounts'
-import Analytics from './screens/Analytics'
-import AnalyticsCategories, { CategoryDetail } from './screens/AnalyticsCategories'
-import AnalyticsSaving from './screens/AnalyticsSaving'
-import AnalyticsSpending from './screens/AnalyticsSpending'
-import AnalyticsTrends from './screens/AnalyticsTrends'
-import Categories from './screens/Categories'
 import Home from './screens/Home'
-import Investments, { InvestmentsRefresh } from './screens/Investments'
 import Login from './screens/Login'
-import Onboarding from './screens/Onboarding'
-import Recurring from './screens/Recurring'
-import Savings from './screens/Savings'
-import Settings from './screens/Settings'
-import Transactions from './screens/Transactions'
 import TransactionSheet from './screens/TransactionSheet'
+
+// Every other screen is its own piece of code, loaded the first time it's needed, so the app starts with
+// only Home and Add. Once the app is up, the rest load quietly in the background (see preloadScreens).
+const load = {
+  accounts: () => import('./screens/Accounts'),
+  analytics: () => import('./screens/Analytics'),
+  analyticsCategories: () => import('./screens/AnalyticsCategories'),
+  analyticsSaving: () => import('./screens/AnalyticsSaving'),
+  analyticsSpending: () => import('./screens/AnalyticsSpending'),
+  analyticsTrends: () => import('./screens/AnalyticsTrends'),
+  categories: () => import('./screens/Categories'),
+  investments: () => import('./screens/Investments'),
+  onboarding: () => import('./screens/Onboarding'),
+  recurring: () => import('./screens/Recurring'),
+  savings: () => import('./screens/Savings'),
+  settings: () => import('./screens/Settings'),
+  transactions: () => import('./screens/Transactions'),
+}
+const named = (loader, name) => lazy(() => loader().then((m) => ({ default: m[name] })))
+const Accounts = lazy(load.accounts)
+const Analytics = lazy(load.analytics)
+const AnalyticsCategories = lazy(load.analyticsCategories)
+const CategoryDetail = named(load.analyticsCategories, 'CategoryDetail')
+const AnalyticsSaving = lazy(load.analyticsSaving)
+const AnalyticsSpending = lazy(load.analyticsSpending)
+const AnalyticsTrends = lazy(load.analyticsTrends)
+const Categories = lazy(load.categories)
+const Investments = lazy(load.investments)
+const InvestmentsRefresh = named(load.investments, 'InvestmentsRefresh')
+const Onboarding = lazy(load.onboarding)
+const Recurring = lazy(load.recurring)
+const Savings = lazy(load.savings)
+const Settings = lazy(load.settings)
+const Transactions = lazy(load.transactions)
+
+function preloadScreens() {
+  const all = () => Object.entries(load).forEach(([name, loader]) => name !== 'onboarding' && loader().catch(() => {}))
+  setTimeout(all, 1200)
+}
 
 function App() {
   const session = useSession()
@@ -66,6 +92,7 @@ function App() {
         setOnboarding(isNew)
         // New users choose their categories during setup
         if (isNew) return
+        preloadScreens()
         // Load accounts/categories early so the Add screen opens instantly
         return ensureDefaultCategories().then(() => Promise.all([fetchLookups(), fetchLastUsedAccountId()]))
       })
@@ -77,14 +104,17 @@ function App() {
   if (onboarding === undefined) return null
   if (onboarding) {
     return (
-      <Onboarding
-        email={session.user.email}
-        onDone={() => {
-          setOnboarding(false)
-          setDataVersion((v) => v + 1)
-          navigate('/home')
-        }}
-      />
+      <Suspense fallback={null}>
+        <Onboarding
+          email={session.user.email}
+          onDone={() => {
+            setOnboarding(false)
+            setDataVersion((v) => v + 1)
+            navigate('/home')
+            preloadScreens()
+          }}
+        />
+      </Suspense>
     )
   }
 
@@ -92,13 +122,21 @@ function App() {
 
   return (
     <div className="min-h-full pb-[calc(6rem+max(env(safe-area-inset-bottom),12px))]">
-      <TopBar title={screen.title} back={screen.back} action={screen.action} center={screen.center} email={session.user.email} />
+      <TopBar
+        title={screen.title}
+        back={screen.back}
+        action={screen.action && <Suspense fallback={null}>{screen.action}</Suspense>}
+        center={screen.center}
+        email={session.user.email}
+      />
       {!online && (
         <p role="status" className="mx-4 mb-2 rounded-xl bg-ink px-4 py-2.5 text-sm text-paper">
           You're offline. Your data will load again when you're back online.
         </p>
       )}
-      <main>{screen.body}</main>
+      <main>
+        <Suspense fallback={null}>{screen.body}</Suspense>
+      </main>
       <TabBar route={route} onAdd={() => setAdding(true)} />
       {locked && lockSettings() && <LockScreen email={session.user.email} onUnlock={() => setLocked(false)} />}
       {adding && (

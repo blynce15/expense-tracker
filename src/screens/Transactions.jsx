@@ -20,6 +20,7 @@ import {
   usesRecurring,
 } from '../lib/filters'
 import { fetchLookups } from '../lib/lookups'
+import { recall, remember } from '../lib/memory'
 import { formatCents } from '../lib/money'
 import { fetchRecurring, isIncome } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
@@ -37,10 +38,13 @@ const TYPE_TABS = [
 
 // filter: see lib/filters.js — kept by App so it survives tab switches
 export default function Transactions({ filter, onFilterChange, filterOpen, onFilterClose }) {
-  const [rows, setRows] = useState(null)
-  const [lookups, setLookups] = useState(null)
-  const [recurring, setRecurring] = useState(null)
-  const [hasMore, setHasMore] = useState(false)
+  // What this list last showed for the same filter, while a fresh copy loads
+  const last = recall('transactions')
+  const shown = last?.filterKey === JSON.stringify(filter) ? last : null
+  const [rows, setRows] = useState(shown?.rows ?? null)
+  const [lookups, setLookups] = useState(shown?.lookups ?? null)
+  const [recurring, setRecurring] = useState(shown?.recurring ?? null)
+  const [hasMore, setHasMore] = useState(shown?.hasMore ?? false)
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
 
@@ -48,17 +52,23 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
   const load = useCallback(
     async (count) => {
       try {
-        const [data, entries] = await Promise.all([fetchLookups(), fetchRecurring()])
-        const tx = await applyFilter(supabase.from('transactions').select('*'), filter, entries)
-          .order('date', { ascending: false })
-          .order('created_at', { ascending: false })
-          .range(0, count)
+        const list = (entries) =>
+          applyFilter(supabase.from('transactions').select('*'), filter, entries)
+            .order('date', { ascending: false })
+            .order('created_at', { ascending: false })
+            .range(0, count)
+        // The recurring entries are only needed first when filtering by them; otherwise all at once
+        const byRecurring = filter.recurring && filter.recurring !== 'all'
+        const entriesReq = fetchRecurring()
+        const [data, entries, tx] = await Promise.all([fetchLookups(), entriesReq, byRecurring ? entriesReq.then(list) : list([])])
         if (tx.error) throw tx.error
-        setLookups(data)
-        setRecurring(entries)
         // We ask for one extra row to know whether there are more
-        setHasMore(tx.data.length > count)
-        setRows(tx.data.slice(0, count))
+        const next = { filterKey: JSON.stringify(filter), lookups: data, recurring: entries, hasMore: tx.data.length > count, rows: tx.data.slice(0, count) }
+        remember('transactions', next)
+        setLookups(next.lookups)
+        setRecurring(next.recurring)
+        setHasMore(next.hasMore)
+        setRows(next.rows)
       } catch (e) {
         setError(e.message)
       }

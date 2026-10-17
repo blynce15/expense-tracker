@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
 import MerchantIcon from '../components/MerchantIcon'
-import { fetchAnalytics, monthShort, periodLabel, prevLabel, verdictOf } from '../lib/analytics'
-import { fetchLookups } from '../lib/lookups'
+import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, prevLabel, verdictOf } from '../lib/analytics'
+import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { monthlyCents } from '../lib/recurring'
 import { navigate } from '../lib/useRoute'
@@ -14,8 +14,8 @@ const kept = (m) => (m ? m.saved + m.invested : 0)
 // in and out, is spending creeping up, which categories are changing, are fixed costs growing, your records.
 export default function AnalyticsTrends() {
   const [period, setPeriod] = usePeriod()
-  const [data, setData] = useState(null)
-  const [categories, setCategories] = useState(null)
+  const [data, setData] = useState(() => cachedAnalytics(period))
+  const [categories, setCategories] = useState(() => lookupCache.lookups?.categories ?? null)
   const [error, setError] = useState(null)
 
   useEffect(() => {
