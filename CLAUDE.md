@@ -70,7 +70,7 @@ Done:
 - Phase 2: Home with dark total-balance card (tappable account edges, hide amounts) and recent transactions.
 - Phase 3 (partial): Analytics tab with month picker, spending by category, last 6 months, daily spending.
 - Phase 4: Savings goals (progress, add/take out money, deadlines).
-- Deployed to Vercel via CLI: https://expense-tracker-phi-ivory-98.vercel.app (publish with `npx vercel deploy --prod --yes`; env vars set in Vercel).
+- Deployed to Vercel via CLI: https://expense-tracker-phi-ivory-98.vercel.app (since 2026-10-17 publishing = `git push` to main on GitHub; env vars set in Vercel).
 - Display style: European numbers (€1.234,56), comma key on the number pad.
 
 Also done (same day):
@@ -194,8 +194,11 @@ Done:
 - Analytics → Better or worse (#/analytics/trends, src/screens/AnalyticsTrends.jsx, title "Better or worse"; owner's 6 questions, 2026-10-16), navy numbered sections: 1 Overall (navy card: verdict Better / Worse / About the same from the chips; Spending, Income, Kept vs usual and vs the same month last year up to the same day (analytics lastYear; year view: one column vs last year)); 2 The last 12 months (paired in/out bars, tap a month, kept in 12 months, Avg in / out / left); 3 Is spending creeping up? (spending per full month + dashed trend through the earlier and recent averages; headline from the last 6 vs 6 before, or fewer with less history); 4 Which categories are changing (diverging bars, last 3 full months vs 3 before per category, tap → category page); 5 Are fixed costs growing (recurring paid per month, dashed = what they cost now, change since the first month, recurring added in the 12 months and price rises spotted from fixedHistory); 6 Your records (lowest/highest spending, most kept, highest income month, next to this month or the year's monthly average). fetchAnalytics now loads 13 months (the same month last year). Weekday and calendar charts moved out (they live in Where it goes). Published 2026-10-16.
 - Safari's yellow autofill background is turned off for every text box (src/index.css, :-webkit-autofill and :autofill keep the box's own colours); owner saw it on the onboarding Name box.
 
+### 2026-10-17
+Done:
+- Code backed up on GitHub: private repo https://github.com/blynce15/expense-tracker (remote origin, branch main). History checked first: no secret keys were ever committed. Vercel's GitHub app installed for that repo only, and the Vercel project is connected to it: every `git push` to main now publishes to production automatically (no need for `npx vercel deploy --prod --yes` any more; it still works as a manual fallback). The gh CLI is not installed; GitHub pushes sign in through Git Credential Manager.
+
 Next:
 - Analytics details page still to build (owner will continue later): Net worth. Each card on Analytics gets "More ›" (Card onMore) once its page exists.
-- Connect GitHub repo to Vercel for automatic deploys (needs owner at the computer).
 - Monthly budget per category: owner declined for now (would need a data-model change).
 - Later: CSV export.
