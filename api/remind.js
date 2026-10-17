@@ -119,7 +119,9 @@ export default async function handler(req, res) {
     }
     return res.status(200).json({ due, payments: payments.length, sent })
   } catch (e) {
+    // The details go to Vercel's logs only; the answer stays plain
     const hint = /permission denied/.test(e.message) ? ' Run supabase/migrations/007_reminders_server_access.sql in the Supabase SQL Editor.' : ''
-    return res.status(500).json({ error: e.message + hint })
+    console.error('remind failed:', e.message + hint)
+    return res.status(500).json({ error: 'Reminders could not be sent. Details are in the Vercel logs.' })
   }
 }

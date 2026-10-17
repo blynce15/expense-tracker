@@ -5,7 +5,8 @@
 // tracks itself.
 // GET /api/getquin?url=<share link> with the user's login token (only signed-in users can use it).
 //
-// Needs these Vercel settings: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (only to check the login).
+// Needs these Vercel settings: VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY (only to check the login;
+// the secret key isn't needed here).
 
 import { createClient } from '@supabase/supabase-js'
 
@@ -188,10 +189,10 @@ async function monthlyAmounts(code, currencies) {
 }
 
 export default async function handler(req, res) {
-  if (!process.env.VITE_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return res.status(500).json({ error: 'Not set up in Vercel.' })
+  if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_PUBLISHABLE_KEY) return res.status(500).json({ error: 'Not set up in Vercel.' })
 
   const token = (req.headers.authorization || '').replace(/^Bearer /, '')
-  const db = createClient(process.env.VITE_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  const db = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } })
   const { data: auth, error: authError } = token ? await db.auth.getUser(token) : { data: null }
   if (authError || !auth?.user) return res.status(401).json({ error: 'Please sign in again.' })
 
