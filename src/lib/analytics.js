@@ -101,7 +101,8 @@ export async function fetchAnalytics(p) {
 
 // ---------- Calculations ----------
 
-function buildAnalytics(p, accounts, recurring, rows) {
+// Exported for the tests (tests/analytics.test.js)
+export function buildAnalytics(p, accounts, recurring, rows) {
   const typeOf = new Map(accounts.map((a) => [a.id, a.type]))
   const now = todayISO().slice(0, 7)
   const prev = shiftPeriod(p, -1)

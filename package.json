@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vitest run && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "backup": "node scripts/backup.mjs"
+    "backup": "node scripts/backup.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.2",
@@ -25,6 +26,7 @@
     "oxlint": "^1.81.0",
     "pg": "^8.23.1",
     "vite": "^8.3.0",
-    "vite-plugin-pwa": "2.0.0"
+    "vite-plugin-pwa": "2.0.0",
+    "vitest": "^3.2.7"
   }
 }

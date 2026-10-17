@@ -1,4 +1,16 @@
 {
-  "crons": [{ "path": "/api/remind", "schedule": "0 8 * * *" }],
-  "functions": { "api/getquin.js": { "regions": ["fra1"] } }
+  "buildCommand": "npm run build",
+  "crons": [
+    {
+      "path": "/api/remind",
+      "schedule": "0 8 * * *"
+    }
+  ],
+  "functions": {
+    "api/getquin.js": {
+      "regions": [
+        "fra1"
+      ]
+    }
+  }
 }

@@ -23,7 +23,7 @@ export function savingsEffect(accounts, t) {
 }
 
 // Map goal id (null = General savings) → cents
-function holdings(accounts, transactions, moves) {
+export function holdings(accounts, transactions, moves) {
   const out = new Map([[null, 0]])
   const add = (id, cents) => out.set(id ?? null, (out.get(id ?? null) ?? 0) + cents)
   for (const a of accounts) if (a.type === 'savings') add(null, a.starting_balance_cents)
