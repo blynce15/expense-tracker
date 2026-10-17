@@ -1,7 +1,8 @@
 {
-  "name": "expense-tracker",
+  "name": "lynxos",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "LynxOS: a personal expense tracker for iPhone (installable web app)",
   "type": "module",
   "scripts": {
     "dev": "vite",
