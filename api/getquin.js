@@ -1,4 +1,4 @@
-// Investments page: reads the owner's public getquin share page (e.g. https://getqu.in/WO8FIo/) and returns
+// Investments page: reads the owner's public getquin share page (e.g. https://getqu.in/AbC123/) and returns
 // the portfolio's current value, how much went in, each position, and the money put in each month.
 // getquin has no public API, so this reads the data the share page itself carries (Next.js __NEXT_DATA__)
 // and its trades from getquin's data service; if getquin changes either, the app falls back to what it

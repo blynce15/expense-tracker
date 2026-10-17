@@ -1,14 +1,20 @@
 // Monthly data backup (runs on the owner's PC, see CLAUDE.md → Data backup).
-// Copies every table in the database's public schema into a dated folder in OneDrive:
+// Copies every table in the database's public schema into a dated folder (BACKUP_DIR):
 // backup.json (everything, for restoring) + one CSV per table (to open in Excel).
-// The database address lives in .env.backup (never committed).
+// The database address (DATABASE_URL) and the folder (BACKUP_DIR) live in .env.backup, on this PC only (never committed).
 import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const backupsDir = join(process.env.OneDrive || join(process.env.USERPROFILE, 'OneDrive'), 'Documents', 'Dados Pessoais', 'Bazinho', 'Finances', 'Expense-tracker')
+try {
+  process.loadEnvFile(join(root, '.env.backup'))
+} catch {
+  // Reported below: DATABASE_URL will be missing
+}
+// Without BACKUP_DIR: a "LynxOS backups" folder in OneDrive
+const backupsDir = process.env.BACKUP_DIR || join(process.env.OneDrive || join(process.env.USERPROFILE, 'OneDrive'), 'LynxOS backups')
 const failedNote = join(backupsDir, 'BACKUP FAILED.txt')
 
 function csvCell(value) {
@@ -24,7 +30,6 @@ function toCsv(columns, rows) {
 }
 
 async function run() {
-  process.loadEnvFile(join(root, '.env.backup'))
   if (!process.env.DATABASE_URL || process.env.DATABASE_URL.includes('[YOUR-PASSWORD]')) {
     throw new Error('DATABASE_URL in .env.backup is missing or still has [YOUR-PASSWORD] in it.')
   }

@@ -6,7 +6,7 @@ import { supabase } from './supabase'
 
 const CACHE_KEY = 'getquin'
 
-// Accepts "getqu.in/WO8FIo" or a full getquin address; null if it isn't one
+// Accepts "getqu.in/AbC123" or a full getquin address; null if it isn't one
 export function cleanGetquinLink(text) {
   const t = text.trim()
   if (!t) return null
