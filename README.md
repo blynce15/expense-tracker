@@ -45,7 +45,7 @@ Built as a home-screen web app for one person, with no app store, no ads and no 
 
 ## Features
 
-| | |
+| Feature | What it does |
 |---|---|
 | ⚡ **Three-tap entry** | Amount → category → save. The number pad opens immediately, with the last-used account and today's date as defaults. |
 | 💳 **Accounts as cards** | Bank, cash, savings and meal cards, shown as real-looking cards with bank logos. Balances are always calculated, never stored. |
