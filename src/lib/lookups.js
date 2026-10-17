@@ -38,7 +38,7 @@ export async function fetchLastUsedAccountId() {
 
 // Picks the default account for a new transaction: the pinned one, else last used, else the first active one.
 export function defaultAccountId(lookups, lastUsedId) {
-  const active = lookups.accounts.filter((a) => !a.archived && a.type !== 'investment')
+  const active = lookups.accounts.filter((a) => !a.archived)
   const pick = (id) => active.find((a) => a.id === id)
   return (pick(lookupCache.pinnedAccountId) ?? pick(lastUsedId) ?? active[0])?.id ?? null
 }

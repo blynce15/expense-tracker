@@ -119,20 +119,16 @@ function buildAnalytics(p, accounts, recurring, rows) {
   let prevSpentSoFar = 0
   const catPrevSoFar = new Map()
 
-  const flowByAccount = new Map() // savings/investment account id → net money in during this period
+  const flowByAccount = new Map() // savings account id → net money in during this period
   const flowByGoal = new Map() // savings goal id ('general' = General savings) → net money in during this period
   let currentTx = null // the transaction being counted (for its goal)
   const moveInto = (m, accountId, cents, k) => {
-    const t = typeOf.get(accountId)
-    if (t === 'savings') m.saved += cents
-    else if (t === 'investment') m.invested += cents
-    else return
+    if (typeOf.get(accountId) !== 'savings') return
+    m.saved += cents
     if (months.includes(k)) {
       flowByAccount.set(accountId, (flowByAccount.get(accountId) ?? 0) + cents)
-      if (t === 'savings') {
-        const goal = currentTx?.goal_id ?? 'general'
-        flowByGoal.set(goal, (flowByGoal.get(goal) ?? 0) + cents)
-      }
+      const goal = currentTx?.goal_id ?? 'general'
+      flowByGoal.set(goal, (flowByGoal.get(goal) ?? 0) + cents)
     }
   }
 
@@ -303,7 +299,6 @@ function buildAnalytics(p, accounts, recurring, rows) {
       line: worthLine,
       bank: byType(BANK_TYPES),
       savings: byType(['savings']),
-      investments: byType(['investment']),
     },
     spending: {
       perDay: days.passed ? cur.spent / days.passed : 0,
@@ -355,37 +350,6 @@ export function placesFrom(expenses, limit = 5) {
 function running(values) {
   let total = 0
   return values.map((v) => (total += v))
-}
-
-const WEEKDAYS = ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays']
-
-// Short facts in plain words, most useful first. `name(id)` gives a category's name.
-export function highlights(a, name, euros) {
-  const out = []
-  const vs = a.period.kind === 'year' ? `in ${prevLabel(a.period)}` : `in ${monthLong(shiftMonth(a.period.key, -1)).split(' ')[0]}`
-  const diff = a.totals.spent - a.compare.spent
-  if (a.compare.spent > 0 && Math.abs(diff) >= 100) {
-    const when = a.current ? ` than by this time ${vs}` : ` than ${vs}`
-    out.push({ key: 'spent', good: diff < 0, icon: diff < 0 ? 'arrowDown' : 'arrowUp', text: [`You've spent `, `${euros(Math.abs(diff))} ${diff < 0 ? 'less' : 'more'}`, `${when}.`] })
-  }
-  const changes = a.categories.filter((c) => c.prev > 0 && c.cents - c.prev >= 1000)
-  if (changes.length) {
-    const top = changes.sort((x, y) => (y.cents - y.prev) / y.prev - (x.cents - x.prev) / x.prev)[0]
-    const rise = (top.cents - top.prev) / top.prev
-    const by = rise >= 2 ? `${Math.round(top.cents / top.prev)}× higher` : `up ${Math.round(rise * 100)}%`
-    out.push({ key: 'cat', good: false, icon: 'tag', text: ['', name(top.id), ` is ${by}, your biggest rise.`] })
-  }
-  const maxDay = a.weekdayAvg.reduce((best, v, i) => (v > a.weekdayAvg[best] ? i : best), 0)
-  if (a.weekdayAvg[maxDay] > 0) {
-    out.push({ key: 'day', good: null, icon: 'calendar', text: ['', WEEKDAYS[maxDay], ` cost you most: ${euros(Math.round(a.weekdayAvg[maxDay]))} on average.`] })
-  }
-  if (a.saving.rate !== null && a.saving.avgRate !== null) {
-    const r = Math.round(a.saving.rate * 100)
-    const avg = Math.round(a.saving.avgRate * 100)
-    const how = r > avg ? 'above' : r < avg ? 'below' : 'the same as'
-    out.push({ key: 'kept', good: r >= avg, icon: 'invest', text: ['You saved ', `${r}%`, ` of your income, ${how} your ${avg}% average.`] })
-  }
-  return out
 }
 
 // ---------- The Analytics overview ----------

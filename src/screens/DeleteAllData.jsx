@@ -39,11 +39,7 @@ export default function DeleteAllData({ onClose }) {
     const { error } = await supabase.rpc('delete_my_data')
     if (error) {
       setStep('confirm')
-      return setError(
-        error.code === 'PGRST202' || /delete_my_data/.test(error.message)
-          ? 'This isn’t set up yet: run supabase/migrations/009_delete_my_data.sql in Supabase first.'
-          : `Nothing was deleted: ${error.message}`,
-      )
+      return setError(`Nothing was deleted: ${error.message}`)
     }
     // Start over: back to Home, and the app reloads into onboarding
     window.location.replace('/#/home')

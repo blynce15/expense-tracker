@@ -5,10 +5,8 @@ import Icon from './Icon'
 export const TYPE_INFO = {
   debit: { label: 'Bank', icon: 'bank' },
   savings: { label: 'Savings', icon: 'coins' },
-  credit: { label: 'Card', icon: 'card' }, // older credit cards (no longer offered)
   cash: { label: 'Cash', icon: 'cash' },
   meal: { label: 'Meal card', icon: 'meal' },
-  investment: { label: 'Investment', icon: 'invest' },
 }
 
 // Darker version of a #rrggbb color, for card gradients

@@ -4,7 +4,7 @@ import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import GoalPicker from '../components/GoalPicker'
 import Sheet from '../components/Sheet'
-import { canPayFrom, checkOverdraft, isInvest } from '../lib/balances'
+import { checkOverdraft, isInvest } from '../lib/balances'
 import { formatDay, monthRange, todayISO } from '../lib/dates'
 import { checkGoals, savingsEffect } from '../lib/goals'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
@@ -65,16 +65,15 @@ function suggestCategory(history, type, name) {
 }
 
 // transaction: null to add a new one, or an existing row to edit it.
-// draft (new ones only): starting type and "to" account, e.g. a transfer into an investment account.
 // Step 1: amount (number pad). Step 2: a sheet with the name and categories, then Save.
 // Invest (teal): step 1 also has Put in / Take out; step 2 has only the name and this month's total.
-export default function TransactionSheet({ transaction, draft, onClose, onSaved }) {
+export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const isNew = !transaction
   const [lookups, setLookups] = useState(lookupCache.lookups)
   const [history, setHistory] = useState(null)
   const [step, setStep] = useState(1)
   // The tab: 'divest' (Take out) is shown on the Invest tab
-  const [type, setType] = useState(isInvest(transaction) ? 'invest' : (transaction?.type ?? draft?.type ?? 'expense'))
+  const [type, setType] = useState(isInvest(transaction) ? 'invest' : (transaction?.type ?? 'expense'))
   const [direction, setDirection] = useState(transaction?.type === 'divest' ? 'out' : 'in')
   const [investedSoFar, setInvestedSoFar] = useState(null)
   const [amount, setAmount] = useState(transaction ? centsToPad(transaction.amount_cents) : '')
@@ -82,7 +81,7 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
   const [accountId, setAccountId] = useState(() =>
     transaction ? transaction.account_id : lookupCache.lookups && defaultAccountId(lookupCache.lookups, lookupCache.lastUsedAccountId),
   )
-  const [toAccountId, setToAccountId] = useState(transaction?.to_account_id ?? draft?.to_account_id ?? null)
+  const [toAccountId, setToAccountId] = useState(transaction?.to_account_id ?? null)
   const [date, setDate] = useState(transaction?.date ?? todayISO())
   const [name, setName] = useState(transaction?.note ?? '')
   const [goalId, setGoalId] = useState(transaction?.goal_id ?? null) // null = General savings
@@ -236,13 +235,11 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
 
   // Keep showing an archived account/category if an existing transaction uses it
   const accounts = lookups.accounts.filter((a) => !a.archived || a.id === accountId || a.id === toAccountId)
-  // Money can't come out of an investment account (it can only be a transfer's "to")
-  const fromAccounts = accounts.filter((a) => canPayFrom(a) || a.id === accountId)
   const categories = lookups.categories.filter((c) => c.kind === type && (!c.archived || c.id === categoryId))
   const accountById = (id) => lookups.accounts.find((a) => a.id === id)
   const account = accountById(accountId)
 
-  if (fromAccounts.length === 0) {
+  if (accounts.length === 0) {
     return (
       <Sheet title={title} onClose={onClose} tall>
         <p className="py-6 text-center text-muted">
@@ -525,7 +522,7 @@ export default function TransactionSheet({ transaction, draft, onClose, onSaved 
       {picking === 'account' && (
         <Sheet title={type === 'transfer' ? 'From account' : investing && direction === 'out' ? 'Into account' : 'Account'} onClose={() => setPicking(null)} tall>
           <ul className="overflow-hidden rounded-2xl bg-card">
-            {fromAccounts.map((a) => (
+            {accounts.map((a) => (
               <li key={a.id} className="border-b border-line last:border-0">
                 <button
                   onClick={() => {

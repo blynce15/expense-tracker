@@ -342,7 +342,7 @@ export default function Settings({ session }) {
       {pinFlow && <PinSheet flow={pinFlow} canFaceId={faceIdSupported()} onFaceId={toggleFaceId} onClose={() => setPinFlow(null)} />}
 
       {pickingAccount && o && (
-        <DefaultAccountSheet accounts={o.accounts.filter((a) => a.type !== 'investment')} pinnedId={pinned ? pinnedId : null} onPick={changeDefaultAccount} onClose={() => setPickingAccount(false)} />
+        <DefaultAccountSheet accounts={o.accounts} pinnedId={pinned ? pinnedId : null} onPick={changeDefaultAccount} onClose={() => setPickingAccount(false)} />
       )}
 
       {editingName && (

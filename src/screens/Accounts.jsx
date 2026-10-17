@@ -22,7 +22,7 @@ function AccountCard({ account, cents, className = '', corner }) {
   const [whole, decimals] = formatCents(cents).split(',')
   return (
     <BankCard account={account} named className={`text-sm ${className}`} corner={corner}>
-      <p className="mt-5 text-xs text-white/70">{account.type === 'investment' ? 'Invested' : 'Balance today'}</p>
+      <p className="mt-5 text-xs text-white/70">Balance today</p>
       <p className="tabular font-display leading-tight font-bold">
         <span className="text-[26px]">{whole}</span>
         <span className="text-base text-white/60">,{decimals}</span>
@@ -174,8 +174,7 @@ function AccountForm({ account, onClose, onSaved }) {
 
   async function setArchived(archived) {
     // Money rule: an archived account drops out of your totals, so it has to be empty first.
-    // Investment accounts never empty (money only goes in), so they can be archived as they are.
-    if (archived && account.type !== 'investment' && account.balance_cents !== 0) {
+    if (archived && account.balance_cents !== 0) {
       return setError(
         account.balance_cents < 0
           ? `${account.name} is at ${formatCents(account.balance_cents)}. Bring it to €0 first, then archive it.`

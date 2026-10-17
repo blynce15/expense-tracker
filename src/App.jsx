@@ -33,10 +33,6 @@ import TransactionSheet from './screens/TransactionSheet'
 function App() {
   const session = useSession()
   const route = useRoute()
-  // Investments used to live at #/savings/investments; it's its own tab now
-  useEffect(() => {
-    if (route === '/savings/investments') window.location.replace('#/investments')
-  }, [route])
   const online = useOnline()
   const [adding, setAdding] = useState(false)
   // App lock: locked when the app starts and every time you come back to it
@@ -172,8 +168,6 @@ function screenFor(route, session, dataVersion, tx) {
     case '/investments':
       return { title: 'Investments', action: <InvestmentsRefresh />, body: <Investments key={dataVersion} /> }
     case '/profile':
-    case '/settings':
-    case '/account':
       return { title: 'Profile', back: '/home', body: <Settings session={session} /> }
     case '/settings/accounts':
       return { title: 'Accounts & cards', back: '/profile', body: <Accounts key={dataVersion} /> }

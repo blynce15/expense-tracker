@@ -209,12 +209,10 @@ function BigAmount({ cents, hidden }) {
 // with a fan of account cards that opens a list of all accounts. Picking an account opens its own page.
 function Balance({ accounts, portfolio, hidden, onToggleHidden, onOpenAccount }) {
   const [open, setOpen] = useState(false)
-  // Old investment accounts (no longer offered) only count what was put in: left out, getquin has the real value
-  const counted = accounts.filter((a) => a.type !== 'investment')
-  const accountsTotal = counted.reduce((s, a) => s + a.balance_cents, 0)
+  const accountsTotal = accounts.reduce((s, a) => s + a.balance_cents, 0)
   const investments = portfolio?.value_cents ?? 0
   const total = accountsTotal + investments
-  const fan = (counted.length ? counted : accounts).slice(0, 3)
+  const fan = accounts.slice(0, 3)
   const offset = 3 - fan.length
 
   function pick(id) {
@@ -283,7 +281,7 @@ function Balance({ accounts, portfolio, hidden, onToggleHidden, onOpenAccount })
             <ul className="px-1.5 pb-1.5">
               <AccountOption
                 label="All accounts"
-                sub={`${counted.length} ${counted.length === 1 ? 'account' : 'accounts'}`}
+                sub={`${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`}
                 cents={accountsTotal}
                 hidden={hidden}
                 selected

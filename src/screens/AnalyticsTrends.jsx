@@ -50,7 +50,7 @@ export default function AnalyticsTrends() {
             <InOut a={a} />
           </Section>
           <Section n={3} title="Is spending creeping up?">
-            <Creep a={a} full={full} />
+            <Creep full={full} />
           </Section>
           <Section n={4} title="Which categories are changing">
             <Changing a={a} category={category} />
@@ -244,7 +244,7 @@ function InOut({ a }) {
 // ---------- 3 · Is spending creeping up ----------
 // Monthly spending (full months with activity) with a straight trend line through them; headline from the
 // last 6 months against the 6 before (or 3 vs 3 when there's less history).
-function Creep({ a, full }) {
+function Creep({ full }) {
   if (full.length < 4) return <Empty>A few more months of history are needed to see a trend.</Empty>
   const half = Math.min(6, Math.floor(full.length / 2))
   const avg = (list) => list.reduce((s, t) => s + t.spent, 0) / list.length

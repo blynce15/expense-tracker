@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { canPayFrom, checkOverdraft } from '../lib/balances'
+import { checkOverdraft } from '../lib/balances'
 import { checkGoals, savingsEffect } from '../lib/goals'
 import { lookupCache } from '../lib/lookups'
 import { centsToInput, formatCents, parseToCents } from '../lib/money'
@@ -12,7 +12,7 @@ import Sheet from './Sheet'
 export default function PaySheet({ payment, onClose, onPaid }) {
   const [amount, setAmount] = useState(centsToInput(payment.amount_cents))
   // Archived accounts can't be paid from; if the payment's own card was archived, start on the first active one
-  const accounts = (lookupCache.lookups?.accounts ?? []).filter((a) => !a.archived && canPayFrom(a))
+  const accounts = (lookupCache.lookups?.accounts ?? []).filter((a) => !a.archived)
   const [accountId, setAccountId] = useState(() =>
     accounts.some((a) => a.id === payment.account_id) ? payment.account_id : (accounts[0]?.id ?? payment.account_id),
   )

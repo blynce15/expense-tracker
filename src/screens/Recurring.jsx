@@ -363,7 +363,7 @@ export function RecurringForm({ payment, lookups, onClose, onSaved }) {
   const [type, setType] = useState(payment?.type ?? 'expense')
   const income = type === 'income'
   const categories = lookups.categories.filter((c) => c.kind === type && (!c.archived || c.id === payment?.category_id))
-  const accounts = lookups.accounts.filter((a) => (!a.archived && a.type !== 'investment') || a.id === payment?.account_id)
+  const accounts = lookups.accounts.filter((a) => !a.archived || a.id === payment?.account_id)
 
   const [name, setName] = useState(payment?.name ?? '')
   const [icon, setIcon] = useState(payment?.icon ?? '')

@@ -82,9 +82,6 @@ export async function checkGoals(before, after) {
   return transactionGoalProblem(await fetchGoalsState(), before, after)
 }
 
-// The goal a transaction touches, when it moves savings money (else no goal choice is needed)
-export const needsGoal = (accounts, t) => savingsEffect(accounts, t) !== 0
-
 // Moves money from one goal to another inside savings (null = General savings)
 export async function moveBetweenGoals(fromId, toId, cents) {
   const { error } = await supabase.from('goal_moves').insert({ from_goal_id: fromId, to_goal_id: toId, amount_cents: cents })

@@ -74,24 +74,5 @@ export async function recordPayment(p, { amountCents, accountId, goalId = null }
     p_next_due: nextDue,
     p_goal_id: goalId,
   })
-  if (!rpcError) return
-  // If the function is missing (migration not run): fall back to two separate saves
-  if (rpcError.code !== 'PGRST202') throw rpcError
-
-  const { error } = await supabase.from('transactions').insert({
-    type: p.type ?? 'expense',
-    amount_cents: amountCents,
-    date,
-    account_id: accountId,
-    category_id: p.category_id,
-    note: p.name,
-    goal_id: goalId,
-  })
-  if (error) throw error
-
-  const { error: updateError } = await supabase
-    .from('recurring_payments')
-    .update({ next_due: nextDue })
-    .eq('id', p.id)
-  if (updateError) throw updateError
+  if (rpcError) throw rpcError
 }
