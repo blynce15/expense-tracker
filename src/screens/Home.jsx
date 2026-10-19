@@ -6,6 +6,7 @@ import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
 import { budgetPeriod, computeBudget, startDayOf } from '../lib/budget'
 import { formatDayMonth, monthRange, todayISO } from '../lib/dates'
+import { isRecurring, recurringNameSet } from '../lib/filters'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
@@ -110,6 +111,7 @@ export default function Home({ onSeeAccount }) {
         lookups,
         recent: recent.data,
         upcoming: recurring.filter((p) => p.active).slice(0, UPCOMING_COUNT),
+        recurringNames: recurringNameSet(recurring),
       }))
     } catch (e) {
       setError(e.message)
@@ -600,7 +602,12 @@ function Recent({ data, onSelect }) {
           {data.recent.map((t) => (
             <li key={t.id} className="border-b border-line last:border-0">
               <button onClick={() => onSelect(t)} className="flex w-full items-center gap-3 px-4 py-2 text-left">
-                <TransactionRow t={t} category={category(t.category_id)} accountName={accountName} />
+                <TransactionRow
+                  t={t}
+                  category={category(t.category_id)}
+                  accountName={accountName}
+                  recurring={!!data.recurringNames && isRecurring(t, data.recurringNames)}
+                />
               </button>
             </li>
           ))}
