@@ -63,7 +63,7 @@ export function describeRange(date) {
 }
 
 export function activeFilterCount(filter) {
-  return (filter.date.preset !== 'all' ? 1 : 0) + (filter.accountIds.length ? 1 : 0) + (usesCategories(filter) ? 1 : 0) + (usesRecurring(filter) ? 1 : 0)
+  return (filter.type !== 'all' ? 1 : 0) + (filter.date.preset !== 'all' ? 1 : 0) + (filter.accountIds.length ? 1 : 0) + (usesCategories(filter) ? 1 : 0) + (usesRecurring(filter) ? 1 : 0)
 }
 
 // The recurring filter doesn't apply to transfers either

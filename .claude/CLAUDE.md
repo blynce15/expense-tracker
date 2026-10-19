@@ -209,6 +209,7 @@ Done:
 ### 2026-10-19
 Done:
 - Home "Recent transactions" rows show the violet ↻ recurring badge too (same rule as Transactions: isRecurring / recurringNameSet). Published.
+- Transactions: the All · Income · Expense · Transfer · Invest tabs at the top are gone; the type is now the first section of the Filters sheet ("Type": five tiles in one card, the picked one filled in its colour: All cobalt, Expense orange, Income green, Transfer ink, Invest teal; then "Narrow down" with Date range / Cards / Categories / Recurring). A chosen type counts as a filter (badge on the filter button, Reset) and shows as the first chip on the page in its colour. With no filters the list starts right under the title. Published.
 
 Next:
 - Analytics details page still to build (owner will continue later): Net worth. Each card on Analytics gets "More ›" (Card onMore) once its page exists.

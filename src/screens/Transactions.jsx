@@ -28,13 +28,19 @@ import TransactionDetails from './TransactionDetails'
 
 const PAGE_SIZE = 100
 
-const TYPE_TABS = [
-  { value: 'all', label: 'All' },
-  { value: 'income', label: 'Income' },
-  { value: 'expense', label: 'Expense' },
-  { value: 'transfer', label: 'Transfer' },
-  { value: 'invest', label: 'Invest' },
+// Transaction types in Filters → Type; `on` = the picked tile, `chip` = its chip on the page
+const TYPE_OPTIONS = [
+  { value: 'all', label: 'All', icon: 'list', tint: 'bg-cobalt/10 text-cobalt', on: 'bg-cobalt text-white', text: 'text-cobalt' },
+  { value: 'expense', label: 'Expense', icon: 'arrowUp', tint: 'bg-orange-text/12 text-orange-text', on: 'bg-orange-text text-white', text: 'text-orange-text', chip: 'bg-orange-text/12 text-orange-text', dot: 'bg-orange-text' },
+  { value: 'income', label: 'Income', icon: 'arrowDown', tint: 'bg-gain/12 text-gain', on: 'bg-gain text-white', text: 'text-gain', chip: 'bg-gain/12 text-gain', dot: 'bg-gain' },
+  { value: 'transfer', label: 'Transfer', glyph: '⇄', tint: 'bg-line text-ink', on: 'bg-ink text-paper', text: 'text-ink', chip: 'bg-ink/8 text-ink', dot: 'bg-ink' },
+  { value: 'invest', label: 'Invest', icon: 'invest', tint: 'bg-teal/12 text-teal', on: 'bg-teal text-white', text: 'text-teal', chip: 'bg-teal/12 text-teal', dot: 'bg-teal' },
 ]
+
+// Categories that fit a type (transfers and investing have none)
+function kindsFor(type) {
+  return type === 'all' ? ['expense', 'income'] : type === 'transfer' || type === 'invest' ? [] : [type]
+}
 
 // filter: see lib/filters.js — kept by App so it survives tab switches
 export default function Transactions({ filter, onFilterChange, filterOpen, onFilterClose }) {
@@ -80,36 +86,15 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
     load(PAGE_SIZE)
   }, [load])
 
-  function changeType(type) {
-    // Keep only the selected categories that belong to the new type (transfers have none)
-    const kinds = type === 'all' ? ['expense', 'income'] : type === 'invest' ? [] : [type]
-    const categoryIds = filter.categoryIds.filter((id) => kinds.includes(lookups?.categories.find((c) => c.id === id)?.kind))
-    onFilterChange({ ...filter, type, categoryIds })
-  }
-
-  const filtered = filter.type !== 'all' || activeFilterCount(filter) > 0
+  const filtered = activeFilterCount(filter) > 0
 
   return (
-    <div className="px-4 pb-6">
-      <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 -mx-4 bg-paper/90 px-4 pt-1 pb-3 backdrop-blur">
-        <div className="grid grid-cols-5 gap-0.5 rounded-2xl bg-card p-1">
-          {TYPE_TABS.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => changeType(t.value)}
-              aria-pressed={filter.type === t.value}
-              className={`rounded-xl py-2.5 text-[13px] font-semibold transition ${
-                filter.type === t.value ? 'bg-cobalt text-white shadow-[0_6px_14px_-8px_rgba(31,79,224,0.9)]' : 'text-muted'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        {activeFilterCount(filter) > 0 && lookups && recurring && (
+    <div className="px-4 pt-1 pb-6">
+      {filtered && lookups && recurring && (
+        <div className="sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 -mx-4 bg-paper/90 pb-2 backdrop-blur">
           <ActiveFilters filter={filter} lookups={lookups} recurring={recurring} onChange={onFilterChange} />
-        )}
-      </div>
+        </div>
+      )}
 
       {error && <p className="pt-4 text-loss">Couldn't load transactions: {error}</p>}
       {rows && lookups && recurring && (
@@ -151,6 +136,17 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
 // Chips for the filters that are on; tapping one removes it
 function ActiveFilters({ filter, lookups, recurring, onChange }) {
   const chips = []
+  const type = TYPE_OPTIONS.find((t) => t.value === filter.type)
+  if (type?.chip) {
+    chips.push({
+      key: 'type',
+      label: type.label,
+      swatch: type.glyph ? <span className="text-sm leading-none">{type.glyph}</span> : <Icon name={type.icon} size={14} strokeWidth={2.6} />,
+      style: type.chip,
+      dot: type.dot,
+      remove: () => onChange({ ...filter, type: 'all' }),
+    })
+  }
   if (filter.date.preset !== 'all') {
     chips.push({ key: 'date', label: `📅 ${describeDate(filter.date)}`, remove: () => onChange({ ...filter, date: EMPTY_FILTER.date }) })
   }
@@ -179,25 +175,24 @@ function ActiveFilters({ filter, lookups, recurring, onChange }) {
       key: 'recurring',
       label: recurringText(filter, recurring),
       swatch: <Icon name="repeat" size={14} strokeWidth={2.5} />,
-      violet: true,
+      style: 'bg-violet/12 text-violet',
+      dot: 'bg-violet',
       remove: () => onChange({ ...filter, recurring: 'all', recurringIds: [] }),
     })
   }
 
   return (
-    <div className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
+    <div className="flex gap-1.5 overflow-x-auto px-4 pt-1 [scrollbar-width:none]">
       {chips.map((c) => (
         <button
           key={c.key}
           onClick={c.remove}
-          className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full pr-1.5 pl-3 text-[13px] font-semibold whitespace-nowrap ${
-            c.violet ? 'bg-violet/12 text-violet' : 'bg-cobalt/10 text-cobalt'
-          }`}
+          className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full pr-1.5 pl-3 text-[13px] font-semibold whitespace-nowrap ${c.style ?? 'bg-cobalt/10 text-cobalt'}`}
           aria-label={`Remove filter ${c.label}`}
         >
           {c.swatch}
           {c.label}
-          <span className={`grid size-[18px] place-items-center rounded-full text-white ${c.violet ? 'bg-violet' : 'bg-cobalt'}`}>
+          <span className={`grid size-[18px] place-items-center rounded-full text-white ${c.dot ?? 'bg-cobalt'}`}>
             <Icon name="close" size={11} strokeWidth={3} />
           </span>
         </button>
@@ -287,15 +282,22 @@ function FilterSheet({ filter, lookups, recurring, onApply, onClose }) {
   }, [draft])
 
   const accounts = lookups.accounts.filter((a) => !a.archived || draft.accountIds.includes(a.id))
-  const kinds = draft.type === 'all' ? ['expense', 'income'] : draft.type === 'invest' ? [] : [draft.type]
+  const kinds = kindsFor(draft.type)
   const categories = lookups.categories.filter((c) => kinds.includes(c.kind) && (!c.archived || draft.categoryIds.includes(c.id)))
   const toggle = (key, id) =>
     setDraft((d) => ({ ...d, [key]: d[key].includes(id) ? d[key].filter((x) => x !== id) : [...d[key], id] }))
   const setDate = (date) => setDraft((d) => ({ ...d, date }))
+  // Keep only the picked categories that belong to the new type
+  const setType = (type) =>
+    setDraft((d) => ({
+      ...d,
+      type,
+      categoryIds: d.categoryIds.filter((id) => kindsFor(type).includes(lookups.categories.find((c) => c.id === id)?.kind)),
+    }))
 
   const back = page === 'range' ? 'date' : 'main'
-  const resetButton = (
-    <button onClick={() => setDraft({ ...EMPTY_FILTER, type: draft.type })} className="px-2 py-2 text-[15px] font-semibold text-cobalt">
+  const resetButton = activeFilterCount(draft) > 0 && (
+    <button onClick={() => setDraft(EMPTY_FILTER)} className="px-2 py-2 text-[15px] font-semibold text-cobalt">
       Reset
     </button>
   )
@@ -330,6 +332,9 @@ function FilterSheet({ filter, lookups, recurring, onApply, onClose }) {
           : `${draft.categoryIds.length} categories`
     body = (
       <div className="space-y-3">
+        <SectionLabel>Type</SectionLabel>
+        <TypePicker value={draft.type} onChange={setType} />
+        <SectionLabel className="pt-1">Narrow down</SectionLabel>
         <ul className="overflow-hidden rounded-2xl bg-card">
           <FilterRow emoji="📅" tint="bg-cobalt/10" label="Date range" value={describeDate(draft.date)} set={draft.date.preset !== 'all'} onClick={() => setPage('date')} />
           <FilterRow emoji="💳" tint="bg-[#6741d9]/10" label="Cards" value={accountText} set={draft.accountIds.length > 0} onClick={() => setPage('cards')} />
@@ -484,6 +489,35 @@ function FilterSheet({ filter, lookups, recurring, onApply, onClose }) {
     >
       {body}
     </Sheet>
+  )
+}
+
+function SectionLabel({ children, className = '' }) {
+  return <p className={`px-1 text-xs font-semibold tracking-[0.08em] text-muted uppercase ${className}`}>{children}</p>
+}
+
+// Filters → Type: five tiles in one card; the picked one is filled in its own colour
+function TypePicker({ value, onChange }) {
+  return (
+    <div className="grid grid-cols-5 gap-1 rounded-2xl bg-card p-1.5" role="radiogroup" aria-label="Type">
+      {TYPE_OPTIONS.map((t) => {
+        const on = value === t.value
+        return (
+          <button
+            key={t.value}
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(t.value)}
+            className={`flex flex-col items-center gap-1.5 rounded-xl pt-2.5 pb-2 transition active:scale-[0.96] ${on ? 'bg-paper' : ''}`}
+          >
+            <span className={`grid size-10 place-items-center rounded-xl transition ${on ? `${t.on} shadow-[0_8px_16px_-10px_rgba(11,27,69,0.6)]` : t.tint}`}>
+              {t.glyph ? <span className="text-lg leading-none font-semibold">{t.glyph}</span> : <Icon name={t.icon} size={19} strokeWidth={2.4} />}
+            </span>
+            <span className={`text-[12px] font-semibold ${on ? t.text : 'text-muted'}`}>{t.label}</span>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
