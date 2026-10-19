@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { pct, resetPeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import { cachedAnalytics, currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, prevLabel, shiftMonth, verdictOf } from '../lib/analytics'
+import { cachedUsdRate, cashEntries, cashOn, cashTotal, fetchUsdRate } from '../lib/cash'
 import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { recall, remember } from '../lib/memory'
@@ -17,7 +18,7 @@ export default function Analytics() {
   const [period] = useState(() => currentPeriod('month'))
   const [data, setData] = useState(() => cachedAnalytics(period))
   const [categories, setCategories] = useState(() => lookupCache.lookups?.categories ?? null)
-  // { portfolio, since } from getquin, or {} when not linked
+  // { portfolio, since, cash, rate } from getquin and the cash at the brokers, or {} when not linked
   const [invest, setInvestState] = useState(() => recall('analytics:invest'))
   const setInvest = (value) => setInvestState(remember('analytics:invest', value))
   const [error, setError] = useState(null)
@@ -44,12 +45,19 @@ export default function Analytics() {
         const link = p?.answers?.getquinUrl
         const since = p?.answers?.getquinSince ?? null
         if (!link) return setInvest({})
-        const cached = cachedPortfolio(link)
-        setInvest({ portfolio: cached, since })
+        const cash = cashEntries(p)
+        let now = { portfolio: cachedPortfolio(link), since, cash, rate: cachedUsdRate()?.rate ?? null }
+        const update = (patch) => setInvest((now = { ...now, ...patch }))
+        update({})
         // Fresh numbers (and the value history) in the background
         fetchPortfolio(link)
-          .then((portfolio) => setInvest({ portfolio, since }))
+          .then((portfolio) => update({ portfolio }))
           .catch(() => {})
+        if (cash.some((e) => e.currency === 'USD')) {
+          fetchUsdRate()
+            .then((r) => update({ rate: r.rate }))
+            .catch(() => {})
+        }
       })
       .catch(() => setInvest({}))
   }, [])
@@ -83,8 +91,11 @@ export default function Analytics() {
 // Net worth = accounts + the getquin portfolio. Back in time the portfolio is its real value at the end of each
 // month (getquin's value history). If getquin can't give the history: today's value minus what was put in after
 // that month (getquin's trades before getquinSince, your Invest transactions after).
+// Cash at the brokers counts with the investments (only when getquin is linked): back in time, what you had
+// entered by the end of each month (dollars at today's rate).
 function standingOf(a, invest) {
-  const value = invest.portfolio?.value_cents ?? 0
+  const cash = invest.portfolio ? (invest.cash ?? []) : []
+  const value = (invest.portfolio?.value_cents ?? 0) + cashTotal(cash, invest.rate)
   const put = new Map()
   const add = (k, cents) => put.set(k, (put.get(k) ?? 0) + cents)
   const p = invest.portfolio
@@ -95,10 +106,11 @@ function standingOf(a, invest) {
   for (const [k, m] of a.byMonth) if (m.investNet) add(k, m.investNet)
   const history = p?.history?.length ? p.history : null
   const thisMonth = a.worth.line.at(-1)?.key
-  const investedAt = (k) => {
-    if (!value) return 0
+  const positions = p?.value_cents ?? 0
+  const positionsAt = (k) => {
+    if (!positions) return 0
     if (history) {
-      if (k >= thisMonth) return value
+      if (k >= thisMonth) return positions
       // The value at the end of month k (the last one known up to then; before the first one, nothing)
       let found = 0
       for (const h of history) if (h.date.slice(0, 7) <= k) found = h.cents
@@ -106,8 +118,10 @@ function standingOf(a, invest) {
     }
     let after = 0
     for (const [key, cents] of put) if (key > k) after += cents
-    return Math.max(0, value - after)
+    return Math.max(0, positions - after)
   }
+  const cashAt = (k) => (k >= thisMonth ? cashTotal(cash, invest.rate) : cashOn(cash, `${k}-31`, invest.rate))
+  const investedAt = (k) => positionsAt(k) + cashAt(k)
   const endKey = a.period.kind === 'year' ? `${a.period.key}-12` : a.period.key
   const prevKey = a.period.kind === 'year' ? `${Number(a.period.key) - 1}-12` : shiftMonth(a.period.key, -1)
   const end = a.worth.end + investedAt(endKey)

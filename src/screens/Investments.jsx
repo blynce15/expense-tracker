@@ -4,9 +4,10 @@ import Icon from '../components/Icon'
 import LynxWatermark from '../components/LynxWatermark'
 import Sheet from '../components/Sheet'
 import { todayISO } from '../lib/dates'
+import { cachedUsdRate, cashEntries, cashTotal, CURRENCIES, fetchUsdRate, formatIn, toEuroCents, updatedText, withAmount } from '../lib/cash'
 import { cachedPortfolio, cleanGetquinLink, fetchPortfolio, forgetPortfolio } from '../lib/getquin'
-import { formatCents } from '../lib/money'
-import { fetchProfile, saveGetquinLink, saveGetquinSince } from '../lib/profile'
+import { centsToPad, formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
+import { fetchProfile, saveBrokerCash, saveGetquinLink, saveGetquinSince } from '../lib/profile'
 import { supabase } from '../lib/supabase'
 
 const MONTHS_SHOWN = 6
@@ -92,6 +93,10 @@ export default function Investments() {
   const [editingLink, setEditingLink] = useState(false) // only from the empty page; changing the link is in Profile
   const [since, setSince] = useState(null) // the day getquin was first connected
   const [own, setOwn] = useState(null) // your Invest / Take out transactions in the months shown
+  const [cash, setCash] = useState([]) // cash at the brokers (src/lib/cash.js)
+  const [rate, setRate] = useState(() => cachedUsdRate()) // { rate, date }: euros per dollar
+  const [tab, setTab] = useState('positions')
+  const [editingCash, setEditingCash] = useState(null) // an entry, 'new' or null
 
   // Fresh numbers from getquin every time the page opens; the last ones show meanwhile
   const refresh = useCallback((url) => {
@@ -123,6 +128,7 @@ export default function Investments() {
           saveGetquinSince(start).catch(() => {})
         }
         setSince(start)
+        setCash(cashEntries(p))
         setLink(url)
         refresh(url)
       })
@@ -133,6 +139,9 @@ export default function Investments() {
       .in('type', ['invest', 'divest'])
       .gte('date', `${firstShownMonth()}-01`)
       .then(({ data, error }) => setOwn(error ? [] : data))
+    fetchUsdRate()
+      .then(setRate)
+      .catch(() => {}) // The last rate on this phone stays
   }, [refresh])
 
   if (link === undefined) return null
@@ -165,16 +174,23 @@ export default function Investments() {
 
   // Money put in per month: getquin before you connected it, your Invest transactions after
   const flow = since && own ? lastMonths(portfolio, since, own) : null
+  const cashCents = cashTotal(cash, rate?.rate)
+
+  async function saveCash(next) {
+    await saveBrokerCash(next)
+    setCash(next)
+    setEditingCash(null)
+  }
 
   return (
     <div className="space-y-4 px-4 pt-1 pb-6">
-      <ValueCard portfolio={portfolio} monthCents={flow ? flow.at(-1).cents : null} error={portfolioError} />
+      <ValueCard portfolio={portfolio} cashCents={cashCents} monthCents={flow ? flow.at(-1).cents : null} error={portfolioError} />
       {flow && (portfolio?.months || flow.some((d) => !d.fromGetquin)) && <InvestChart flow={flow} />}
 
-      <h2 className="px-1 pt-2 font-display text-lg font-bold">
-        Positions {portfolio && <span className="tabular text-base font-semibold text-muted">· {portfolio.positions.length}</span>}
-      </h2>
-      {portfolio ? (
+      <TabSwitch tab={tab} onChange={setTab} positions={portfolio?.positions.length} cash={cash.length} />
+      {tab === 'cash' ? (
+        <CashList entries={cash} totalCents={cashCents} rate={rate} onOpen={setEditingCash} />
+      ) : portfolio ? (
         <ul className="space-y-2.5">
           {portfolio.positions.map((p) => (
             <PositionRow key={`${p.ticker}-${p.name}`} position={p} />
@@ -185,12 +201,23 @@ export default function Investments() {
           {portfolioError ? `Couldn't load your positions: ${portfolioError}` : 'Loading your positions…'}
         </p>
       )}
+
+      {editingCash && (
+        <CashSheet
+          entry={editingCash === 'new' ? null : editingCash}
+          rate={rate}
+          onClose={() => setEditingCash(null)}
+          onSave={(entry) => saveCash(editingCash === 'new' ? [...cash, entry] : cash.map((e) => (e.id === entry.id ? entry : e)))}
+          onDelete={() => saveCash(cash.filter((e) => e.id !== editingCash.id))}
+        />
+      )}
     </div>
   )
 }
 
-// Today's value from getquin with the overall gain; Invested = what getquin says the positions cost
-function ValueCard({ portfolio, monthCents, error }) {
+// Today's value: getquin's positions + your cash at the brokers. The gain is the positions' only (cash isn't
+// profit); Invested = what getquin says the positions cost.
+function ValueCard({ portfolio, cashCents, monthCents, error }) {
   const header = <p className="relative text-sm font-semibold text-white/80">Portfolio value</p>
   if (!portfolio) {
     return (
@@ -202,7 +229,7 @@ function ValueCard({ portfolio, monthCents, error }) {
   }
   const gain = portfolio.value_cents - portfolio.invested_cents
   const rate = portfolio.invested_cents ? gain / portfolio.invested_cents : 0
-  const [euros, decimals] = formatCents(portfolio.value_cents).split(',')
+  const [euros, decimals] = formatCents(portfolio.value_cents + cashCents).split(',')
   return (
     <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#14a3b8] via-[#0c8599] to-[#08606f] p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(12,133,153,0.9)]">
       <LynxWatermark className="-bottom-14 -left-10" />
@@ -222,13 +249,14 @@ function ValueCard({ portfolio, monthCents, error }) {
           {signedWhole(gain)} · {percent(rate)}
         </span>
       </div>
-      <div className="relative mt-3.5 grid grid-cols-2 rounded-2xl bg-white/[.12]">
+      <div className="relative mt-3.5 grid grid-cols-3 rounded-2xl bg-white/[.12]">
         <Fact label="Invested" value={whole(portfolio.invested_cents)} />
         {monthCents != null ? (
-          <Fact label="Put in this month" value={signedWhole(monthCents)} divider />
+          <Fact label="This month" value={signedWhole(monthCents)} divider />
         ) : (
-          <Fact label="Dividends" value={formatCents(portfolio.dividends_cents)} divider />
+          <Fact label="Dividends" value={whole(portfolio.dividends_cents)} divider />
         )}
+        <Fact label="Cash" value={whole(cashCents)} divider highlight />
       </div>
     </section>
   )
@@ -323,11 +351,11 @@ export function LinkSheet({ link, onClose, onSaved }) {
   )
 }
 
-function Fact({ label, value, divider }) {
+function Fact({ label, value, divider, highlight }) {
   return (
-    <div className={`px-3.5 py-2.5 ${divider ? 'border-l border-white/15' : ''}`}>
-      <span className="block text-[11px] font-semibold text-white/70">{label}</span>
-      <span className="tabular block truncate font-display text-[17px] font-bold">{value}</span>
+    <div className={`min-w-0 px-3 py-2.5 ${divider ? 'border-l border-white/15' : ''}`}>
+      <span className="block truncate text-[11px] font-semibold text-white/70">{label}</span>
+      <span className={`tabular block truncate font-display text-[17px] font-bold ${highlight ? 'text-[#ffe08a]' : ''}`}>{value}</span>
     </div>
   )
 }
@@ -427,5 +455,182 @@ function InvestChart({ flow }) {
         )}
       </p>
     </section>
+  )
+}
+
+// Positions | Cash, under the chart
+function TabSwitch({ tab, onChange, positions, cash }) {
+  const tabs = [
+    { value: 'positions', label: 'Positions', count: positions },
+    { value: 'cash', label: 'Cash', count: cash },
+  ]
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-2xl bg-card p-1" role="tablist">
+      {tabs.map((t) => {
+        const on = tab === t.value
+        return (
+          <button
+            key={t.value}
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(t.value)}
+            className={`flex items-center justify-center gap-1.5 rounded-xl py-2.5 text-[15px] font-bold transition ${
+              on ? 'bg-teal text-white shadow-[0_8px_16px_-10px_rgba(12,133,153,0.9)]' : 'text-muted'
+            }`}
+          >
+            {t.label}
+            {t.count != null && (
+              <span className={`tabular rounded-full px-1.5 text-xs leading-5 ${on ? 'bg-white/20 text-white' : 'bg-paper text-muted'}`}>{t.count}</span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// € / $ tile
+function CurrencyTile({ currency }) {
+  return (
+    <span
+      className={`grid size-12 shrink-0 place-items-center rounded-2xl font-display text-[21px] font-extrabold ${
+        currency === 'USD' ? 'bg-gain/12 text-gain' : 'bg-teal/12 text-teal'
+      }`}
+    >
+      {CURRENCIES[currency].symbol}
+    </span>
+  )
+}
+
+// "$1 = €0,891"
+const rateText = (rate) => `$1 = €${rate.rate.toLocaleString('de-DE', { minimumFractionDigits: 3, maximumFractionDigits: 3 })}`
+
+// Cash tab: each cash position (tap to change it) with its share of the cash, then + Add cash
+function CashList({ entries, totalCents, rate, onOpen }) {
+  const usd = entries.some((e) => e.currency === 'USD')
+  return (
+    <>
+      {entries.length > 0 && (
+        <ul className="space-y-2.5">
+          {entries.map((e) => {
+            const euros = toEuroCents(e.cents, e.currency, rate?.rate)
+            const share = totalCents > 0 ? Math.round((euros / totalCents) * 100) : 0
+            const sub = e.currency === 'USD' ? (rate ? `≈ ${formatCents(euros)} · ${updatedText(e)}` : 'No exchange rate yet') : updatedText(e)
+            return (
+              <li key={e.id}>
+                <button onClick={() => onOpen(e)} className="flex w-full items-center gap-3 rounded-[22px] bg-card p-4 text-left active:scale-[.99]">
+                  <CurrencyTile currency={e.currency} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-display text-base font-bold">{e.name || CURRENCIES[e.currency].label}</span>
+                    <span className="tabular block truncate text-xs text-muted">{sub}</span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="tabular block font-display text-base font-bold">{formatIn(e.cents, e.currency)}</span>
+                    <span className="tabular block text-xs font-semibold text-muted">{share}%</span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      <button
+        onClick={() => onOpen('new')}
+        className="w-full rounded-[22px] border-2 border-dashed border-teal/30 bg-teal/5 py-3.5 text-[15px] font-bold text-teal active:opacity-70"
+      >
+        + Add cash
+      </button>
+      {usd && rate && (
+        <p className="tabular text-center text-xs text-muted">
+          Dollars at the ECB rate of {new Date(rate.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · {rateText(rate)}
+        </p>
+      )}
+    </>
+  )
+}
+
+// Add or change a cash position: € or $, the amount on the number pad, an optional name
+function CashSheet({ entry, rate, onClose, onSave, onDelete }) {
+  const [currency, setCurrency] = useState(entry?.currency ?? 'EUR')
+  const [amount, setAmount] = useState(entry ? centsToPad(entry.cents) : '')
+  const [name, setName] = useState(entry?.name ?? '')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState(null)
+  const cents = parseToCents(amount || '0') ?? 0
+  const symbol = CURRENCIES[currency].symbol
+
+  async function run(action) {
+    setBusy(true)
+    setError(null)
+    try {
+      await action()
+    } catch (e) {
+      setError(e.message)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Sheet title={entry ? 'Edit cash' : 'Add cash'} onClose={onClose}>
+      <div className="space-y-3 pb-4">
+        <div className="grid grid-cols-2 gap-1 rounded-2xl bg-card p-1">
+          {Object.entries(CURRENCIES).map(([code, c]) => (
+            <button
+              key={code}
+              onClick={() => setCurrency(code)}
+              aria-pressed={currency === code}
+              className={`rounded-xl py-2.5 text-[15px] font-bold ${currency === code ? 'bg-ink text-paper' : 'text-muted'}`}
+            >
+              {c.symbol} {c.label}
+            </button>
+          ))}
+        </div>
+        <div className="py-1 text-center">
+          <p className={`tabular truncate font-display text-[46px] leading-tight font-extrabold tracking-tight ${amount ? '' : 'text-muted/40'}`}>
+            {symbol}
+            {amount ? formatTyping(amount) : '0'}
+          </p>
+          <p className="tabular min-h-5 text-sm font-semibold text-muted">
+            {currency === 'USD' && cents > 0 && (rate ? `≈ ${formatCents(toEuroCents(cents, 'USD', rate.rate))} at today's rate` : 'No exchange rate yet')}
+          </p>
+        </div>
+        <label className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3">
+          <span className="font-semibold">Name</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Trade Republic (optional)"
+            autoComplete="off"
+            className="min-w-0 flex-1 bg-transparent text-right text-base outline-none placeholder:text-muted"
+          />
+        </label>
+        <div className="grid grid-cols-3 gap-1.5">
+          {PAD_KEYS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setAmount((a) => pressKey(a, k))}
+              className={`grid h-12 place-items-center rounded-2xl font-display text-[22px] font-semibold active:bg-line ${k === '.' || k === 'back' ? '' : 'bg-card'}`}
+              aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
+            >
+              {k === 'back' ? <Icon name="backspace" size={22} /> : k === '.' ? ',' : k}
+            </button>
+          ))}
+        </div>
+        {error && <p className="text-sm text-loss">{error}</p>}
+        <button
+          onClick={() => run(() => onSave(withAmount(entry, { name, currency, cents })))}
+          disabled={busy || (!entry && cents === 0)}
+          className="w-full rounded-2xl bg-teal py-4 text-base font-semibold text-white shadow-[0_10px_24px_-12px_rgba(12,133,153,0.9)] active:opacity-80 disabled:opacity-40"
+        >
+          Save
+        </button>
+        {entry && (
+          <button onClick={() => run(onDelete)} disabled={busy} className="w-full py-1.5 text-sm font-semibold text-loss disabled:opacity-50">
+            Remove this cash
+          </button>
+        )}
+      </div>
+    </Sheet>
   )
 }

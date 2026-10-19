@@ -44,6 +44,8 @@ export async function saveGetquinLink(url) {
   await saveAnswers({ getquinUrl: url, ...(url && !since ? { getquinSince: todayISO() } : {}) })
 }
 export const saveGetquinSince = (iso) => saveAnswers({ getquinSince: iso })
+// Cash at the brokers (src/lib/cash.js)
+export const saveBrokerCash = (entries) => saveAnswers({ brokerCash: entries })
 
 // Center-crops a picked image to a square and shrinks it to `size` px
 export function squareJpeg(file, size = 256) {

@@ -5,6 +5,7 @@ import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
 import { budgetPeriod, computeBudget, startDayOf } from '../lib/budget'
+import { cachedUsdRate, cashEntries, cashTotal, fetchUsdRate } from '../lib/cash'
 import { formatDayMonth, monthRange, todayISO } from '../lib/dates'
 import { isRecurring, recurringNameSet } from '../lib/filters'
 import { fetchLookups } from '../lib/lookups'
@@ -47,6 +48,10 @@ export default function Home({ onSeeAccount }) {
   // getquin, when linked: part of the net worth
   const [portfolio, setPortfolioState] = useState(() => recall('home:portfolio'))
   const setPortfolio = (value) => setPortfolioState(remember('home:portfolio', value))
+  // Cash at the brokers (also only with getquin), and the dollar rate for it
+  const [cash, setCashState] = useState(() => recall('home:cash') ?? [])
+  const setCash = (value) => setCashState(remember('home:cash', value))
+  const [usdRate, setUsdRate] = useState(() => cachedUsdRate()?.rate ?? null)
 
   const load = useCallback(async () => {
     try {
@@ -70,6 +75,12 @@ export default function Home({ onSeeAccount }) {
       const period = budgetPeriod(today, startDayOf(profile))
       // Investments come from getquin: show the last value at once, then refresh it in the background
       const link = profile?.answers?.getquinUrl
+      setCash(link ? cashEntries(profile) : [])
+      if (link && cashEntries(profile).some((e) => e.currency === 'USD')) {
+        fetchUsdRate()
+          .then((r) => setUsdRate(r.rate))
+          .catch(() => {}) // The last rate on this phone stays
+      }
       if (link) {
         setPortfolio(cachedPortfolio(link))
         fetchPortfolio(link)
@@ -140,7 +151,14 @@ export default function Home({ onSeeAccount }) {
 
   return (
     <div className="space-y-3 pb-1">
-      <Balance accounts={data.accounts} portfolio={portfolio} hidden={hidden} onToggleHidden={toggleHidden} onOpenAccount={setOpenAccountId} />
+      <Balance
+        accounts={data.accounts}
+        portfolio={portfolio}
+        cash={portfolio ? { cents: cashTotal(cash, usdRate), count: cash.length } : null}
+        hidden={hidden}
+        onToggleHidden={toggleHidden}
+        onOpenAccount={setOpenAccountId}
+      />
       <BudgetCard budget={data.budget} hidden={hidden} />
       <ComingUp payments={data.upcoming} onPay={setPaying} onOpen={(p) => setOpenPaymentId(p.id)} />
       <Recent data={data} onSelect={setEditing} />
@@ -215,13 +233,14 @@ function BigAmount({ cents, hidden }) {
   )
 }
 
-// Net worth = every account (bank, cash, meal card, savings) + investments (getquin's portfolio value),
-// with a fan of account cards that opens a list of all accounts. Picking an account opens its own page.
-function Balance({ accounts, portfolio, hidden, onToggleHidden, onOpenAccount }) {
+// Net worth = every account (bank, cash, meal card, savings) + investments (getquin's portfolio value)
+// + cash at the brokers, with a fan of account cards that opens a list of all accounts. Picking an account
+// opens its own page.
+function Balance({ accounts, portfolio, cash, hidden, onToggleHidden, onOpenAccount }) {
   const [open, setOpen] = useState(false)
   const accountsTotal = accounts.reduce((s, a) => s + a.balance_cents, 0)
   const investments = portfolio?.value_cents ?? 0
-  const total = accountsTotal + investments
+  const total = accountsTotal + investments + (cash?.cents ?? 0)
   const fan = accounts.slice(0, 3)
   const offset = 3 - fan.length
 
@@ -333,6 +352,24 @@ function Balance({ accounts, portfolio, hidden, onToggleHidden, onOpenAccount })
                   swatch={
                     <span className="grid h-8 w-11 shrink-0 place-items-center rounded-lg text-white shadow-sm" style={{ background: 'linear-gradient(140deg,#16b2c6,#0c8599 55%,#075a68)' }}>
                       <Icon name="invest" size={16} strokeWidth={2.4} />
+                    </span>
+                  }
+                  chevron
+                />
+              )}
+              {cash?.count > 0 && (
+                <AccountOption
+                  label="Broker cash"
+                  sub={`${cash.count} cash ${cash.count === 1 ? 'position' : 'positions'}`}
+                  cents={cash.cents}
+                  hidden={hidden}
+                  onClick={() => {
+                    setOpen(false)
+                    navigate('/investments')
+                  }}
+                  swatch={
+                    <span className="grid h-8 w-11 shrink-0 place-items-center rounded-lg bg-[#ffe08a] text-[#7a5600] shadow-sm">
+                      <Icon name="coins" size={16} strokeWidth={2.4} />
                     </span>
                   }
                   chevron
