@@ -154,7 +154,7 @@ export default function Home({ onSeeAccount }) {
       <Balance
         accounts={data.accounts}
         portfolio={portfolio}
-        cash={portfolio ? { cents: cashTotal(cash, usdRate), count: cash.length } : null}
+        cashCents={portfolio ? cashTotal(cash, usdRate) : 0}
         hidden={hidden}
         onToggleHidden={toggleHidden}
         onOpenAccount={setOpenAccountId}
@@ -234,13 +234,12 @@ function BigAmount({ cents, hidden }) {
 }
 
 // Net worth = every account (bank, cash, meal card, savings) + investments (getquin's portfolio value)
-// + cash at the brokers, with a fan of account cards that opens a list of all accounts. Picking an account
-// opens its own page.
-function Balance({ accounts, portfolio, cash, hidden, onToggleHidden, onOpenAccount }) {
+// + cash at the brokers, with a fan of account cards that opens a list of the accounts only (no investments).
+// Picking an account opens its own page.
+function Balance({ accounts, portfolio, cashCents, hidden, onToggleHidden, onOpenAccount }) {
   const [open, setOpen] = useState(false)
   const accountsTotal = accounts.reduce((s, a) => s + a.balance_cents, 0)
-  const investments = portfolio?.value_cents ?? 0
-  const total = accountsTotal + investments + (cash?.cents ?? 0)
+  const total = accountsTotal + (portfolio?.value_cents ?? 0) + cashCents
   const fan = accounts.slice(0, 3)
   const offset = 3 - fan.length
 
@@ -339,49 +338,7 @@ function Balance({ accounts, portfolio, cash, hidden, onToggleHidden, onOpenAcco
                   chevron
                 />
               ))}
-              {portfolio && (
-                <AccountOption
-                  label="Investments"
-                  sub={`getquin · ${portfolio.positions.length} positions`}
-                  cents={investments}
-                  hidden={hidden}
-                  onClick={() => {
-                    setOpen(false)
-                    navigate('/investments')
-                  }}
-                  swatch={
-                    <span className="grid h-8 w-11 shrink-0 place-items-center rounded-lg text-white shadow-sm" style={{ background: 'linear-gradient(140deg,#16b2c6,#0c8599 55%,#075a68)' }}>
-                      <Icon name="invest" size={16} strokeWidth={2.4} />
-                    </span>
-                  }
-                  chevron
-                />
-              )}
-              {cash?.count > 0 && (
-                <AccountOption
-                  label="Broker cash"
-                  sub={`${cash.count} cash ${cash.count === 1 ? 'position' : 'positions'}`}
-                  cents={cash.cents}
-                  hidden={hidden}
-                  onClick={() => {
-                    setOpen(false)
-                    navigate('/investments')
-                  }}
-                  swatch={
-                    <span className="grid h-8 w-11 shrink-0 place-items-center rounded-lg bg-[#ffe08a] text-[#7a5600] shadow-sm">
-                      <Icon name="coins" size={16} strokeWidth={2.4} />
-                    </span>
-                  }
-                  chevron
-                />
-              )}
             </ul>
-            {portfolio && (
-              <div className="flex items-center justify-between border-t border-line px-4 py-2.5 text-sm">
-                <span className="font-semibold">Net worth</span>
-                <span className="tabular font-display font-bold">{hidden ? HIDDEN : formatCents(total)}</span>
-              </div>
-            )}
             <button
               onClick={() => navigate('/settings/accounts')}
               className="flex w-full items-center justify-center gap-1 border-t border-line py-3 text-sm font-semibold text-cobalt"
