@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { FullEmpty } from '../components/EmptyLynx'
 import { MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
@@ -54,15 +54,23 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
   const [error, setError] = useState(null)
   const [editing, setEditing] = useState(null)
 
+  // Rows from `from` on (newest first). id breaks ties so pages never skip or repeat a row.
+  // One extra row is asked for, to know whether there are more.
+  const page = useCallback(
+    (entries, from, count) =>
+      applyFilter(supabase.from('transactions').select('*'), filter, entries)
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(from, from + count),
+    [filter],
+  )
+
   // Loads the first `count` matching transactions (newest first)
   const load = useCallback(
     async (count) => {
       try {
-        const list = (entries) =>
-          applyFilter(supabase.from('transactions').select('*'), filter, entries)
-            .order('date', { ascending: false })
-            .order('created_at', { ascending: false })
-            .range(0, count)
+        const list = (entries) => page(entries, 0, count)
         // The recurring entries are only needed first when filtering by them; otherwise all at once
         const byRecurring = filter.recurring && filter.recurring !== 'all'
         const entriesReq = fetchRecurring()
@@ -79,12 +87,45 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
         setError(e.message)
       }
     },
-    [filter],
+    [filter, page],
   )
 
   useEffect(() => {
     load(PAGE_SIZE)
   }, [load])
+
+  // Older transactions arrive on their own when you scroll near the end: only the next page is downloaded
+  const [loadingMore, setLoadingMore] = useState(false)
+  const busy = useRef(false)
+  const loadMore = useCallback(async () => {
+    if (busy.current || !rows || !hasMore) return
+    busy.current = true
+    setLoadingMore(true)
+    const key = JSON.stringify(filter)
+    try {
+      const tx = await page(recurring ?? [], rows.length, PAGE_SIZE)
+      if (tx.error) throw tx.error
+      if (key !== JSON.stringify(filter)) return
+      const seen = new Set(rows.map((r) => r.id))
+      const next = { ...recall('transactions'), hasMore: tx.data.length > PAGE_SIZE, rows: [...rows, ...tx.data.slice(0, PAGE_SIZE).filter((r) => !seen.has(r.id))] }
+      remember('transactions', next)
+      setHasMore(next.hasMore)
+      setRows(next.rows)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      busy.current = false
+      setLoadingMore(false)
+    }
+  }, [filter, hasMore, page, recurring, rows])
+
+  const end = useRef(null)
+  useEffect(() => {
+    if (!hasMore || !end.current) return
+    const watch = new IntersectionObserver((seen) => seen[0].isIntersecting && loadMore(), { rootMargin: '800px 0px' })
+    watch.observe(end.current)
+    return () => watch.disconnect()
+  }, [hasMore, loadMore])
 
   const filtered = activeFilterCount(filter) > 0
 
@@ -107,10 +148,10 @@ export default function Transactions({ filter, onFilterChange, filterOpen, onFil
         />
       )}
 
-      {hasMore && (
-        <button onClick={() => load(rows.length + PAGE_SIZE)} className="mt-4 w-full py-3 text-base font-medium text-cobalt">
-          Show older transactions
-        </button>
+      {hasMore && rows && (
+        <div ref={end} className="py-5 text-center text-sm font-medium text-muted">
+          {loadingMore ? 'Loading older transactions…' : ' '}
+        </div>
       )}
 
       {filterOpen && lookups && recurring && (
