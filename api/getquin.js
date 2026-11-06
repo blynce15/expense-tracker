@@ -1,5 +1,6 @@
 // Investments page: reads the owner's public getquin share page (e.g. https://getqu.in/AbC123/) and returns
-// the portfolio's current value, how much went in, each position, and the money put in each month.
+// the portfolio's current value, how much went in, each position (with today's move), closed positions,
+// every trade (activity), the value over time for each chart period, and the money put in each month.
 // getquin has no public API, so this reads the data the share page itself carries (Next.js __NEXT_DATA__)
 // and its trades from getquin's data service; if getquin changes either, the app falls back to what it
 // tracks itself.
@@ -51,25 +52,67 @@ function readPortfolio(html) {
       const invested = cents(p.capital_invested)
       const value = cents(p.current_value)
       const gain = p.returns?.all?.absolute
+      // Today = price now vs yesterday's close (getquin's own "intraday" is always 0 on share pages)
+      const last = p.lastValue?.value
+      const close = p.eodValue?.value ?? i.eodValue?.value
+      const dayRate = last > 0 && close > 0 ? last / close - 1 : 0
       return {
         name: p.title || p.name || i.name || p.isin,
         ticker: p.ticker || i.ticker || i.symbol || '',
+        isin: p.isin ?? null,
         kind: p.category || i.category || '', // etf, stock, crypto…
         logo: p.logo || i.logo || null,
+        currency: p.original_currency || 'EUR',
         units: p.units ?? null,
-        price_cents: cents(p.lastValue?.value ?? p.instrument?.eodValue?.value),
+        price: Number.isFinite(last) ? last : null, // in the position's own currency
+        price_cents: cents(last ?? i.eodValue?.value),
         value_cents: value,
         invested_cents: invested,
         gain_cents: Number.isFinite(gain) ? cents(gain) : value - invested,
         gain_rate: p.returns?.all?.relative ?? (invested ? (value - invested) / invested : 0),
+        day_cents: Math.round(value - value / (1 + dayRate)),
+        day_rate: dayRate,
+        realized_cents: cents(p.realizedGains),
+        opened: p.opened ? p.opened.slice(0, 10) : null,
+        trades: p.trades ?? null,
       }
     })
     .sort((a, b) => b.value_cents - a.value_cents)
 
-  // Each instrument's own currency (open, partly and fully sold positions), for the monthly amounts
+  // Fully sold positions, newest first
+  const closed = (d.sold?.total ?? d.soldPositions ?? [])
+    .map((p) => {
+      const i = p.instrument ?? {}
+      return {
+        name: p.title || p.name || i.name || p.isin,
+        ticker: p.ticker || i.ticker || i.symbol || '',
+        isin: p.isin ?? null,
+        kind: p.category || i.category || '',
+        logo: p.logo || i.logo || null,
+        realized_cents: cents(p.realizedGains),
+        realized_rate: p.realizedGainsRelative ?? 0,
+        opened: p.opened ? p.opened.slice(0, 10) : null,
+        closed: p.closed ? p.closed.slice(0, 10) : null,
+        trades: p.trades ?? null,
+      }
+    })
+    .sort((a, b) => ((a.closed ?? '') < (b.closed ?? '') ? 1 : -1))
+
+  // Realized profit: open positions (part-sold ones carry theirs), fully sold ones, and part-sold ones not listed open
+  const openIsins = new Set(d.positions.map((p) => p.isin))
+  const realized = [...d.positions, ...(d.sold?.total ?? []), ...(d.sold?.partial ?? []).filter((p) => !openIsins.has(p.isin))].reduce(
+    (s, p) => s + cents(p.realizedGains),
+    0,
+  )
+
+  // Each instrument's own currency (open, partly and fully sold positions), and its name and logo for the activity list
   const currencies = {}
+  const instruments = {}
   for (const p of [...d.positions, ...(d.sold?.partial ?? []), ...(d.sold?.total ?? []), ...(d.soldPositions ?? [])]) {
-    if (p?.isin && p.original_currency) currencies[p.isin] = p.original_currency
+    if (!p?.isin) continue
+    if (p.original_currency) currencies[p.isin] = p.original_currency
+    const i = p.instrument ?? {}
+    instruments[p.isin] ??= { name: p.title || p.name || i.name || p.isin, ticker: p.ticker || i.ticker || i.symbol || '', logo: p.logo || i.logo || null }
   }
 
   return {
@@ -77,11 +120,14 @@ function readPortfolio(html) {
       value_cents: cents(d.total),
       invested_cents: cents(d.capital_invested),
       dividends_cents: cents(d.dividends_received),
+      realized_cents: realized,
       positions,
+      closed,
       updated_at: new Date().toISOString(),
     },
     code: query.match(/"code":"([^"]+)"/)?.[1],
     currencies,
+    instruments,
   }
 }
 
@@ -116,24 +162,30 @@ async function fetchTrades(code) {
   return trades
 }
 
-// The portfolio's value over time, as getquin's share page draws it (getSharedAggregatedDashboardTimeSeriesV2,
-// period "all", in euros): the last value of each month, [{ date: '2026-09-30', cents }], oldest first.
-async function valueHistory(code) {
+// The portfolio's value over time, as getquin's share page draws it (getSharedAggregatedDashboardTimeSeriesV2, in
+// euros). Periods: intraday (today), month, ytd, year, all. [[iso time, cents]], oldest first.
+const PERIODS = ['intraday', 'month', 'ytd', 'year', 'all']
+async function valueSeries(code, period) {
   const res = await fetch('https://api-gql-v2.getquin.com/', {
     method: 'POST',
     headers: GQL_HEADERS,
     body: JSON.stringify({
-      query: `query($code: String!, $tz: String!) { t: getSharedAggregatedDashboardTimeSeriesV2(code: $code, period: "all", currency: "EUR", tz: $tz) { values { value timestamp } } }`,
-      variables: { code, tz: 'Europe/Lisbon' },
+      query: `query($code: String!, $period: String!, $tz: String!) { t: getSharedAggregatedDashboardTimeSeriesV2(code: $code, period: $period, currency: "EUR", tz: $tz) { values { value timestamp } } }`,
+      variables: { code, period, tz: 'Europe/Lisbon' },
     }),
   })
   const body = await res.json()
   const values = body?.data?.t?.values
   if (!values) throw new Error(body?.errors?.[0]?.message || `getquin answered ${res.status}.`)
+  return [...values].sort((x, y) => (x.timestamp < y.timestamp ? -1 : 1)).map((v) => [v.timestamp, cents(v.value)])
+}
+
+// The last value of each month, [{ date: '2026-09-30', cents }], oldest first (net worth back in time)
+function monthEnds(all) {
   const byMonth = new Map()
-  for (const v of [...values].sort((x, y) => (x.timestamp < y.timestamp ? -1 : 1))) {
-    const date = lisbonDay(v.timestamp)
-    byMonth.set(date.slice(0, 7), { date, cents: cents(v.value) })
+  for (const [ts, c] of all) {
+    const date = lisbonDay(ts)
+    byMonth.set(date.slice(0, 7), { date, cents: c })
   }
   return [...byMonth.values()]
 }
@@ -141,13 +193,15 @@ async function valueHistory(code) {
 // "2026-09-23": the trade's day where the owner lives (getquin stores e.g. 2026-09-22T22:00:00Z)
 const lisbonDay = (iso) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Europe/Lisbon' })
 
-// Money put in each month (and each day) = buys − sales. Trades in other currencies (US stocks are in dollars)
-// are converted at the European Central Bank rate of that day (Frankfurter, free, sees only dates).
-async function monthlyAmounts(code, currencies) {
+// Every trade in euros. Trades in other currencies (US stocks are in dollars) are converted at the European
+// Central Bank rate of that day (Frankfurter, free, sees only dates).
+// months/days = money put in (buys − sales); activity = every trade, newest first.
+const TYPES = { BUYING: 'buy', SELLING: 'sell', REWARD: 'reward', DIVIDEND: 'dividend' }
+async function tradesInEuros(code, currencies, instruments) {
   const trades = (await fetchTrades(code))
-    .filter((t) => t.transaction_type === 'BUYING' || t.transaction_type === 'SELLING')
+    .filter((t) => TYPES[t.transaction_type])
     .map((t) => ({ ...t, day: lisbonDay(t.timestamp), currency: currencies[t.isin] || 'EUR' }))
-  if (!trades.length) return { months: [], days: [] }
+  if (!trades.length) return { months: [], days: [], activity: [] }
 
   const foreign = [...new Set(trades.map((t) => t.currency).filter((c) => c !== 'EUR'))]
   let rateDays = []
@@ -175,16 +229,26 @@ async function monthlyAmounts(code, currencies) {
 
   const byMonth = new Map()
   const byDay = new Map()
+  const activity = []
   for (const t of trades) {
-    const euros = toEuros(t.units * t.price, t.currency, t.day) * (t.transaction_type === 'SELLING' ? -1 : 1)
-    const key = t.day.slice(0, 7)
-    byMonth.set(key, (byMonth.get(key) ?? 0) + euros)
-    byDay.set(t.day, (byDay.get(t.day) ?? 0) + euros)
+    const type = TYPES[t.transaction_type]
+    const units = Number(t.units) || 0
+    const price = Number(t.price) || 0
+    const euros = toEuros(type === 'dividend' && !units ? price : units * price, t.currency, t.day)
+    if (type === 'buy' || type === 'sell') {
+      const signed = type === 'sell' ? -euros : euros
+      const key = t.day.slice(0, 7)
+      byMonth.set(key, (byMonth.get(key) ?? 0) + signed)
+      byDay.set(t.day, (byDay.get(t.day) ?? 0) + signed)
+    }
+    const i = instruments[t.isin] ?? {}
+    activity.push({ date: t.day, type, isin: t.isin, name: i.name ?? t.isin, ticker: i.ticker ?? '', logo: i.logo ?? null, units, price, currency: t.currency, cents: cents(euros) })
   }
   const sorted = (map) => [...map].sort(([a], [b]) => (a < b ? -1 : 1))
   return {
     months: sorted(byMonth).map(([key, euros]) => ({ key, cents: cents(euros) })),
     days: sorted(byDay).map(([date, euros]) => ({ date, cents: cents(euros) })),
+    activity: activity.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
   }
 }
 
@@ -205,24 +269,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { portfolio, code, currencies } = readPortfolio(await fetchPage(link.href))
-    // Monthly amounts are extra: without them the page uses only your Invest transactions (months = null)
-    try {
-      const flows = code ? await monthlyAmounts(code, currencies) : null
-      portfolio.months = flows?.months ?? null
-      portfolio.days = flows?.days ?? null
-    } catch (e) {
-      portfolio.months = null
-      portfolio.days = null
-      portfolio.months_error = e.message
-    }
-    // Value history is extra too: without it net worth in the past is estimated from money put in
-    try {
-      portfolio.history = code ? await valueHistory(code) : null
-    } catch (e) {
-      portfolio.history = null
-      portfolio.history_error = e.message
-    }
+    const { portfolio, code, currencies, instruments } = readPortfolio(await fetchPage(link.href))
+    const noCode = () => Promise.reject(new Error('No share code.'))
+    const [flows, ...series] = await Promise.allSettled([
+      code ? tradesInEuros(code, currencies, instruments) : noCode(),
+      ...PERIODS.map((p) => (code ? valueSeries(code, p) : noCode())),
+    ])
+    // Money put in and the activity list are extra: without them the page uses only your Invest transactions (months = null)
+    if (flows.status === 'fulfilled') Object.assign(portfolio, flows.value)
+    else Object.assign(portfolio, { months: null, days: null, activity: null, months_error: flows.reason?.message })
+    // Value history is extra too: without it the chart is hidden and net worth in the past is estimated
+    portfolio.series = Object.fromEntries(PERIODS.map((p, i) => [p, series[i].status === 'fulfilled' ? series[i].value : null]))
+    portfolio.history = portfolio.series.all ? monthEnds(portfolio.series.all) : null
+    if (!portfolio.history) portfolio.history_error = series.at(-1).reason?.message
     res.setHeader('cache-control', 'no-store')
     return res.status(200).json(portfolio)
   } catch (e) {

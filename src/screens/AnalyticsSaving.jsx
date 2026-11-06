@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
+import PutInChart from '../components/PutInChart'
 import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, shiftMonth } from '../lib/analytics'
 import { todayISO } from '../lib/dates'
 import { fetchGoalsState, savingsEffect } from '../lib/goals'
@@ -70,6 +71,7 @@ export default function AnalyticsSaving() {
               <Goals state={goals} />
             </Section>
           )}
+          <PutInChart wrap={(chart) => <Section n={goals?.goals?.length > 0 ? 7 : 6} title="Put into investments">{chart}</Section>} />
         </>
       )}
     </div>

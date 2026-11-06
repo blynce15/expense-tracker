@@ -46,6 +46,8 @@ export async function saveGetquinLink(url) {
 export const saveGetquinSince = (iso) => saveAnswers({ getquinSince: iso })
 // Cash at the brokers (src/lib/cash.js)
 export const saveBrokerCash = (entries) => saveAnswers({ brokerCash: entries })
+// The pension fund's name and provider (src/lib/pension.js); null = no pension
+export const savePensionFund = (fund) => saveAnswers({ pension: fund })
 
 // Center-crops a picked image to a square and shrinks it to `size` px
 export function squareJpeg(file, size = 256) {

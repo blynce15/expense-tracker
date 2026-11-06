@@ -11,6 +11,7 @@ import { isRecurring, recurringNameSet } from '../lib/filters'
 import { fetchLookups } from '../lib/lookups'
 import { formatCents } from '../lib/money'
 import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
+import { fetchPension, pensionValueOn } from '../lib/pension'
 import { fetchProfile } from '../lib/profile'
 import { recall, remember } from '../lib/memory'
 import { daysUntil, fetchRecurring } from '../lib/recurring'
@@ -52,6 +53,9 @@ export default function Home({ onSeeAccount }) {
   const [cash, setCashState] = useState(() => recall('home:cash') ?? [])
   const setCash = (value) => setCashState(remember('home:cash', value))
   const [usdRate, setUsdRate] = useState(() => cachedUsdRate()?.rate ?? null)
+  // The pension fund's latest value (entered by hand once a month), also part of the net worth
+  const [pensionCents, setPensionState] = useState(() => recall('home:pension') ?? 0)
+  const setPension = (value) => setPensionState(remember('home:pension', value))
 
   const load = useCallback(async () => {
     try {
@@ -71,6 +75,9 @@ export default function Home({ onSeeAccount }) {
         fetchRecurring(),
       ])
       others.catch(() => {}) // reported below, when awaited
+      fetchPension()
+        .then((p) => setPension(pensionValueOn(p.entries, today)))
+        .catch(() => {}) // Keep the last value
       const profile = await fetchProfile()
       const period = budgetPeriod(today, startDayOf(profile))
       // Investments come from getquin: show the last value at once, then refresh it in the background
@@ -155,6 +162,7 @@ export default function Home({ onSeeAccount }) {
         accounts={data.accounts}
         portfolio={portfolio}
         cashCents={portfolio ? cashTotal(cash, usdRate) : 0}
+        pensionCents={pensionCents}
         hidden={hidden}
         onToggleHidden={toggleHidden}
         onOpenAccount={setOpenAccountId}
@@ -234,12 +242,12 @@ function BigAmount({ cents, hidden }) {
 }
 
 // Net worth = every account (bank, cash, meal card, savings) + investments (getquin's portfolio value)
-// + cash at the brokers, with a fan of account cards that opens a list of the accounts only (no investments).
+// + cash at the brokers + the pension fund, with a fan of account cards that opens a list of the accounts only (no investments).
 // Picking an account opens its own page.
-function Balance({ accounts, portfolio, cashCents, hidden, onToggleHidden, onOpenAccount }) {
+function Balance({ accounts, portfolio, cashCents, pensionCents = 0, hidden, onToggleHidden, onOpenAccount }) {
   const [open, setOpen] = useState(false)
   const accountsTotal = accounts.reduce((s, a) => s + a.balance_cents, 0)
-  const total = accountsTotal + (portfolio?.value_cents ?? 0) + cashCents
+  const total = accountsTotal + (portfolio?.value_cents ?? 0) + cashCents + pensionCents
   const fan = accounts.slice(0, 3)
   const offset = 3 - fan.length
 

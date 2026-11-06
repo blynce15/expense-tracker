@@ -161,6 +161,10 @@ function screenFor(route, session, dataVersion, tx) {
     const title = cat ? `${cat.icon} ${cat.name}` : id === 'none' ? 'No category' : 'Category'
     return { title, back: '/analytics/categories', body: <CategoryDetail key={`${id}-${dataVersion}`} id={id} /> }
   }
+  // Investments → Pension; "?update" (from the monthly reminder) opens the update sheet
+  if (route.startsWith('/investments/pension')) {
+    return { title: 'Investments', body: <Investments key={`pension-${dataVersion}`} part="pension" /> }
+  }
   switch (route) {
     case '/transactions': {
       const active = activeFilterCount(tx.txFilter)
@@ -204,7 +208,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/savings':
       return { title: 'Savings', body: <Savings key={dataVersion} /> }
     case '/investments':
-      return { title: 'Investments', action: <InvestmentsRefresh />, body: <Investments key={dataVersion} /> }
+      return { title: 'Investments', action: <InvestmentsRefresh />, body: <Investments key={dataVersion} part="portfolio" /> }
     case '/profile':
       return { title: 'Profile', back: '/home', body: <Settings session={session} /> }
     case '/settings/accounts':

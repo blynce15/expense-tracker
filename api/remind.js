@@ -1,6 +1,7 @@
 // Payment reminders, run by Vercel Cron every morning (vercel.json): for each recurring payment
 // due tomorrow, a notification goes to the phones of its owner that turned reminders on
-// (recurring income gets its own "Payday tomorrow" note).
+// (recurring income gets its own "Payday tomorrow" note). On the 1st of each month, owners of a pension fund
+// (Investments → Pension) with no entry for the month yet get "Update due · 🏛️ Pension".
 // POST /api/remind?test=1 with the user's login token sends a test notification to that user only.
 //
 // Needs these Vercel settings: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (server only, never in the app),
@@ -11,12 +12,12 @@ import webpush from 'web-push'
 
 const TIME_ZONE = 'Europe/Lisbon'
 
-// "2026-10-10": tomorrow's date where the owner lives
-function tomorrowISO() {
+// "2026-10-10": today's (0) or tomorrow's (1) date where the owner lives
+function lisbonISO(addDays) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map((p) => [p.type, p.value]),
   )
-  const d = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) + 1))
+  const d = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day) + addDays))
   return d.toISOString().slice(0, 10)
 }
 
@@ -79,7 +80,7 @@ export default async function handler(req, res) {
     // Daily run: only Vercel Cron knows the secret
     if (token !== process.env.CRON_SECRET) return res.status(401).json({ error: 'Not allowed.' })
 
-    const due = tomorrowISO()
+    const due = lisbonISO(1)
     const { data: payments, error } = await db.from('recurring_payments').select('user_id, name, icon, amount_cents, account_id, type').eq('active', true).eq('next_due', due)
     if (error) throw error
 
@@ -117,7 +118,22 @@ export default async function handler(req, res) {
       if (costs.length) sent += await notify(userId, { ...message(costs, false), tag: `due-${due}`, url: '/#/recurring' })
       if (income.length) sent += await notify(userId, { ...message(income, true), tag: `pay-${due}`, url: '/#/recurring' })
     }
-    return res.status(200).json({ due, payments: payments.length, sent })
+    // Pension: on the 1st, a note to enter this month's numbers (needs migration 020's grant).
+    // "Update due · 🏛️ Pension" / "Last updated 31 Oct"; tapping it opens the update.
+    const today = lisbonISO(0)
+    let pensions = 0
+    if (today.endsWith('-01')) {
+      const { data: entries, error: pensionError } = await db.from('pension_entries').select('user_id, date')
+      if (pensionError) throw pensionError
+      const latest = new Map()
+      for (const e of entries) if (!latest.has(e.user_id) || e.date > latest.get(e.user_id)) latest.set(e.user_id, e.date)
+      for (const [userId, date] of latest) {
+        if (date.slice(0, 7) === today.slice(0, 7)) continue
+        pensions += 1
+        sent += await notify(userId, { title: 'Update due · 🏛️ Pension', body: `Last updated ${shortDay(date).replace(/^\w+ /, '')}`, tag: `pension-${today.slice(0, 7)}`, url: '/#/investments/pension?update' })
+      }
+    }
+    return res.status(200).json({ due, payments: payments.length, pensions, sent })
   } catch (e) {
     // The details go to Vercel's logs only; the answer stays plain
     const hint = /permission denied/.test(e.message) ? ' Run supabase/migrations/007_reminders_server_access.sql in the Supabase SQL Editor.' : ''

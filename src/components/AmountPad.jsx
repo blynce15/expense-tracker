@@ -4,7 +4,8 @@ import { centsToPad, formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey
 // The same number pad as Add transaction, in a sheet over the bottom of the screen (above other sheets).
 // Optional `max` (cents): above it the amount turns red, `maxText` says why, Done is blocked and a
 // button sets the amount to the most allowed (e.g. a goal can't start with more than is free in savings).
-export default function AmountPad({ label, amount, onChange, onDone, max = null, maxText }) {
+// Optional `prefix` (default €; '' for a plain number such as units) and `press` (how a key changes the text).
+export default function AmountPad({ label, amount, onChange, onDone, max = null, maxText, prefix = '€', press = pressKey }) {
   const over = max !== null && (parseToCents(amount) ?? 0) > max
   return (
     <>
@@ -12,7 +13,10 @@ export default function AmountPad({ label, amount, onChange, onDone, max = null,
       <div className="fixed inset-x-0 bottom-0 z-[70] mx-auto max-w-lg rounded-t-[28px] bg-card px-5 pt-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] motion-safe:animate-[sheet-up_200ms_ease-out]">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-muted">{label}</span>
-          <span className={`tabular truncate font-display text-[32px] font-extrabold ${over ? 'text-loss' : ''}`}>€{formatTyping(amount)}</span>
+          <span className={`tabular truncate font-display text-[32px] font-extrabold ${over ? 'text-loss' : ''}`}>
+            {prefix}
+            {formatTyping(amount)}
+          </span>
         </div>
         {over && (
           <div className="mt-2.5 flex items-center justify-between gap-3 rounded-2xl bg-loss/10 px-3 py-2.5">
@@ -31,7 +35,7 @@ export default function AmountPad({ label, amount, onChange, onDone, max = null,
             <button
               key={k}
               type="button"
-              onClick={() => onChange(pressKey(amount, k))}
+              onClick={() => onChange(press(amount, k))}
               className={`grid h-13 place-items-center rounded-2xl font-display text-[24px] font-semibold active:bg-line ${k === '.' || k === 'back' ? '' : 'bg-paper'}`}
               aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
             >

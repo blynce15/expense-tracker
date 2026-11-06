@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { pct, resetPeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import { cachedAnalytics, currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, prevLabel, shiftMonth, verdictOf } from '../lib/analytics'
+import { todayISO } from '../lib/dates'
 import { cachedUsdRate, cashEntries, cashOn, cashTotal, fetchUsdRate } from '../lib/cash'
 import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
 import { fetchLookups, lookupCache } from '../lib/lookups'
+import { fetchPension, pensionValueOn } from '../lib/pension'
 import { recall, remember } from '../lib/memory'
 import { formatCents } from '../lib/money'
 import { fetchProfile } from '../lib/profile'
@@ -21,7 +23,16 @@ export default function Analytics() {
   // { portfolio, since, cash, rate } from getquin and the cash at the brokers, or {} when not linked
   const [invest, setInvestState] = useState(() => recall('analytics:invest'))
   const setInvest = (value) => setInvestState(remember('analytics:invest', value))
+  // The pension fund's monthly entries (by hand), for net worth
+  const [pension, setPensionState] = useState(() => recall('analytics:pension'))
+  const setPension = (value) => setPensionState(remember('analytics:pension', value))
   const [error, setError] = useState(null)
+
+  useEffect(() => {
+    fetchPension()
+      .then((p) => setPension(p.entries))
+      .catch(() => setPension([]))
+  }, [])
 
   useEffect(() => {
     resetPeriod()
@@ -64,14 +75,14 @@ export default function Analytics() {
 
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load analytics: {error}</p>
 
-  const ready = data && data.period === period && categories && invest
+  const ready = data && data.period === period && categories && invest && pension
   const category = (id) => categories?.find((c) => c.id === id)
 
   return (
     <div className="px-4 pt-1 pb-6">
       {ready && (
         <>
-          <Standing a={data} invest={invest} />
+          <Standing a={data} invest={invest} pension={pension} />
           <Verdict a={data} />
           <Noticing items={noticings(data, category, whole)} />
           <h2 className="mt-6 mb-2.5 px-1 font-display text-[19px] font-bold">Explore</h2>
@@ -93,7 +104,8 @@ export default function Analytics() {
 // that month (getquin's trades before getquinSince, your Invest transactions after).
 // Cash at the brokers counts with the investments (only when getquin is linked): back in time, what you had
 // entered by the end of each month (dollars at today's rate).
-function standingOf(a, invest) {
+// The pension fund counts too: back in time, its last monthly entry by the end of each month.
+function standingOf(a, invest, pension = []) {
   const cash = invest.portfolio ? (invest.cash ?? []) : []
   const value = (invest.portfolio?.value_cents ?? 0) + cashTotal(cash, invest.rate)
   const put = new Map()
@@ -121,7 +133,9 @@ function standingOf(a, invest) {
     return Math.max(0, positions - after)
   }
   const cashAt = (k) => (k >= thisMonth ? cashTotal(cash, invest.rate) : cashOn(cash, `${k}-31`, invest.rate))
-  const investedAt = (k) => positionsAt(k) + cashAt(k)
+  const pensionAt = (k) => pensionValueOn(pension, k >= thisMonth ? todayISO() : `${k}-31`)
+  const investedAt = (k) => positionsAt(k) + cashAt(k) + pensionAt(k)
+  const pensionNow = pensionValueOn(pension, todayISO())
   const endKey = a.period.kind === 'year' ? `${a.period.key}-12` : a.period.key
   const prevKey = a.period.kind === 'year' ? `${Number(a.period.key) - 1}-12` : shiftMonth(a.period.key, -1)
   const end = a.worth.end + investedAt(endKey)
@@ -134,13 +148,14 @@ function standingOf(a, invest) {
       { label: 'Accounts', cents: a.worth.bank, color: '#fff' },
       { label: 'Savings', cents: a.worth.savings, color: '#9cc3ff' },
       { label: 'Investments', cents: value, color: '#7fe3ee' },
+      { label: 'Pension', cents: pensionNow, color: '#c4b5fd' },
     ].filter((x) => x.cents > 0),
-    hasInvestments: value > 0,
+    hasInvestments: value + pensionNow > 0,
   }
 }
 
-function Standing({ a, invest }) {
-  const s = standingOf(a, invest)
+function Standing({ a, invest, pension }) {
+  const s = standingOf(a, invest, pension)
   const [euros, decimals] = formatCents(s.end).split(',')
   const values = s.line.map((pt) => pt.cents)
   const W = 300
