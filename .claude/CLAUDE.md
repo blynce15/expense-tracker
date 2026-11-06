@@ -15,6 +15,7 @@ Single user (the owner). Currency: EUR only.
 - Supabase: database + login (email + password, NOT magic links — magic links open in Safari instead of the home-screen app)
 - Vercel: hosting, auto-deploys from GitHub
 - vite-plugin-pwa for installability
+- How Claude connects (owner, 2026-11-06): through the Supabase and Vercel plugins (MCP tools), not the .env.backup database address or the vercel CLI. Supabase project id xvnhqrtilpbqrmgcbycc; Vercel team LYNCE (team_UvBMHcw7dNmUNox9kGutiQsx), project expense-tracker (prj_HqQF3yVN1B8aflomuTuP4ZO79tOT). Migrations: apply_migration, and still keep the .sql file in supabase/migrations. Publishing stays `git push` to main. .env.backup is only for the monthly backup script.
 
 ## Navigation
 Bottom tab bar: Home · Transactions · Analytics · Savings · Investments, with the [+] button on its own at the right (changed 2026-10-14).
