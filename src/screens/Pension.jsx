@@ -167,9 +167,16 @@ export default function Pension() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="tabular block font-display text-[15.5px] font-bold">{formatCents(e.value_cents)}</span>
-              <span className="tabular block truncate text-xs font-semibold text-muted">
-                {e.start ? 'Starting point' : `+${whole(e.put_in_cents)} put in`} · {units(e.units)} units
-              </span>
+              {e.start ? (
+                <span className="block text-xs font-semibold text-muted">Starting point</span>
+              ) : (
+                <span className="tabular flex items-center gap-1 text-xs font-semibold whitespace-nowrap text-muted">
+                  <Icon name="user" size={12} strokeWidth={2.4} className="text-cobalt" aria-label="You" />
+                  {whole(e.put_in_cents)}
+                  <Icon name="building" size={12} strokeWidth={2.4} className="ml-1.5 text-cobalt/60" aria-label="Company" />
+                  {whole(e.company)}
+                </span>
+              )}
             </span>
             {e.start ? (
               <span className="rounded-full bg-bubble px-2.5 py-1 text-[12.5px] font-extrabold text-cobalt">Start</span>
@@ -179,6 +186,16 @@ export default function Pension() {
           </button>
         ))}
       </section>
+      {s.history.length > 1 && (
+        <div className="flex justify-center gap-3.5 text-xs font-bold text-muted">
+          <span className="flex items-center gap-1">
+            <Icon name="user" size={12} strokeWidth={2.4} className="text-cobalt" /> You
+          </span>
+          <span className="flex items-center gap-1">
+            <Icon name="building" size={12} strokeWidth={2.4} className="text-cobalt/60" /> Company
+          </span>
+        </div>
+      )}
 
       {editing && (
         <UpdateSheet
@@ -263,18 +280,14 @@ export function PensionCard({ fund, summary: s, entries = [], onFund, small = fa
       {s && (
         <div className="relative mt-3.5">
           <div className="flex h-2 gap-[3px] overflow-hidden rounded-full">
-            <span className="bg-white/85" style={{ flex: s.putIn || 1 }} />
+            <span className="bg-white/85" style={{ flex: s.you || (s.company ? 0 : 1) }} />
+            {s.company > 0 && <span className="bg-[#9cc3ff]" style={{ flex: s.company }} />}
             {s.gain > 0 && <span className="bg-[#5eead4]" style={{ flex: s.gain }} />}
           </div>
-          <div className="mt-2 flex gap-[18px] text-[12.5px] font-semibold">
-            <span className="flex items-center gap-1.5 opacity-90">
-              <span className="size-2 rounded-full bg-white/85" />
-              Put in <b className="tabular font-extrabold">{whole(s.putIn)}</b>
-            </span>
-            <span className="flex items-center gap-1.5 opacity-90">
-              <span className="size-2 rounded-full bg-[#5eead4]" />
-              Growth <b className="tabular font-extrabold">{signed(s.gain)}</b>
-            </span>
+          <div className="mt-2 flex gap-3 text-xs font-semibold whitespace-nowrap">
+            <Legend color="bg-white/85" label="You" value={whole(s.you)} />
+            {s.company > 0 && <Legend color="bg-[#9cc3ff]" label="Company" value={whole(s.company)} />}
+            <Legend color="bg-[#5eead4]" label="Growth" value={signed(s.gain)} />
           </div>
         </div>
       )}
@@ -282,12 +295,21 @@ export function PensionCard({ fund, summary: s, entries = [], onFund, small = fa
   )
 }
 
-// Value each month (white) against everything put in so far (dashed)
+function Legend({ color, label, value }) {
+  return (
+    <span className="flex items-center gap-1.5 opacity-90">
+      <span className={`size-2 rounded-full ${color}`} />
+      {label} <b className="tabular font-extrabold">{value}</b>
+    </span>
+  )
+}
+
+// Value each month (white) against everything put in so far, yours and the company’s (dashed)
 function PensionChart({ entries }) {
   const W = 354
   const H = 96
   let total = 0
-  const put = entries.map((e) => (total += e.put_in_cents))
+  const put = entries.map((e) => (total += e.put_in_cents + (e.company_put_in_cents ?? 0)))
   const all = [...entries.map((e) => e.value_cents), ...put]
   const min = Math.min(...all) * 0.996
   const max = Math.max(...all) * 1.002
@@ -328,6 +350,7 @@ function Setup({ onClose, onDone }) {
   const [provider, setProvider] = useState('')
   const [value, setValue] = useState('')
   const [putIn, setPutIn] = useState('')
+  const [company, setCompany] = useState('')
   const [unitText, setUnitText] = useState('')
   const [pad, setPad] = useState(null) // 'value' | 'putIn' | 'units'
   const [busy, setBusy] = useState(false)
@@ -335,17 +358,18 @@ function Setup({ onClose, onDone }) {
 
   const valueCents = parseToCents(value || '0') ?? 0
   const putCents = parseToCents(putIn || '0') ?? 0
+  const companyCents = parseToCents(company || '0') ?? 0
   const unitCount = Number(unitText || 0)
   const preview =
     step === 2 && valueCents > 0
-      ? pensionSummary([{ id: 'start', date: todayISO(), value_cents: valueCents, put_in_cents: putCents, units: unitCount }])
+      ? pensionSummary([{ id: 'start', date: todayISO(), value_cents: valueCents, put_in_cents: putCents, company_put_in_cents: companyCents, units: unitCount }])
       : null
 
   async function finish() {
     setBusy(true)
     setError(null)
     try {
-      await createPension({ name, provider, value_cents: valueCents, put_in_cents: putCents, units: unitCount })
+      await createPension({ name, provider, value_cents: valueCents, put_in_cents: putCents, company_put_in_cents: companyCents, units: unitCount })
       onDone()
     } catch (e) {
       setError(e.message)
@@ -377,7 +401,8 @@ function Setup({ onClose, onDone }) {
       ) : (
         <div className="overflow-hidden rounded-[22px] bg-card">
           <PadRow label="Value now" value={value ? formatCents(valueCents) : null} on={pad === 'value'} onClick={() => setPad('value')} />
-          <PadRow label="Put in so far" hint="Everything since you opened it" value={putIn ? formatCents(putCents) : null} on={pad === 'putIn'} onClick={() => setPad('putIn')} />
+          <PadRow label="You put in so far" hint="Everything since you opened it" value={putIn ? formatCents(putCents) : null} on={pad === 'putIn'} onClick={() => setPad('putIn')} />
+          <PadRow label="Company put in so far" hint="Everything your employer added" value={company ? formatCents(companyCents) : null} on={pad === 'company'} onClick={() => setPad('company')} />
           <PadRow label="Units" value={unitText ? units(unitCount) : null} on={pad === 'units'} onClick={() => setPad('units')} />
         </div>
       )}
@@ -391,7 +416,8 @@ function Setup({ onClose, onDone }) {
       </button>
 
       {pad === 'value' && <AmountPad label="Value now" amount={value} onChange={setValue} onDone={() => setPad(null)} />}
-      {pad === 'putIn' && <AmountPad label="Put in so far" amount={putIn} onChange={setPutIn} onDone={() => setPad(null)} />}
+      {pad === 'putIn' && <AmountPad label="You put in so far" amount={putIn} onChange={setPutIn} onDone={() => setPad(null)} />}
+      {pad === 'company' && <AmountPad label="Company put in so far" amount={company} onChange={setCompany} onDone={() => setPad(null)} />}
       {pad === 'units' && <AmountPad label="Units" amount={unitText} onChange={setUnitText} onDone={() => setPad(null)} prefix="" press={pressUnits} />}
     </FullPage>
   )
@@ -433,7 +459,9 @@ function UpdateSheet({ fund, entries, entry, onClose, onSaved }) {
   const prev = sorted.filter((e) => e.date < date).at(-1) ?? null
   const isStart = entry && sorted[0]?.id === entry.id
   const [value, setValue] = useState(entry ? centsToPad(entry.value_cents) : '')
-  const [putIn, setPutIn] = useState(entry ? centsToPad(entry.put_in_cents) : prev ? centsToPad(lastPutIn(sorted)) : '')
+  const last = lastPutIn(sorted, date)
+  const [putIn, setPutIn] = useState(entry ? centsToPad(entry.put_in_cents) : last ? centsToPad(last.you) : '')
+  const [company, setCompany] = useState(entry ? centsToPad(entry.company_put_in_cents ?? 0) : last ? centsToPad(last.company) : '')
   const [unitText, setUnitText] = useState(entry ? unitsToPad(entry.units) : '')
   const [pad, setPad] = useState(entry ? null : 'value')
   const [busy, setBusy] = useState(false)
@@ -442,11 +470,13 @@ function UpdateSheet({ fund, entries, entry, onClose, onSaved }) {
 
   const valueCents = parseToCents(value || '0') ?? 0
   const putCents = parseToCents(putIn || '0') ?? 0
+  const companyCents = parseToCents(company || '0') ?? 0
+  const addedNow = putCents + companyCents
   const unitCount = Number(unitText || 0)
   const before = sorted.filter((e) => e.date < date)
-  const putBefore = before.reduce((s, e) => s + e.put_in_cents, 0)
-  const growth = prev ? valueCents - prev.value_cents - putCents : null
-  const totalGain = valueCents - putBefore - putCents
+  const putBefore = before.reduce((s, e) => s + e.put_in_cents + (e.company_put_in_cents ?? 0), 0)
+  const growth = prev ? valueCents - prev.value_cents - addedNow : null
+  const totalGain = valueCents - putBefore - addedNow
 
   async function run(action) {
     setBusy(true)
@@ -474,11 +504,18 @@ function UpdateSheet({ fund, entries, entry, onClose, onSaved }) {
         <div className="overflow-hidden rounded-[22px] bg-card">
           <PadRow label="Value now" hint={prev ? `Last month ${formatCents(prev.value_cents)}` : null} value={value ? formatCents(valueCents) : null} on={pad === 'value'} onClick={() => setPad('value')} />
           <PadRow
-            label={isStart ? 'Put in so far' : 'Put in this month'}
-            hint={isStart ? 'Everything before LynxOS' : prev ? `Last month ${formatCents(lastPutIn(sorted, date))}` : null}
+            label={isStart ? 'You put in so far' : 'You put in'}
+            hint={isStart ? 'Everything before LynxOS' : last ? `This month · last month ${formatCents(last.you)}` : 'This month'}
             value={putIn ? formatCents(putCents) : null}
             on={pad === 'putIn'}
             onClick={() => setPad('putIn')}
+          />
+          <PadRow
+            label={isStart ? 'Company put in so far' : 'Company put in'}
+            hint={isStart ? 'Everything your employer added' : last ? `This month · last month ${formatCents(last.company)}` : 'This month'}
+            value={company ? formatCents(companyCents) : null}
+            on={pad === 'company'}
+            onClick={() => setPad('company')}
           />
           <PadRow label="Units" hint={prev ? `Last month ${units(prev.units)}` : null} value={unitText ? units(unitCount) : null} on={pad === 'units'} onClick={() => setPad('units')} />
         </div>
@@ -494,7 +531,7 @@ function UpdateSheet({ fund, entries, entry, onClose, onSaved }) {
           onClick={() =>
             run(() => {
               const existing = entry ?? entryForMonth(entries, date)
-              return savePensionEntry({ id: existing?.id, date, value_cents: valueCents, put_in_cents: putCents, units: unitCount })
+              return savePensionEntry({ id: existing?.id, date, value_cents: valueCents, put_in_cents: putCents, company_put_in_cents: companyCents, units: unitCount })
             })
           }
           disabled={busy || !(valueCents > 0 && unitCount > 0)}
@@ -513,16 +550,21 @@ function UpdateSheet({ fund, entries, entry, onClose, onSaved }) {
         )}
       </div>
       {pad === 'value' && <AmountPad label="Value now" amount={value} onChange={setValue} onDone={() => setPad(null)} />}
-      {pad === 'putIn' && <AmountPad label={isStart ? 'Put in so far' : 'Put in this month'} amount={putIn} onChange={setPutIn} onDone={() => setPad(null)} />}
+      {pad === 'putIn' && <AmountPad label={isStart ? 'You put in so far' : 'You put in'} amount={putIn} onChange={setPutIn} onDone={() => setPad(null)} />}
+      {pad === 'company' && <AmountPad label={isStart ? 'Company put in so far' : 'Company put in'} amount={company} onChange={setCompany} onDone={() => setPad(null)} />}
       {pad === 'units' && <AmountPad label="Units" amount={unitText} onChange={setUnitText} onDone={() => setPad(null)} prefix="" press={pressUnits} />}
     </Sheet>
   )
 }
 
-// The money put in at the last monthly update before `date` (not the starting point), as a hint and default
+// What you and the company put in at the last monthly update before `date` (not the starting point),
+// as a hint and the default for a new month; null when there's none yet
 function lastPutIn(sorted, date = '9999-12-31') {
-  const updates = sorted.slice(1).filter((e) => e.date < date)
-  return updates.at(-1)?.put_in_cents ?? 0
+  const e = sorted
+    .slice(1)
+    .filter((x) => x.date < date)
+    .at(-1)
+  return e ? { you: e.put_in_cents, company: e.company_put_in_cents ?? 0 } : null
 }
 
 function Result({ label, value, tone = '' }) {

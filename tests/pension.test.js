@@ -3,19 +3,21 @@ import { describe, expect, test, vi } from 'vitest'
 vi.mock('../src/lib/profile', () => ({ fetchProfile: async () => null, savePensionFund: async () => {} }))
 const { entryForMonth, isPensionDue, pensionSummary, pensionValueOn } = await import('../src/lib/pension')
 
-// Starting point in June (everything put in before LynxOS), then monthly updates
+// Starting point in June (everything put in before LynxOS), then monthly updates: €100 from you, €50 from the company
 const entries = [
-  { id: 'oct', date: '2026-10-31', value_cents: 1262400, put_in_cents: 15000, units: '2512.4' },
-  { id: 'jun', date: '2026-06-30', value_cents: 1180000, put_in_cents: 1150000, units: '2391.2' },
-  { id: 'jul', date: '2026-07-31', value_cents: 1214000, put_in_cents: 15000, units: '2421.5' },
-  { id: 'aug', date: '2026-08-31', value_cents: 1209500, put_in_cents: 15000, units: '2451.9' },
-  { id: 'sep', date: '2026-09-30', value_cents: 1238000, put_in_cents: 15000, units: '2482.0' },
+  { id: 'oct', date: '2026-10-31', value_cents: 1262400, put_in_cents: 10000, company_put_in_cents: 5000, units: '2512.4' },
+  { id: 'jun', date: '2026-06-30', value_cents: 1180000, put_in_cents: 900000, company_put_in_cents: 250000, units: '2391.2' },
+  { id: 'jul', date: '2026-07-31', value_cents: 1214000, put_in_cents: 10000, company_put_in_cents: 5000, units: '2421.5' },
+  { id: 'aug', date: '2026-08-31', value_cents: 1209500, put_in_cents: 10000, company_put_in_cents: 5000, units: '2451.9' },
+  { id: 'sep', date: '2026-09-30', value_cents: 1238000, put_in_cents: 10000, company_put_in_cents: 5000, units: '2482.0' },
 ]
 
 describe('pension summary', () => {
   const s = pensionSummary(entries, '2026-11-06')
-  test('value, money put in and gain', () => {
+  test('value, money put in (yours + the company’s) and gain = market growth only', () => {
     expect(s.value).toBe(1262400)
+    expect(s.you).toBe(940000)
+    expect(s.company).toBe(270000)
     expect(s.putIn).toBe(1210000)
     expect(s.gain).toBe(52400)
     expect(s.rate).toBeCloseTo(52400 / 1210000)
@@ -41,9 +43,17 @@ describe('pension summary', () => {
     expect(s.history.map((h) => h.id)).toEqual(['oct', 'sep', 'aug', 'jul', 'jun'])
     expect(s.history[0].growth).toBe(1262400 - 1238000 - 15000)
     expect(s.history[2].growth).toBe(1209500 - 1214000 - 15000) // a month that lost value
-    expect(s.history.at(-1)).toMatchObject({ start: true, growth: null })
+    expect(s.history.at(-1)).toMatchObject({ start: true, growth: null, put_in_cents: 900000, company: 250000 })
+    expect(s.history[0]).toMatchObject({ put_in_cents: 10000, company: 5000 })
   })
   test('no entries = no pension', () => expect(pensionSummary([])).toBeNull())
+})
+
+describe('entries saved before company money existed', () => {
+  test('count as €0 from the company', () => {
+    const t = pensionSummary([{ id: 'a', date: '2026-10-31', value_cents: 1000, put_in_cents: 900, units: '1' }], '2026-11-06')
+    expect(t).toMatchObject({ you: 900, company: 0, putIn: 900, gain: 100 })
+  })
 })
 
 describe('monthly update', () => {

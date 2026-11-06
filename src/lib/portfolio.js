@@ -77,7 +77,8 @@ export function shiftMonth(key, delta) {
 
 // Money put into investments per month, the last `count` months (oldest first):
 // getquin's trades before `since` (the day getquin was first connected), your Invest − Take out transactions
-// from that day on, plus money put into the pension fund (each entry's put_in, except the starting one, which
+// from that day on, plus your own money put into the pension fund (each entry's put_in_cents, not the company's;
+// not the starting one, which
 // is everything before LynxOS). fromGetquin: the whole month's portfolio money came from getquin.
 export function putInMonths({ portfolio, since, own = [], pension = [], count = 12, today = todayISO() }) {
   const thisMonth = today.slice(0, 7)

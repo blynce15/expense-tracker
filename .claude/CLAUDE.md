@@ -32,7 +32,7 @@ Every table has `user_id uuid default auth.uid()` and `created_at`.
 - goal_moves: from_goal_id, to_goal_id (null = General savings), amount_cents, date. Money moved between goals inside savings.
 - recurring_payments: type (expense | income, migration 012), name, icon, amount_cents, frequency (weekly | monthly | yearly), start_date (sets day of month), next_due, account_id, category_id, active. "Paid" creates an expense (income entries: "Received" creates income) and moves next_due forward; nothing is created automatically.
 - user_settings (one row per user, primary key user_id): budget_start_day (1–31), answers (jsonb: name, photo, defaultAccountId, getquinUrl, getquinSince, brokerCash, pension = { name, provider }; older "About you" answers), onboarded_at.
-- pension_entries (migration 020): date, value_cents, put_in_cents (money added since the previous entry; the first entry = everything put in before LynxOS), units (numeric). One per calendar month (unique index). Not an account: no money moves; counts in net worth.
+- pension_entries (migrations 020, 021): date, value_cents, put_in_cents (your money added since the previous entry; the first entry = everything put in before LynxOS), company_put_in_cents (the employer's, same way; default 0), units (numeric). Gain = market growth only: value − (yours + company's). One per calendar month (unique index). Not an account: no money moves; counts in net worth.
 
 ## Rules
 - Store money as integer cents. Never floats. Format as € only for display.
@@ -227,6 +227,7 @@ Done (not yet published unless noted):
 - Analytics → What you keep → "Put into investments" (src/components/PutInChart.jsx): last 12 months, portfolio (getquin trades before getquinSince, Invest − Take out after) + pension put in, stacked, dashed average. The old Put in chart on Investments is gone.
 - Reminder (api/remind.js): on the 1st, owners of a pension with no entry that month get "Update due · 🏛️ Pension" / "Last updated 31 Oct", opening #/investments/pension?update (update sheet ready).
 - Tests: tests/portfolio.test.js, tests/pension.test.js (107 tests in total).
+- Pension company money (owner's request, 2026-11-06; migration 021 applied by Claude after a backup): setup and the monthly update ask You put in / Company put in (the update starts from last month's amounts); the card's bar is You / Company / Growth; History rows show a person icon + your amount and a building icon + the company's (design D, chosen from 4), with a small legend. Analytics' Put into investments counts only your money (owner's choice); net worth counts the full value.
 - Harness: ?nopension = no pension; sample pension Jun–Oct 2026; .harness/portfolio.js = a real getquin answer from 2026-11-06.
 
 Next:

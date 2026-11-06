@@ -4,12 +4,17 @@ import { supabase } from './supabase'
 
 // Pension fund (Investments → Pension): not an account, no money moves. Once a month the owner types in what
 // the fund is worth, how much went in since the last time and how many units they hold.
-// Table pension_entries (migration 020): { id, date, value_cents, put_in_cents, units }, one per calendar month.
-// The first entry is the starting point: its put_in_cents is everything put in before LynxOS.
+// Table pension_entries (migrations 020, 021): { id, date, value_cents, put_in_cents, company_put_in_cents, units },
+// one per calendar month. put_in_cents = your money added since the previous entry, company_put_in_cents = your
+// employer's. The first entry is the starting point: everything put in before LynxOS.
+// Gain = market growth only: value − everything put in (yours and the company's).
 // The fund's name and provider: user_settings.answers.pension = { name, provider }.
 
 const byDate = (entries) => [...entries].sort((a, b) => (a.date < b.date ? -1 : 1))
 const units = (e) => Number(e.units) || 0
+const company = (e) => e.company_put_in_cents ?? 0
+// All money added with an entry (yours + the company's)
+const added = (e) => e.put_in_cents + company(e)
 
 // Everything the Pension page shows, worked out from the entries (oldest first or not)
 export function pensionSummary(entries, today = todayISO()) {
@@ -17,7 +22,9 @@ export function pensionSummary(entries, today = todayISO()) {
   if (!list.length) return null
   const last = list.at(-1)
   const first = list[0]
-  const putIn = list.reduce((s, e) => s + e.put_in_cents, 0)
+  const you = list.reduce((s, e) => s + e.put_in_cents, 0)
+  const fromCompany = list.reduce((s, e) => s + company(e), 0)
+  const putIn = you + fromCompany
   const gain = last.value_cents - putIn
   const perUnit = (e) => (units(e) > 0 ? e.value_cents / units(e) : null) // cents per unit
 
@@ -25,17 +32,17 @@ export function pensionSummary(entries, today = todayISO()) {
   // leaving out the money added in between
   const year = today.slice(0, 4)
   const base = list.filter((e) => e.date < `${year}-01-01`).at(-1) ?? first
-  const addedSince = list.filter((e) => e.date > base.date).reduce((s, e) => s + e.put_in_cents, 0)
+  const addedSince = list.filter((e) => e.date > base.date).reduce((s, e) => s + added(e), 0)
   const yearCents = last.value_cents - base.value_cents - addedSince
   const yearBase = base.value_cents + addedSince
 
-  // History, newest first: each month's growth = change in value − money added that month
+  // History, newest first: each month's growth = change in value − money added that month (yours + company's)
   let running = 0
   const history = list
     .map((e, i) => {
-      running += e.put_in_cents
+      running += added(e)
       const prev = list[i - 1]
-      return { ...e, start: i === 0, putInTotal: running, growth: prev ? e.value_cents - prev.value_cents - e.put_in_cents : null }
+      return { ...e, start: i === 0, putInTotal: running, company: company(e), growth: prev ? e.value_cents - prev.value_cents - added(e) : null }
     })
     .reverse()
 
@@ -46,6 +53,8 @@ export function pensionSummary(entries, today = todayISO()) {
     first,
     value: last.value_cents,
     putIn,
+    you,
+    company: fromCompany,
     gain,
     rate: putIn > 0 ? gain / putIn : 0,
     year: { cents: yearCents, rate: yearBase > 0 ? yearCents / yearBase : 0, since: base.date },
@@ -80,9 +89,9 @@ export async function fetchPension() {
   return { fund: profile?.answers?.pension ?? null, entries: res.data ?? [] }
 }
 
-// Adds or changes an entry ({ id? , date, value_cents, put_in_cents, units })
+// Adds or changes an entry ({ id? , date, value_cents, put_in_cents, company_put_in_cents, units })
 export async function savePensionEntry(entry) {
-  const row = { date: entry.date, value_cents: entry.value_cents, put_in_cents: entry.put_in_cents, units: entry.units }
+  const row = { date: entry.date, value_cents: entry.value_cents, put_in_cents: entry.put_in_cents, company_put_in_cents: entry.company_put_in_cents ?? 0, units: entry.units }
   const { error } = entry.id ? await supabase.from('pension_entries').update(row).eq('id', entry.id) : await supabase.from('pension_entries').insert(row)
   if (error) throw error.code === '23505' ? new Error('This month already has an update.') : error
 }
@@ -93,8 +102,8 @@ export async function deletePensionEntry(id) {
 }
 
 // Setup: the fund and its starting point
-export async function createPension({ name, provider, value_cents, put_in_cents, units: u }) {
-  await savePensionEntry({ date: todayISO(), value_cents, put_in_cents, units: u })
+export async function createPension({ name, provider, value_cents, put_in_cents, company_put_in_cents, units: u }) {
+  await savePensionEntry({ date: todayISO(), value_cents, put_in_cents, company_put_in_cents, units: u })
   await savePensionFund({ name: name.trim(), provider: provider.trim() })
 }
 
