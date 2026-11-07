@@ -27,7 +27,7 @@ const shiftISO = (iso, days) => {
   return toISO(t.getFullYear(), t.getMonth(), t.getDate())
 }
 // "Thu 15 Oct"
-const shortDay = (iso) => {
+export const shortDay = (iso) => {
   const [y, m, d] = iso.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
 }
@@ -328,21 +328,20 @@ export function dueText(p) {
 
 // One payment: icon or shop logo, name, when it's due, amount (or a Paid button when due).
 // Income shows its amount in green with a plus, and "Received" instead of "Paid".
-// `home`: Home's "Coming up", sized exactly like the recent transaction rows below it.
-export function PaymentRow({ p, sub, due, late, onOpen, onPay, compact, home }) {
-  const icon = compact ? 'size-9 rounded-[14px] bg-card text-lg' : home ? 'size-10 rounded-xl bg-paper text-lg' : 'size-11 rounded-[14px] bg-paper text-xl'
+export function PaymentRow({ p, sub, due, late, onOpen, onPay, compact }) {
+  const icon = compact ? 'size-9 rounded-[14px] bg-card text-lg' : 'size-11 rounded-[14px] bg-paper text-xl'
   return (
-    <div className={`flex items-center gap-3 ${compact ? 'py-2' : home ? 'pr-4' : 'pr-3.5'}`}>
-      <button onClick={() => onOpen(p)} className={`flex min-w-0 flex-1 items-center gap-3 text-left ${compact ? '' : home ? 'py-2 pl-4' : 'py-3 pl-3.5'}`}>
+    <div className={`flex items-center gap-3 ${compact ? 'py-2' : 'pr-3.5'}`}>
+      <button onClick={() => onOpen(p)} className={`flex min-w-0 flex-1 items-center gap-3 text-left ${compact ? '' : 'py-3 pl-3.5'}`}>
         <MerchantIcon name={p.name} className={icon}>
           {p.icon}
         </MerchantIcon>
         <span className="min-w-0 flex-1">
-          <span className={`block truncate ${home ? 'text-base font-medium' : 'text-[15px] font-semibold'}`}>{p.name}</span>
-          <span className={`block truncate ${home ? 'text-sm' : 'text-xs'} ${late ? 'font-semibold text-loss' : due ? 'font-semibold text-cobalt' : 'text-muted'}`}>{sub}</span>
+          <span className="block truncate text-[15px] font-semibold">{p.name}</span>
+          <span className={`block truncate text-xs ${late ? 'font-semibold text-loss' : due ? 'font-semibold text-cobalt' : 'text-muted'}`}>{sub}</span>
         </span>
         {!(due && onPay) && (
-          <span className={`tabular shrink-0 text-right ${home ? 'font-display text-base leading-5 font-semibold' : 'text-[15px] font-bold'} ${isIncome(p) ? 'text-gain' : ''}`}>
+          <span className={`tabular shrink-0 text-right text-[15px] font-bold ${isIncome(p) ? 'text-gain' : ''}`}>
             {isIncome(p) && '+'}
             {formatCents(p.amount_cents)}
             <span className="block text-[11px] font-semibold text-muted">/{perLabel(p.frequency)}</span>

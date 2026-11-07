@@ -126,7 +126,8 @@ function App() {
         title={screen.title}
         back={screen.back}
         action={screen.action && <Suspense fallback={null}>{screen.action}</Suspense>}
-        center={screen.center}
+        navy={screen.navy}
+        date={screen.date}
         email={session.user.email}
       />
       {!online && (
@@ -233,7 +234,8 @@ function screenFor(route, session, dataVersion, tx) {
     default:
       return {
         title: 'Home',
-        center: formatTodayLabel(),
+        navy: true,
+        date: formatTodayLabel(),
         body: (
           <Home
             key={dataVersion}

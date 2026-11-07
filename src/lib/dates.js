@@ -24,7 +24,7 @@ export function formatTodayLabel() {
   const d = new Date()
   const weekday = d.toLocaleDateString('en-GB', { weekday: 'short' })
   const dayMonth = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
-  return `🗓️ ${weekday}, ${dayMonth}`
+  return `${weekday}, ${dayMonth}`
 }
 
 // "Today", "Yesterday", or e.g. "Mon 29 Sep" (adds the year if not this year)

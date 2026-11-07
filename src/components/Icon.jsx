@@ -20,6 +20,7 @@ const paths = {
   chevronRight: 'm9 6 6 6-6 6',
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.6-3.6',
   swap: 'M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7',
+  clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2',
   chevronLeft: 'm15 6-6 6 6 6',
   chevronUp: 'm6 15 6-6 6 6',
   chevronDown: 'm6 9 6 6 6-6',

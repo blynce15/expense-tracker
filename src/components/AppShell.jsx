@@ -10,25 +10,31 @@ const TABS = [
   { path: '/investments', label: 'Investments', icon: 'invest' },
 ]
 
-export function TopBar({ title, back, action, center, email }) {
+// `navy`: Home's version, white on the navy top (which reaches up behind it) and not sticky; `date` shows as a pill
+export function TopBar({ title, back, action, navy = false, date, email }) {
   const look = useProfileLook()
   return (
-    <header className="sticky top-0 z-20 bg-paper/90 pt-[env(safe-area-inset-top)] backdrop-blur">
+    <header className={`${navy ? 'relative text-white' : 'sticky bg-paper/90 backdrop-blur'} top-0 z-20 pt-[env(safe-area-inset-top)]`}>
       <div className="relative flex h-14 items-center gap-1 px-2">
-        {center && <p className="pointer-events-none absolute inset-x-0 text-center text-sm font-semibold text-muted">{center}</p>}
         {back ? (
           <button onClick={() => goBack(back)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back">
             <Icon name="chevronLeft" />
           </button>
         ) : (
           // The LynxOS lynx before the title of each main tab
-          <img src="/logo.png" alt="" className="ml-1 size-8 shrink-0" />
+          <img src={navy ? '/logo-white.png' : '/logo.png'} alt="" className="ml-1 size-8 shrink-0" />
         )}
         <h1 className="flex-1 truncate font-display text-[22px] font-bold tracking-tight">{title}</h1>
+        {date && (
+          <span className="mr-1 flex shrink-0 items-center gap-1.5 rounded-full bg-white/12 px-3 py-1.5 text-[13px] font-semibold text-white/90">
+            <Icon name="calendar" size={14} />
+            {date}
+          </span>
+        )}
         {action}
         {!back && (
           <button onClick={() => navigate('/profile')} className="grid size-11 place-items-center rounded-full" aria-label="Profile">
-            <Avatar name={look.name} email={email} photo={look.photo} size={34} className="shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]" />
+            <Avatar name={look.name} email={email} photo={look.photo} size={34} className={navy ? 'ring-2 ring-white/25' : 'shadow-[0_6px_14px_-6px_rgba(31,79,224,0.8)]'} />
           </button>
         )}
       </div>

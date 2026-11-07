@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import BankCard, { cardBackground, MiniCard, TYPE_INFO } from '../components/BankCard'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import PaySheet from '../components/PaySheet'
 import TransactionRow from '../components/TransactionRow'
 import { fetchAccountsWithBalances } from '../lib/balances'
@@ -14,11 +15,11 @@ import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
 import { fetchPension, pensionValueOn } from '../lib/pension'
 import { fetchProfile } from '../lib/profile'
 import { recall, remember } from '../lib/memory'
-import { daysUntil, fetchRecurring } from '../lib/recurring'
+import { daysUntil, fetchRecurring, FREQUENCIES, isIncome } from '../lib/recurring'
 import { supabase } from '../lib/supabase'
 import { navigate } from '../lib/useRoute'
 import AccountPage from './AccountPage'
-import { dueText, PaymentRow, RecurringForm } from './Recurring'
+import { RecurringForm, shortDay } from './Recurring'
 import RecurringDetails from './RecurringDetails'
 import TransactionDetails from './TransactionDetails'
 
@@ -36,6 +37,8 @@ function readHidden() {
 }
 
 const shortDate = formatDayMonth
+// Home's navy top (always dark, also in dark mode)
+const HERO = 'radial-gradient(120% 90% at 85% 0%, #22408f 0%, #0b1b45 55%, #070d24 100%)'
 
 export default function Home({ onSeeAccount }) {
   const [data, setData] = useState(() => recall('home'))
@@ -158,6 +161,8 @@ export default function Home({ onSeeAccount }) {
 
   return (
     <div className="space-y-3 pb-1">
+      {/* Navy top: reaches up behind the top bar (same height), the budget card overlaps its bottom edge */}
+      <div className="-mt-[calc(3.5rem+env(safe-area-inset-top))] rounded-b-[34px] pt-[calc(3.5rem+env(safe-area-inset-top))] pb-[88px]" style={{ background: HERO }}>
       <Balance
         accounts={data.accounts}
         portfolio={portfolio}
@@ -167,6 +172,7 @@ export default function Home({ onSeeAccount }) {
         onToggleHidden={toggleHidden}
         onOpenAccount={setOpenAccountId}
       />
+      </div>
       <BudgetCard budget={data.budget} hidden={hidden} />
       <ComingUp payments={data.upcoming} onPay={setPaying} onOpen={(p) => setOpenPaymentId(p.id)} />
       <Recent data={data} onSelect={setEditing} />
@@ -229,14 +235,14 @@ export default function Home({ onSeeAccount }) {
   )
 }
 
-// "€7.854" big, ",43" small and faded
+// "€7.854" big, ",43" small and faded (white, on the navy top)
 function BigAmount({ cents, hidden }) {
-  if (hidden) return <p className="mt-1 font-display text-[44px] leading-tight font-bold tracking-tight">{HIDDEN}</p>
+  if (hidden) return <p className="mt-1 font-display text-[44px] leading-tight font-bold tracking-tight text-white">{HIDDEN}</p>
   const [whole, decimals] = formatCents(cents).split(',')
   return (
-    <p className="tabular mt-1 truncate font-display leading-tight font-bold tracking-tight">
+    <p className="tabular mt-1 truncate font-display leading-tight font-bold tracking-tight text-white">
       <span className="text-[44px]">{whole}</span>
-      <span className="text-2xl text-muted/60">,{decimals}</span>
+      <span className="text-2xl text-white/45">,{decimals}</span>
     </p>
   )
 }
@@ -268,10 +274,10 @@ function Balance({ accounts, portfolio, cashCents, pensionCents = 0, hidden, onT
     <section className="relative flex min-h-[124px] items-center gap-3 px-5 py-2">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
-          <span className="truncate text-sm text-muted">Net worth</span>
+          <span className="truncate text-sm text-white/70">Net worth</span>
           <button
             onClick={onToggleHidden}
-            className="-my-2 grid size-9 shrink-0 place-items-center rounded-full text-muted"
+            className="-my-2 grid size-9 shrink-0 place-items-center rounded-full text-white/70"
             aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
           >
             <Icon name={hidden ? 'eyeOff' : 'eye'} size={17} />
@@ -303,7 +309,7 @@ function Balance({ accounts, portfolio, cashCents, pensionCents = 0, hidden, onT
             </span>
           ))}
         </span>
-        <span className="flex items-center gap-0.5 text-xs font-semibold text-muted">
+        <span className="flex items-center gap-0.5 rounded-full bg-white/12 py-1 pr-2 pl-2.5 text-xs font-bold text-white">
           {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
           <Icon name="chevronDown" size={14} strokeWidth={2.4} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
         </span>
@@ -385,6 +391,9 @@ function AccountOption({ label, sub, cents, hidden, selected, onClick, swatch, c
 const W = 300
 const H = 56
 
+// The budget card sits over the bottom edge of the navy top
+const OVERLAP = 'relative z-10 -mt-[76px] px-4'
+
 // Budget: a ring of what's left to spend (thin outer arc = how far through the period you are),
 // and under it the money spent so far as a line against an even pace. Touch the line to read a day.
 function BudgetCard({ budget, hidden }) {
@@ -394,7 +403,7 @@ function BudgetCard({ budget, hidden }) {
 
   if (!budget.hasAccounts) {
     return (
-      <section className="px-4">
+      <section className={OVERLAP}>
         <button
           onClick={() => navigate('/settings/accounts')}
           className="relative w-full overflow-hidden rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to p-4 text-left"
@@ -445,65 +454,61 @@ function BudgetCard({ budget, hidden }) {
   }
 
   return (
-    <section className="px-4">
-      <div className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-[#1f4fe0] to-[#1638a8] px-4 pt-3.5 pb-3.5 text-white shadow-[0_22px_36px_-22px_rgba(31,79,224,0.95)]">
-        <span className="pointer-events-none absolute -top-20 -right-16 size-56 rounded-full bg-white/[.07]" />
-        <span className="pointer-events-none absolute -bottom-24 -left-20 size-56 rounded-full bg-[#6aa8ff]/[.12]" />
-
+    <section className={OVERLAP}>
+      <div className="relative overflow-hidden rounded-[26px] bg-card px-4 pt-3.5 pb-3.5 shadow-[0_24px_40px_-24px_rgba(11,27,69,0.6)]">
         <div className="relative flex items-center gap-4">
           {/* What's left, as a ring */}
           <div className="relative grid size-[104px] shrink-0 place-items-center">
             <svg width="104" height="104" viewBox="0 0 104 104" className="absolute inset-0 -rotate-90" aria-hidden="true">
-              <circle cx="52" cy="52" r={R} fill="none" stroke="rgba(255,255,255,.16)" strokeWidth="10" />
+              <circle cx="52" cy="52" r={R} fill="none" strokeWidth="10" className="stroke-tint-to" />
               <circle
                 cx="52"
                 cy="52"
                 r={R}
                 fill="none"
-                stroke="#fff"
                 strokeWidth="10"
                 strokeLinecap="round"
                 strokeDasharray={`${leftShare * C} ${C}`}
-                className="transition-[stroke-dasharray] duration-700"
+                className="stroke-cobalt transition-[stroke-dasharray] duration-700"
               />
-              <circle cx="52" cy="52" r={R2} fill="none" stroke="rgba(255,255,255,.14)" strokeWidth="2" />
-              <circle cx="52" cy="52" r={R2} fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${timeShare * C2} ${C2}`} />
-              <circle cx={52 + R2 * Math.cos(timeShare * 2 * Math.PI)} cy={52 + R2 * Math.sin(timeShare * 2 * Math.PI)} r="3.5" fill="#fff" />
+              <circle cx="52" cy="52" r={R2} fill="none" strokeWidth="2" className="stroke-line" />
+              <circle cx="52" cy="52" r={R2} fill="none" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${timeShare * C2} ${C2}`} className="stroke-cobalt/55" />
+              <circle cx={52 + R2 * Math.cos(timeShare * 2 * Math.PI)} cy={52 + R2 * Math.sin(timeShare * 2 * Math.PI)} r="3.5" className="fill-cobalt" />
             </svg>
             <span className="relative text-center leading-none">
               <b className="tabular block font-display text-[21px]">{hidden ? '••' : `${Math.round(leftShare * 100)}%`}</b>
-              <span className="mt-1 block text-[10.5px] font-semibold text-white/75">left</span>
+              <span className="mt-1 block text-[10.5px] font-semibold text-muted">left</span>
             </span>
           </div>
 
           <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-semibold text-white/80">Left to spend</p>
+            <p className="text-[13px] font-semibold text-muted">Left to spend</p>
             <p className="tabular truncate font-display leading-tight font-bold tracking-tight">
               <span className="text-[32px]">{hidden ? '€ ••••' : euros}</span>
-              {!hidden && <span className="text-lg text-white/55">,{decimals}</span>}
+              {!hidden && <span className="text-lg text-muted/60">,{decimals}</span>}
             </p>
-            <p className="tabular text-[12.5px] text-white/75">of {money(budgetCents)}</p>
-            <span className="tabular mt-2 inline-flex items-center gap-1 rounded-full bg-white/16 px-2.5 py-1 text-xs font-bold ring-1 ring-white/15">
+            <p className="tabular text-[12.5px] text-muted">of {money(budgetCents)}</p>
+            <span className="tabular mt-2 inline-flex items-center gap-1 rounded-full bg-tint-from px-2.5 py-1 text-xs font-bold text-cobalt">
               {money(perDayLeft)}
-              <span className="font-semibold text-white/75">/ day · {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left</span>
+              <span className="font-semibold text-muted">/ day · {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left</span>
             </span>
           </div>
         </div>
 
         {/* Spending against an even pace */}
-        <div className="relative mt-3 rounded-[20px] bg-white/[.09] px-3.5 pt-2.5 pb-2 ring-1 ring-white/[.12] ring-inset">
+        <div className="relative mt-3 rounded-[20px] bg-paper px-3.5 pt-2.5 pb-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="tabular min-w-0 truncate text-xs font-semibold text-white/80">
+            <p className="tabular min-w-0 truncate text-xs font-semibold text-muted">
               {day ? (
                 <>
-                  {shortDate(dateOf(period.start, day))}: <b className="text-white">{money(spentBy)}</b> spent · pace {money(paceBy)}
+                  {shortDate(dateOf(period.start, day))}: <b className="text-ink">{money(spentBy)}</b> spent · pace {money(paceBy)}
                 </>
               ) : (
                 'Spending vs pace'
               )}
             </p>
             {budgetCents > 0 && (
-              <span className={`tabular shrink-0 rounded-full bg-white px-2 py-0.5 text-[11.5px] font-bold ${over ? 'text-[#c26b00]' : 'text-gain'}`}>
+              <span className={`tabular shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-bold ${over ? 'bg-orange-text/13 text-orange-text' : 'bg-gain/13 text-gain'}`}>
                 {over ? `▲ ${money(diff)} over` : `▼ ${money(-diff)} under`}
               </span>
             )}
@@ -521,19 +526,19 @@ function BudgetCard({ budget, hidden }) {
           >
             <defs>
               <linearGradient id="pace-fill" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0" stopColor="#fff" stopOpacity=".34" />
-                <stop offset="1" stopColor="#fff" stopOpacity="0" />
+                <stop offset="0" style={{ stopColor: 'var(--color-cobalt)' }} stopOpacity=".22" />
+                <stop offset="1" style={{ stopColor: 'var(--color-cobalt)' }} stopOpacity="0" />
               </linearGradient>
             </defs>
-            {budgetCents > 0 && <line x1="0" y1={H} x2={W} y2={y(budgetCents)} stroke="#fff" strokeOpacity=".45" strokeWidth="1.5" strokeDasharray="4 5" />}
-            <line x1={x(shown)} x2={x(shown)} y1="-4" y2={H} stroke="#fff" strokeOpacity=".2" strokeWidth="1.5" />
+            {budgetCents > 0 && <line x1="0" y1={H} x2={W} y2={y(budgetCents)} strokeWidth="1.5" strokeDasharray="4 5" className="stroke-muted/45" />}
+            <line x1={x(shown)} x2={x(shown)} y1="-4" y2={H} strokeWidth="1.5" className="stroke-cobalt/20" />
             <path d={area} fill="url(#pace-fill)" />
-            <path d={line} fill="none" stroke="#fff" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
-            {budgetCents > 0 && <circle cx={x(shown)} cy={y(paceBy)} r="4" fill="#1f4fe0" stroke="#fff" strokeOpacity=".7" strokeWidth="2" />}
-            <circle cx={x(shown)} cy={y(spentBy)} r="9" fill="#fff" fillOpacity=".22" />
-            <circle cx={x(shown)} cy={y(spentBy)} r="5" fill="#fff" stroke="#1f4fe0" strokeWidth="2.5" />
+            <path d={line} fill="none" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" className="stroke-cobalt" />
+            {budgetCents > 0 && <circle cx={x(shown)} cy={y(paceBy)} r="4" strokeWidth="2" className="fill-paper stroke-cobalt/60" />}
+            <circle cx={x(shown)} cy={y(spentBy)} r="9" className="fill-cobalt/16" />
+            <circle cx={x(shown)} cy={y(spentBy)} r="5" strokeWidth="2.5" className="fill-card stroke-cobalt" />
           </svg>
-          <div className="mt-1 flex justify-between text-[10.5px] leading-none text-white/65">
+          <div className="mt-1 flex justify-between text-[10.5px] leading-none text-muted">
             <span>{shortDate(period.start)}</span>
             <span>- - even pace · touch the line</span>
             <span>{shortDate(period.end)}</span>
@@ -563,7 +568,8 @@ function SectionHead({ title, onSeeAll }) {
   )
 }
 
-// The next recurring payments and income, in the same rows as the Recurring page
+// The next recurring payments and income as two tiles side by side: logo, name and date on top;
+// "In 3 days" (or Paid / Received when due) bottom left, the amount and how often bottom right
 function ComingUp({ payments, onPay, onOpen }) {
   return (
     <section>
@@ -573,18 +579,64 @@ function ComingUp({ payments, onPay, onOpen }) {
           <EmptyCard icon="repeat" title="Add regular payments" text="Rent, subscriptions and bills. See what's due next." onClick={() => navigate('/recurring')} />
         </div>
       ) : (
-        <ul className="mx-4 overflow-hidden rounded-[20px] bg-card">
-          {payments.map((p) => {
-            const days = daysUntil(p.next_due)
-            return (
-              <li key={p.id} className="border-b border-line last:border-0">
-                <PaymentRow p={p} sub={dueText(p)} due={days <= 0} late={days < 0} onOpen={onOpen} onPay={onPay} home />
-              </li>
-            )
-          })}
+        <ul className="mx-4 grid grid-cols-2 gap-2.5">
+          {payments.map((p) => (
+            <li key={p.id}>
+              <PaymentTile p={p} onOpen={onOpen} onPay={onPay} />
+            </li>
+          ))}
         </ul>
       )}
     </section>
+  )
+}
+
+function PaymentTile({ p, onOpen, onPay }) {
+  const days = daysUntil(p.next_due)
+  const due = days <= 0
+  const income = isIncome(p)
+  const per = FREQUENCIES.find((f) => f.value === p.frequency)?.per
+  const [whole, cents] = formatCents(p.amount_cents).split(',')
+  // Amounts from €1.000 up get a slightly smaller size, and no ",00", so they fit next to the Paid / Received button
+  const long = whole.length + (income ? 1 : 0) >= 6
+  const showCents = !(long && cents === '00')
+  return (
+    <div className="relative h-full rounded-[22px] bg-card p-3">
+      {/* The whole tile opens the payment; the Paid button sits above it */}
+      <button onClick={() => onOpen(p)} className="absolute inset-0 rounded-[22px]" aria-label={`${p.name}, ${shortDay(p.next_due)}`} />
+      <div className="pointer-events-none flex items-center gap-2.5">
+        <MerchantIcon name={p.name} className="size-10 rounded-xl bg-paper text-lg">
+          {p.icon}
+        </MerchantIcon>
+        <span className="min-w-0">
+          <span className="block truncate text-[15.5px] font-semibold">{p.name}</span>
+          <span className={`flex items-center gap-[3px] text-xs font-semibold ${days < 0 ? 'text-loss' : due ? 'text-orange-text' : 'text-muted'}`}>
+            <Icon name="clock" size={13} strokeWidth={2.4} />
+            <span className="truncate">{days < 0 ? `${-days} ${days === -1 ? 'day' : 'days'} late` : shortDay(p.next_due)}</span>
+          </span>
+        </span>
+      </div>
+      <div className="pointer-events-none mt-3 flex items-end justify-between gap-1.5">
+        {due ? (
+          <button
+            onClick={() => onPay(p)}
+            className="pointer-events-auto relative shrink-0 rounded-[11px] bg-cobalt px-3 py-1.5 text-[13.5px] font-bold text-white shadow-[0_8px_14px_-8px_var(--color-cobalt)] active:bg-cobalt-deep"
+          >
+            {income ? 'Received' : 'Paid'}
+          </button>
+        ) : (
+          <span className="truncate text-[12.5px] font-bold">{days === 1 ? 'Tomorrow' : `In ${days} days`}</span>
+        )}
+        <span className="min-w-0 text-right">
+          <span className={`tabular block font-display leading-tight font-bold tracking-tight whitespace-nowrap ${long ? 'text-[15px]' : 'text-lg'} ${income ? 'text-gain' : ''}`}>
+            {income && '+'}
+            {whole}
+            {showCents && <span className="text-[0.66em] opacity-50">,{cents}</span>}
+          </span>
+          {per && <span className="block text-[11.5px] font-medium text-muted">a {per}</span>}
+        </span>
+      </div>
+    </div>
   )
 }
 
