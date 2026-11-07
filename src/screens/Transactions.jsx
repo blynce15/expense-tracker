@@ -499,7 +499,7 @@ function DateTiles({ date, onChange }) {
         {TILE_PRESETS.map((p) => {
           const on = date.preset === p
           return (
-            <button key={p} onClick={() => onChange({ preset: p })} aria-pressed={on} className={`relative overflow-hidden rounded-2xl px-3 pt-3 pb-2.5 text-left transition active:scale-[0.98] ${on ? picked : 'bg-paper'}`}>
+            <button key={p} onClick={() => onChange({ preset: p })} aria-pressed={on} className={`relative overflow-hidden rounded-2xl px-3 pt-3 pb-2.5 text-left transition-transform active:scale-[0.98] ${on ? picked : 'bg-paper'}`}>
               {on && <span className="pointer-events-none absolute -top-8 -right-6 size-20 rounded-full bg-white/10" />}
               <b className="block font-display text-[15.5px] leading-tight">{PRESET_LABEL[p]}</b>
               <span className={`tabular block text-xs ${on ? 'text-white/80' : 'text-muted'}`}>{describeRange({ preset: p })}</span>
@@ -529,7 +529,7 @@ function DateTiles({ date, onChange }) {
 
 function WideTile({ icon, on, picked, title, text, onClick }) {
   return (
-    <button onClick={onClick} aria-pressed={on} className={`col-span-2 flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition active:scale-[0.99] ${on ? picked : 'bg-paper'}`}>
+    <button onClick={onClick} aria-pressed={on} className={`col-span-2 flex items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-transform active:scale-[0.99] ${on ? picked : 'bg-paper'}`}>
       <span className={`grid size-9 shrink-0 place-items-center rounded-[11px] ${on ? 'bg-white/20' : 'bg-cobalt/12 text-cobalt'}`}>
         <Icon name={icon} size={18} />
       </span>
