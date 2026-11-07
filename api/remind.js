@@ -1,6 +1,6 @@
 // Payment reminders, run by Vercel Cron every morning (vercel.json): for each recurring payment
 // due tomorrow, a notification goes to the phones of its owner that turned reminders on
-// (recurring income gets its own "Payday tomorrow" note). On the 1st of each month, owners of a pension fund
+// (recurring income gets its own note; the wording is in reminderText). On the 1st of each month, owners of a pension fund
 // (Investments → Pension) with no entry for the month yet get "Update due · 🏛️ Pension".
 // POST /api/remind?test=1 with the user's login token sends a test notification to that user only.
 //
@@ -29,6 +29,25 @@ function shortDay(iso) {
 
 const euros = (cents) =>
   new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100).replace(/\s?€$/, '').replace(/^/, '€')
+// "€12,99", but "€2.100" for round amounts
+const shortEuros = (cents) => euros(cents).replace(/,00$/, '')
+
+// What a reminder says (owner chose "Simple 1", 2026-11-07): what and how much in bold, "Tomorrow" under it.
+//   one payment:  "🎬 Netflix · €12,99" / "Tomorrow"
+//   several:      "3 payments · €42,48" / "Tomorrow: Netflix, Spotify, Uber"
+//   income:       "💼 Salary · +€2.100" / "Tomorrow"  (several: "2 incomes · +€2.600")
+export function reminderText(list, income) {
+  const sign = income ? '+' : ''
+  if (list.length === 1) {
+    const p = list[0]
+    return { title: `${p.icon ? `${p.icon} ` : ''}${p.name} · ${sign}${shortEuros(p.amount_cents)}`, body: 'Tomorrow' }
+  }
+  const total = list.reduce((sum, p) => sum + p.amount_cents, 0)
+  return {
+    title: `${list.length} ${income ? 'incomes' : 'payments'} · ${sign}${shortEuros(total)}`,
+    body: `Tomorrow: ${list.map((p) => p.name).join(', ')}`,
+  }
+}
 
 export default async function handler(req, res) {
   const missing = ['VITE_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'VITE_VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'CRON_SECRET'].filter((k) => !process.env[k])
@@ -81,42 +100,18 @@ export default async function handler(req, res) {
     if (token !== process.env.CRON_SECRET) return res.status(401).json({ error: 'Not allowed.' })
 
     const due = lisbonISO(1)
-    const { data: payments, error } = await db.from('recurring_payments').select('user_id, name, icon, amount_cents, account_id, type').eq('active', true).eq('next_due', due)
+    const { data: payments, error } = await db.from('recurring_payments').select('user_id, name, icon, amount_cents, type').eq('active', true).eq('next_due', due)
     if (error) throw error
-
-    // Card names ("Main card"). Needs migration 008; without it the reminder just leaves the card out.
-    const cardName = new Map()
-    const ids = [...new Set(payments.map((p) => p.account_id).filter(Boolean))]
-    if (ids.length) {
-      const { data: accounts } = await db.from('accounts').select('id, name').in('id', ids)
-      for (const a of accounts ?? []) cardName.set(a.id, a.name)
-    }
 
     const byUser = new Map()
     for (const p of payments) byUser.set(p.user_id, [...(byUser.get(p.user_id) ?? []), p])
-
-    // Calendar style: "Due tomorrow · 🎬 Netflix" / "€12,99 · Main card · Sat 10 Oct".
-    // Income gets its own note: "Payday tomorrow · 💼 Salary" / "+€1.500,00 · Main card · Sat 10 Oct".
-    const label = (p) => `${p.icon ? `${p.icon} ` : ''}${p.name}`
-    function message(list, income) {
-      const sign = income ? '+' : ''
-      const head = income ? 'Payday tomorrow' : 'Due tomorrow'
-      if (list.length === 1) {
-        const p = list[0]
-        return { title: `${head} · ${label(p)}`, body: [sign + euros(p.amount_cents), cardName.get(p.account_id), shortDay(due)].filter(Boolean).join(' · ') }
-      }
-      return {
-        title: `${head} · ${list.length} ${income ? 'incomes' : 'payments'}`,
-        body: list.map((p) => `${label(p)} ${sign}${euros(p.amount_cents)}`).join('\n'),
-      }
-    }
 
     let sent = 0
     for (const [userId, list] of byUser) {
       const costs = list.filter((p) => p.type !== 'income')
       const income = list.filter((p) => p.type === 'income')
-      if (costs.length) sent += await notify(userId, { ...message(costs, false), tag: `due-${due}`, url: '/#/recurring' })
-      if (income.length) sent += await notify(userId, { ...message(income, true), tag: `pay-${due}`, url: '/#/recurring' })
+      if (costs.length) sent += await notify(userId, { ...reminderText(costs, false), tag: `due-${due}`, url: '/#/recurring' })
+      if (income.length) sent += await notify(userId, { ...reminderText(income, true), tag: `pay-${due}`, url: '/#/recurring' })
     }
     // Pension: on the 1st, a note to enter this month's numbers (needs migration 020's grant).
     // "Update due · 🏛️ Pension" / "Last updated 31 Oct"; tapping it opens the update.
