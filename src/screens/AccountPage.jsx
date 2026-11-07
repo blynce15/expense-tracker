@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import EmptyLynx from '../components/EmptyLynx'
 import BankCard from '../components/BankCard'
 import Icon from '../components/Icon'
@@ -6,8 +7,10 @@ import TransactionRow from '../components/TransactionRow'
 import { formatDay, monthName, todayISO } from '../lib/dates'
 import { formatCents } from '../lib/money'
 import { supabase } from '../lib/supabase'
-import { navigate } from '../lib/useRoute'
 import TransactionDetails from './TransactionDetails'
+
+// The Edit account sheet from Accounts & cards, loaded only when the pencil is tapped
+const AccountForm = lazy(() => import('./Accounts').then((m) => ({ default: m.AccountForm })))
 
 const LIST_COUNT = 30
 const HIDDEN = '€ ••••'
@@ -17,6 +20,7 @@ export default function AccountPage({ account, monthFlow, lookups, hidden, onTog
   const [list, setList] = useState(null)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(null)
+  const [editing, setEditing] = useState(false) // the pencil opens this account's Edit account sheet
 
   const load = useCallback(async () => {
     const { data, error } = await supabase
@@ -55,9 +59,9 @@ export default function AccountPage({ account, monthFlow, lookups, hidden, onTog
           </button>
           <h1 className="flex-1 truncate text-center font-display text-lg font-bold">{account.name}</h1>
           <button
-            onClick={() => navigate('/settings/accounts')}
+            onClick={() => setEditing(true)}
             className="grid size-11 place-items-center rounded-full text-white/80"
-            aria-label="Edit accounts"
+            aria-label="Edit account"
           >
             <Icon name="pencil" size={20} />
           </button>
@@ -132,16 +136,34 @@ export default function AccountPage({ account, monthFlow, lookups, hidden, onTog
         </section>
       </div>
 
-      {selected && (
-        <TransactionDetails
-          transaction={selected}
-          onClose={() => setSelected(null)}
-          onChanged={() => {
-            load()
-            onChanged()
-          }}
-        />
-      )}
+      {/* Sheets go on the page's top layer (document.body), so the tab bar can't cover them */}
+      {selected &&
+        createPortal(
+          <TransactionDetails
+            transaction={selected}
+            onClose={() => setSelected(null)}
+            onChanged={() => {
+              load()
+              onChanged()
+            }}
+          />,
+          document.body,
+        )}
+
+      {editing &&
+        createPortal(
+          <Suspense fallback={null}>
+            <AccountForm
+              account={account}
+              onClose={() => setEditing(false)}
+              onSaved={() => {
+                setEditing(false)
+                onChanged()
+              }}
+            />
+          </Suspense>,
+          document.body,
+        )}
     </div>
   )
 }

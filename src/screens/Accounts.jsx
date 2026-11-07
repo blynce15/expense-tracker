@@ -123,7 +123,7 @@ async function goalsProblem(account, next) {
   return problem && `${problem} Move money into it first (Savings → the goal).`
 }
 
-function AccountForm({ account, onClose, onSaved }) {
+export function AccountForm({ account, onClose, onSaved }) {
   const isNew = !account
   const [name, setName] = useState(account?.name ?? '')
   const [type, setType] = useState(account?.type ?? 'debit')
