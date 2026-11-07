@@ -1,7 +1,7 @@
 // Payment reminders, run by Vercel Cron every morning (vercel.json): for each recurring payment
 // due tomorrow, a notification goes to the phones of its owner that turned reminders on
 // (recurring income gets its own note; the wording is in reminderText). On the 1st of each month, owners of a pension fund
-// (Investments → Pension) with no entry for the month yet get "Update due · 🏛️ Pension".
+// (Investments → Pension) with no entry for the month yet get "🏛️ Pension · time to update".
 // POST /api/remind?test=1 with the user's login token sends a test notification to that user only.
 //
 // Needs these Vercel settings: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (server only, never in the app),
@@ -114,7 +114,7 @@ export default async function handler(req, res) {
       if (income.length) sent += await notify(userId, { ...reminderText(income, true), tag: `pay-${due}`, url: '/#/recurring' })
     }
     // Pension: on the 1st, a note to enter this month's numbers (needs migration 020's grant).
-    // "Update due · 🏛️ Pension" / "Last updated 31 Oct"; tapping it opens the update.
+    // "🏛️ Pension · time to update" / "Last updated 31 Oct"; tapping it opens the update.
     const today = lisbonISO(0)
     let pensions = 0
     if (today.endsWith('-01')) {
@@ -125,7 +125,7 @@ export default async function handler(req, res) {
       for (const [userId, date] of latest) {
         if (date.slice(0, 7) === today.slice(0, 7)) continue
         pensions += 1
-        sent += await notify(userId, { title: 'Update due · 🏛️ Pension', body: `Last updated ${shortDay(date).replace(/^\w+ /, '')}`, tag: `pension-${today.slice(0, 7)}`, url: '/#/investments/pension?update' })
+        sent += await notify(userId, { title: '🏛️ Pension · time to update', body: `Last updated ${shortDay(date).replace(/^\w+ /, '')}`, tag: `pension-${today.slice(0, 7)}`, url: '/#/investments/pension?update' })
       }
     }
     return res.status(200).json({ due, payments: payments.length, pensions, sent })
