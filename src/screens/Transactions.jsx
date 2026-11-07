@@ -296,7 +296,7 @@ function recurringText(filter, recurring) {
 // Filters: search, type, then fold-out sections (dates, cards, categories) and the Only recurring switch
 function FilterSheet({ filter, lookups, recurring, onApply, onClose }) {
   const [draft, setDraft] = useState(filter)
-  const [open, setOpen] = useState('date')
+  const [open, setOpen] = useState(null) // every section starts folded
   const [count, setCount] = useState(null)
 
   // How many transactions the draft would show
