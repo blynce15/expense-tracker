@@ -5,6 +5,8 @@ import { fetchLookups, lookupCache } from '../lib/lookups'
 import { netWorthOf } from '../lib/networth'
 import { navigate } from '../lib/useRoute'
 
+// The Over time card's blue (Analytics → Explore), as the top of this page
+const BLUE_TOP = 'radial-gradient(120% 90% at 85% 0%, #7fa2ff 0%, #3a63e8 45%, #14318f 100%)'
 const signed = (cents) => (cents < 0 ? `−${whole(-cents)}` : `+${whole(cents)}`)
 const kept = (m) => (m ? m.saved + m.invested : 0)
 
@@ -41,7 +43,7 @@ export default function AnalyticsTrends() {
 
   return (
     <div className="pb-6">
-      <NavyTop>
+      <NavyTop background={BLUE_TOP}>
         <NavyPeriodBar period={period} onChange={setPeriod} />
         {w ? <Top a={a} w={w} /> : <div className="h-[92px]" />}
       </NavyTop>
@@ -90,12 +92,21 @@ const Legend = ({ items }) => (
   </div>
 )
 
-// ---------- The navy top: net worth ----------
+// ---------- The blue top: net worth and its line ----------
+// (owner chose "A · Line on top" with C's last-year cards, .harness/analytics-v7-time.html)
 function Top({ a, w }) {
   const first = w.line[0]?.cents ?? 0
   const months = w.line.length - 1
   // As a % only when it started from a real amount (a start near €0 gives silly percentages)
   const share = months > 0 && first > 0 && Math.abs(w.lineChange / first) < 2 ? w.lineChange / first : null
+  const values = w.line.map((pt) => pt.cents)
+  const W = 300
+  const H = 70
+  const max = Math.max(...values)
+  const min = Math.min(...values)
+  const pts = values.map((v, i) => [months ? (i / months) * W : W, H - ((v - min) / (max - min || 1)) * (H - 8) - 4])
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')
+  const span = months === 1 ? 'a month' : months >= 11 ? 'a year' : `${months} months`
   return (
     <>
       <BigAmount
@@ -104,8 +115,8 @@ function Top({ a, w }) {
       />
       {months > 0 && w.lineChange !== 0 && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
-          <NavyPill tone={w.lineChange > 0 ? 'good' : 'bad'}>
-            {w.lineChange > 0 ? '▲' : '▼'} {whole(Math.abs(w.lineChange))} in {months} {months === 1 ? 'month' : 'months'}
+          <NavyPill>
+            {w.lineChange > 0 ? '▲' : '▼'} {whole(Math.abs(w.lineChange))} in {span}
           </NavyPill>
           {share !== null && Math.round(share * 100) !== 0 && (
             <NavyPill>
@@ -114,50 +125,40 @@ function Top({ a, w }) {
           )}
         </div>
       )}
+      {months > 0 && (
+        <>
+          <svg viewBox={`0 0 ${W} ${H}`} className="mt-4 block h-auto w-full overflow-visible" aria-hidden="true">
+            <path d={`${line} L${W} ${H} L0 ${H} Z`} fill="rgba(255,255,255,.16)" />
+            <path d={line} fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx={pts.at(-1)[0]} cy={pts.at(-1)[1]} r="5" fill="#fff" />
+          </svg>
+          <div className="mt-1 flex justify-between text-[10.5px] text-white/70">
+            <span>{monthShort(w.line[0].key)}</span>
+            <span>{monthShort(w.line.at(-1).key)}</span>
+          </div>
+        </>
+      )}
     </>
   )
 }
 
-// ---------- What it's made of (the card on the navy edge) ----------
-// Each part stacked month by month, then today's amount per part with its change over the months shown
+// ---------- What it's made of (the card on the edge) ----------
+// Today's parts as one bar, then each part with its change over the months shown
 function MadeOf({ w }) {
-  const parts = WORTH_PARTS.filter((p) => w.line.some((pt) => pt.parts[p.key] > 0))
-  const W = 300
-  const H = 110
-  const n = w.line.length
-  const tops = w.line.map((pt) => parts.reduce((s, p) => s + Math.max(0, pt.parts[p.key]), 0))
-  const max = Math.max(1, ...tops) * 1.05
-  const x = (i) => (n > 1 ? (i / (n - 1)) * W : W / 2)
-  const y = (c) => H - (c / max) * H
-  let base = w.line.map(() => 0)
-  const layers = parts.map((p) => {
-    const top = w.line.map((pt, i) => base[i] + Math.max(0, pt.parts[p.key]))
-    const d = `M${top.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' L')} L${base
-      .map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`)
-      .reverse()
-      .join(' L')} Z`
-    base = top
-    return { ...p, d }
-  })
-  const labels = n > 1 ? [0, Math.round((n - 1) / 2), n - 1] : [0]
-
+  const shown = WORTH_PARTS.filter((p) => w.parts[p.key] !== 0 || (w.partChange?.[p.key] ?? 0) !== 0)
+  const inBar = shown.filter((p) => w.parts[p.key] > 0)
   return (
     <div className="rounded-[24px] bg-card p-4 shadow-[0_14px_30px_-22px_rgba(11,27,69,0.45)]">
       <b className="font-display text-[17px]">What it&apos;s made of</b>
-      {n > 1 && (
-        <svg viewBox={`0 0 ${W} ${H + 16}`} className="mt-3 block h-auto w-full overflow-visible" role="img" aria-label="Net worth by part, month by month">
-          {layers.map((l) => (
-            <path key={l.key} d={l.d} fill={l.color} opacity=".9" />
+      {inBar.length > 0 && (
+        <div className="mt-3 mb-1.5 flex h-3.5 gap-[3px]">
+          {inBar.map((p) => (
+            <span key={p.key} className="rounded-[5px]" style={{ flex: w.parts[p.key], background: p.color }} />
           ))}
-          {labels.map((i, k) => (
-            <text key={i} x={x(i)} y={H + 13} fontSize="10" textAnchor={k === 0 ? 'start' : k === labels.length - 1 ? 'end' : 'middle'} className="fill-muted">
-              {monthShort(w.line[i].key)}
-            </text>
-          ))}
-        </svg>
+        </div>
       )}
-      <ul className="mt-2">
-        {WORTH_PARTS.filter((p) => w.parts[p.key] !== 0 || (w.partChange?.[p.key] ?? 0) !== 0).map((p) => {
+      <ul>
+        {shown.map((p) => {
           const change = w.partChange?.[p.key] ?? 0
           return (
             <li key={p.key} className="flex items-center gap-2 border-t border-line py-2 text-sm first:border-0">
@@ -208,17 +209,17 @@ function LastYear({ a }) {
       { points: true },
     ],
   ]
-  const then = year ? prevLabel(a.period) : `${monthShort(ly?.key ?? a.period.key)} ${String(Number(a.period.key.slice(0, 4)) - 1)}`
+  // Three cards side by side: this period, what it was a year earlier, the change
   return (
-    <div className={`${card} py-1`}>
+    <div className="grid grid-cols-3 gap-2">
       {rows.map(([label, now, before, change, opts]) => (
-        <div key={label} className="flex items-center gap-2 border-t border-line py-3 first:border-0">
-          <b className="flex-1 text-[15px]">{label}</b>
-          <span className="tabular text-[12.5px] text-muted">
-            {then}: {before}
+        <div key={label} className="rounded-[20px] bg-card px-2 py-3 text-center shadow-[0_14px_30px_-24px_rgba(11,27,69,0.45)]">
+          <span className="block text-xs text-muted">{label}</span>
+          <b className="tabular block truncate font-display text-[19px]">{now}</b>
+          <span className="tabular block truncate text-[11.5px] text-muted">was {before}</span>
+          <span className="mt-1.5 flex justify-center">
+            <ChangeChip change={change} {...opts} />
           </span>
-          <b className="tabular min-w-[60px] text-right">{now}</b>
-          <ChangeChip change={change} {...opts} />
         </div>
       ))}
     </div>
