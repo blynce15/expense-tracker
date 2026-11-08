@@ -3,7 +3,7 @@ import AmountPad from '../components/AmountPad'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
-import { MiniCard } from '../components/BankCard'
+import { MiniCard, shade } from '../components/BankCard'
 import { checkOverdraft } from '../lib/balances'
 import { todayISO } from '../lib/dates'
 import { goalColor, goalTextColor } from '../lib/goalColors'
@@ -16,7 +16,7 @@ const DEFAULT_ICON = '🐷'
 
 // Emojis to choose from for a goal
 const GOAL_EMOJIS = [
-  '🐷', '💰', '🛡️', '✈️', '🏖️', '🌍', '🏠', '🛋️', '🚗', '🚲', '💻', '📱',
+  '🐷', '💰', '🛟', '🛡️', '✈️', '🏖️', '🌍', '🏠', '🛋️', '🚗', '🚲', '💻', '📱',
   '🎓', '💍', '👶', '🐶', '🎁', '🎸', '📷', '⛷️', '🏕️', '🎮', '🩺', '📈',
 ]
 
@@ -373,24 +373,34 @@ const TILE = 'relative overflow-hidden rounded-[24px] p-3.5 text-left'
 
 // A goal: ring in its colour around the emoji, %, name, money of target, then the pace
 function GoalTile({ goal, onOpen }) {
-  const color = goalColor(goal.icon)
-  const text = goalTextColor(goal.icon)
-  const pct = Math.floor((goal.saved_cents / goal.target_cents) * 100)
-  const p = pace(goal)
   return (
     <button onClick={onOpen} className={`${TILE} bg-card shadow-[0_14px_30px_-24px_rgba(11,27,69,0.5)]`}>
+      <GoalTileBody goal={goal} />
+    </button>
+  )
+}
+
+// The inside of a goal tile; also the live preview in the goal form (target may still be 0, name empty)
+function GoalTileBody({ goal }) {
+  const color = goalColor(goal.icon)
+  const text = goalTextColor(goal.icon)
+  const ratio = goal.target_cents ? goal.saved_cents / goal.target_cents : 0
+  const pct = Math.floor(Math.min(1, ratio) * 100)
+  const p = goal.target_cents ? pace(goal) : null
+  return (
+    <>
       <Corner color={`color-mix(in srgb, ${color} 11%, transparent)`} />
       <span className="relative flex items-start justify-between">
-        <Ring ratio={goal.saved_cents / goal.target_cents} size={46} stroke={4.5} color={color} track={`color-mix(in srgb, ${color} 16%, transparent)`}>
+        <Ring ratio={ratio} size={46} stroke={4.5} color={color} track={`color-mix(in srgb, ${color} 16%, transparent)`}>
           <span className="text-xl leading-none">{goal.icon || DEFAULT_ICON}</span>
         </Ring>
         <b className="tabular font-display text-[15px]" style={{ color: text }}>
           {pct}%
         </b>
       </span>
-      <b className="relative mt-3 block truncate font-display text-[15.5px]">{goal.name}</b>
+      <b className={`relative mt-3 block truncate font-display text-[15.5px] ${goal.name ? '' : 'text-muted/55'}`}>{goal.name || 'Goal name'}</b>
       <b className="tabular relative mt-0.5 block font-display text-[21px] leading-tight">{whole(goal.saved_cents)}</b>
-      <span className="tabular relative block text-[12.5px] text-muted">of {whole(goal.target_cents)}</span>
+      <span className="tabular relative block text-[12.5px] text-muted">{goal.target_cents ? `of ${whole(goal.target_cents)}` : 'No target yet'}</span>
       <span
         className={`tabular relative mt-2.5 flex items-center gap-1 text-xs font-semibold ${p?.overdue ? 'text-loss' : p ? '' : 'text-muted'}`}
         style={p && !p.overdue ? { color: text } : undefined}
@@ -408,7 +418,7 @@ function GoalTile({ goal, onOpen }) {
           'No deadline'
         )}
       </span>
-    </button>
+    </>
   )
 }
 
@@ -727,29 +737,66 @@ function GoalForm({ goal, general, onClose, onSaved }) {
     )
   }
 
-  // Under the preview: "€1.500 target · by Dec 2026"
-  const summary = [targetCents ? `${whole(targetCents)} target` : null, deadline ? `by ${formatMonthYear(deadline)}` : null]
-    .filter(Boolean)
-    .join(' · ')
-  const pct = targetCents ? Math.min(100, (startCents / targetCents) * 100) : 0
+  // The goal as its tile will look on the Savings page
+  const draft = {
+    name: name.trim(),
+    icon,
+    target_cents: targetCents,
+    saved_cents: isNew ? startCents : goal.saved_cents,
+    deadline,
+  }
+  const color = goalColor(icon)
+  const text = goalTextColor(icon)
+  const p = targetCents ? pace(draft) : null
+  const ready = Boolean(name.trim() && targetCents)
 
   return (
     <Sheet title={isNew ? 'New goal' : 'Edit goal'} onClose={onClose}>
       <form onSubmit={save}>
-        {/* How it will look: the icon tile, the name and the target */}
-        <div className="flex flex-col items-center pt-1">
-          <span className="grid size-[84px] place-items-center rounded-[26px] bg-cobalt/10 text-[44px]">{icon}</span>
-          <b className={`mt-3 max-w-full truncate font-display text-2xl ${name.trim() ? '' : 'text-muted/50'}`}>{name.trim() || 'Goal name'}</b>
-          <span className="tabular text-sm text-muted">{summary || 'No target yet'}</span>
-          {isNew && startCents > 0 && targetCents > 0 && (
-            <span className="mt-3 block h-2 w-40 overflow-hidden rounded-full bg-card">
-              <span className="block h-full rounded-full bg-gradient-to-r from-[#2b8ef7] to-cobalt" style={{ width: `${Math.max(pct, 2)}%` }} />
-            </span>
-          )}
+        {/* Live preview on a soft wash of the goal's colour */}
+        <div
+          className="-mx-5 -mt-1 px-5 pt-3 pb-1"
+          style={{ background: `radial-gradient(90% 100% at 50% 0%, color-mix(in srgb, ${color} 20%, transparent), transparent 75%)` }}
+        >
+          <div className="flex justify-center">
+            <div className={`${TILE} w-[180px] bg-card`} style={{ boxShadow: `0 18px 34px -20px ${color}` }}>
+              <GoalTileBody goal={draft} />
+            </div>
+          </div>
+          <p className="tabular mt-3 min-h-5 text-center text-[13.5px] font-semibold" style={p && !p.overdue ? { color: text } : undefined}>
+            {p?.overdue ? (
+              <span className="text-loss">The deadline has passed</span>
+            ) : p ? (
+              `Save ${whole(p.perMonth)} a month to make it by ${formatMonthYear(deadline)}`
+            ) : targetCents && !deadline ? (
+              <span className="text-muted">No deadline · save at your own pace</span>
+            ) : null}
+          </p>
         </div>
 
-        <div className="mt-5 overflow-hidden rounded-2xl bg-card">
-          <FormRow label="Name">
+        <p className="px-1 pt-4 pb-2 text-xs font-bold tracking-wider text-muted uppercase">Icon</p>
+        <div className="-mx-5 flex gap-1.5 overflow-x-auto px-5 py-1 [scrollbar-width:none]">
+          {emojis.map((em) => {
+            const on = icon === em
+            return (
+              <button
+                key={em}
+                type="button"
+                onClick={() => setIcon(em)}
+                aria-label={em}
+                aria-pressed={on}
+                className={`grid size-11 shrink-0 place-items-center rounded-full text-[22px] ${on ? '' : 'bg-card'}`}
+                style={on ? { backgroundColor: `color-mix(in srgb, ${goalColor(em)} 18%, transparent)`, boxShadow: `inset 0 0 0 2px ${goalColor(em)}` } : undefined}
+              >
+                {em}
+              </button>
+            )
+          })}
+        </div>
+
+        <p className="px-1 pt-4 pb-2 text-xs font-bold tracking-wider text-muted uppercase">Details</p>
+        <div className="overflow-hidden rounded-[20px] bg-card">
+          <FormRow label="Name" icon="tag" color={color} text={text}>
             <input
               value={name}
               onChange={(e) => {
@@ -758,40 +805,32 @@ function GoalForm({ goal, general, onClose, onSaved }) {
               }}
               placeholder="e.g. Trip to Japan"
               maxLength={30}
-              className="w-full bg-transparent text-right text-base font-semibold text-ink outline-none placeholder:font-normal placeholder:text-muted/60"
+              className="w-full bg-transparent text-right text-[15px] font-semibold text-ink outline-none placeholder:font-medium placeholder:text-muted/60"
             />
           </FormRow>
-          <FormRow label="Target" onClick={() => setPicking('target')}>
-            <RowValue value={targetCents ? formatCents(targetCents) : null} placeholder="€0,00" />
+          <FormRow label="Target" icon="target" color={color} text={text} onClick={() => setPicking('target')}>
+            <RowValue value={targetCents ? whole(targetCents) : null} placeholder="€0" />
+          </FormRow>
+          <FormRow label="Deadline" icon="calendar" color={color} text={text} onClick={() => setPicking('date')}>
+            <RowValue value={deadline ? formatMonthYear(deadline) : null} placeholder="None" />
           </FormRow>
           {canStart && (
-            <FormRow label="Start with" onClick={() => setPicking('start')}>
-              <span className="min-w-0 text-right">
-                <RowValue value={startCents ? formatCents(startCents) : null} placeholder="€0,00" />
-                <span className="tabular block truncate text-xs text-muted">{whole(general.saved_cents)} in General savings</span>
-              </span>
+            <FormRow
+              label="Start with"
+              sub={
+                <span className="tabular flex items-center gap-1">
+                  <Icon name="bank" size={13} />
+                  {whole(general.saved_cents)} in General savings
+                </span>
+              }
+              icon="coins"
+              color={color}
+              text={text}
+              onClick={() => setPicking('start')}
+            >
+              <RowValue value={startCents ? whole(startCents) : null} placeholder="€0" />
             </FormRow>
           )}
-          <FormRow label="Deadline" onClick={() => setPicking('date')}>
-            <RowValue value={deadline ? formatDeadline(deadline) : null} placeholder="None" />
-          </FormRow>
-        </div>
-
-        <div className="mt-3 rounded-2xl bg-card p-3">
-          <div className="grid max-h-[136px] grid-cols-8 gap-1 overflow-y-auto [scrollbar-width:none]">
-            {emojis.map((em) => (
-              <button
-                key={em}
-                type="button"
-                onClick={() => setIcon(em)}
-                aria-label={em}
-                aria-pressed={icon === em}
-                className={`grid aspect-square place-items-center rounded-xl text-xl transition ${icon === em ? 'bg-cobalt/10 ring-2 ring-cobalt' : ''}`}
-              >
-                {em}
-              </button>
-            ))}
-          </div>
         </div>
 
         {error && <p className="mt-3 px-1 text-sm text-loss">{error}</p>}
@@ -799,7 +838,8 @@ function GoalForm({ goal, general, onClose, onSaved }) {
         <button
           type="submit"
           disabled={busy}
-          className="mt-5 w-full rounded-2xl bg-cobalt py-4 text-lg font-semibold text-white shadow-[0_10px_24px_-10px_rgba(31,79,224,0.8)] active:bg-cobalt-deep disabled:opacity-50"
+          className={`mt-5 w-full rounded-[18px] py-4 text-[17px] font-semibold disabled:opacity-50 ${ready ? 'text-white' : 'bg-line text-muted'}`}
+          style={ready ? { background: `linear-gradient(135deg, ${color}, ${shade(color, 0.75)})`, boxShadow: `0 12px 24px -12px ${color}` } : undefined}
         >
           {isNew ? 'Create goal' : 'Save changes'}
         </button>
@@ -815,6 +855,8 @@ function GoalForm({ goal, general, onClose, onSaved }) {
         <AmountPad
           label={picking === 'target' ? 'Target' : 'Start with'}
           amount={picking === 'target' ? target : start}
+          max={picking === 'start' ? Math.max(general.saved_cents, 0) : null}
+          maxText={`Only ${whole(Math.max(general.saved_cents, 0))} is in General savings`}
           onChange={(v) => {
             if (picking === 'target') setTarget(v)
             else setStart(v)
@@ -827,12 +869,22 @@ function GoalForm({ goal, general, onClose, onSaved }) {
   )
 }
 
-// A row in the goal form: label on the left, value on the right (a button when onClick is set)
-function FormRow({ label, onClick, children }) {
-  const cls = 'flex min-h-[52px] w-full items-center gap-3 border-b border-line px-4 py-2 text-left last:border-0'
+// A row in the goal form: a small icon in the goal's colour, the label (and an optional line under it),
+// then the value on the right (a button when onClick is set)
+function FormRow({ label, sub, icon, color, text, onClick, children }) {
+  const cls = 'flex min-h-[56px] w-full items-center gap-3 border-b border-line px-4 py-2 text-left last:border-0'
   const inner = (
     <>
-      <span className="w-24 shrink-0 text-sm text-muted">{label}</span>
+      <span
+        className="grid size-8 shrink-0 place-items-center rounded-[10px]"
+        style={{ backgroundColor: `color-mix(in srgb, ${color} 14%, transparent)`, color: text }}
+      >
+        <Icon name={icon} size={17} />
+      </span>
+      <span className="min-w-0 shrink-0">
+        <span className="block text-[15px] font-semibold">{label}</span>
+        {sub && <span className="block text-xs text-muted">{sub}</span>}
+      </span>
       <span className="flex min-w-0 flex-1 items-center justify-end gap-1">
         {children}
         {onClick && <Icon name="chevronRight" size={16} className="shrink-0 text-muted" />}
@@ -844,15 +896,15 @@ function FormRow({ label, onClick, children }) {
       {inner}
     </button>
   ) : (
-    <div className={cls}>{inner}</div>
+    <label className={cls}>{inner}</label>
   )
 }
 
 function RowValue({ value, placeholder }) {
   return value ? (
-    <b className="tabular block truncate text-base font-semibold">{value}</b>
+    <b className="tabular block truncate text-[15px] font-semibold">{value}</b>
   ) : (
-    <span className="block text-base text-muted/60">{placeholder}</span>
+    <span className="block text-[15px] font-medium text-muted/60">{placeholder}</span>
   )
 }
 
