@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { goalColor } from '../lib/goalColors'
 import DatePicker from '../components/DatePicker'
 import Avatar from '../components/Avatar'
 import AmountPad from '../components/AmountPad'
@@ -1277,8 +1278,6 @@ const GOAL_IDEAS = [
   ['Gift', 'Gift', '🎁'],
 ]
 const GOAL_EMOJIS = ['🎯', '🛟', '✈️', '🏠', '🚗', '💍', '🎓', '🎁', '💻', '🐶', '🏖️', '📱']
-const GOAL_COLORS = { '🎯': '#1f4fe0', '🛟': '#2b8a3e', '✈️': '#1c7ed6', '🏠': '#e8590c', '🚗': '#7048e8', '💍': '#d6336c', '🎓': '#0c8599', '🎁': '#f08c00', '💻': '#495057', '🐶': '#a0522d', '🏖️': '#e8a400', '📱': '#0b1b45' }
-const goalColor = (icon) => GOAL_COLORS[icon] ?? '#1f4fe0'
 // "Jun 2027"
 const monthYear = (iso) => {
   const [y, m] = iso.split('-').map(Number)

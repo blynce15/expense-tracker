@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import LynxWatermark from '../components/LynxWatermark'
-import EmptyLynx from '../components/EmptyLynx'
 import AmountPad from '../components/AmountPad'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
@@ -8,6 +6,7 @@ import Sheet from '../components/Sheet'
 import { MiniCard } from '../components/BankCard'
 import { checkOverdraft } from '../lib/balances'
 import { todayISO } from '../lib/dates'
+import { goalColor, goalTextColor } from '../lib/goalColors'
 import { fetchGoalsState, goalProblem, moveBetweenGoals, savingsAccounts, transactionGoalProblem } from '../lib/goals'
 import { centsToPad, formatCents, parseToCents } from '../lib/money'
 import { recall, remember } from '../lib/memory'
@@ -100,6 +99,9 @@ async function fetchSavingsFlow() {
   return keys.map((k) => ({ key: k, cents: net.get(k), partial: k === thisMonth }))
 }
 
+// Navy top: reaches up behind the top bar (same as Home); the "Saved this month" card overlaps its bottom edge
+const HERO = 'radial-gradient(120% 90% at 85% 0%, #22408f 0%, #0b1b45 55%, #070d24 100%)'
+
 export default function Savings() {
   // accounts, goals with their money, General savings (src/lib/goals.js)
   const [state, setStateNow] = useState(() => recall('savings'))
@@ -127,7 +129,7 @@ export default function Savings() {
     load()
   }, [load])
 
-  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your goals: {error}</p>
+  if (error) return <p className="px-5 pt-6 text-loss">Couldn&apos;t load your goals: {error}</p>
   if (!state) return null
   const { goals, general } = state
   const hasSavings = savingsAccounts(state.accounts).length > 0
@@ -135,55 +137,55 @@ export default function Savings() {
   // Reached goals are listed small at the end
   const active = goals.filter((g) => g.saved_cents < g.target_cents)
   const reachedGoals = goals.filter((g) => g.saved_cents >= g.target_cents)
+  const showGeneral = hasSavings || general.saved_cents !== 0
   // Always the fresh copy after a change
   const openGoal = openId === undefined ? null : openId === null ? general : goals.find((g) => g.id === openId)
 
   return (
-    <div className="space-y-4 px-4 pt-1 pb-6">
-      <TotalCard state={state} />
+    <div className="pb-6">
+      <div
+        className="-mt-[calc(3.5rem+env(safe-area-inset-top))] rounded-b-[34px] px-5 pt-[calc(3.5rem+env(safe-area-inset-top))] pb-[88px] text-white"
+        style={{ background: HERO }}
+      >
+        <TotalHero state={state} />
+      </div>
 
-      {flow !== undefined && <SavingsChart flow={flow} />}
+      <section className="relative z-10 -mt-[72px] px-4">
+        <SavedCard flow={flow} />
+      </section>
 
-      <div className="flex items-center justify-between px-1 pt-2">
+      <div className="flex items-center justify-between px-5 pt-6 pb-2.5">
         <h2 className="font-display text-lg font-bold">
           Goals {active.length > 0 && <span className="tabular text-base font-semibold text-muted">· {active.length}</span>}
         </h2>
-        <button onClick={() => setEditing('new')} className="flex items-center gap-1 rounded-full bg-cobalt py-1.5 pr-3.5 pl-2.5 text-sm font-semibold text-white active:bg-cobalt-deep">
+        <button
+          onClick={() => setEditing('new')}
+          className="flex items-center gap-1 rounded-full bg-cobalt py-1.5 pr-3.5 pl-2.5 text-sm font-semibold text-white active:bg-cobalt-deep"
+        >
           <Icon name="plus" size={16} strokeWidth={2.6} />
           New goal
         </button>
       </div>
 
-      {(hasSavings || general.saved_cents !== 0) && <GeneralCard general={general} onOpen={() => setOpenId(null)} />}
-
-      {goals.length === 0 ? (
-        <div className="rounded-[22px] bg-card px-5 py-8 text-center">
-          <EmptyLynx />
-          <p className="mt-2 font-display text-lg font-bold">Start your first savings goal</p>
-          <p className="mt-1 text-muted">A trip, an emergency fund, a new laptop. Set a target and move money into it.</p>
-        </div>
-      ) : active.length === 0 ? (
-        <p className="rounded-[22px] bg-card px-5 py-6 text-center text-muted">Every goal is reached. Tap New goal to start another.</p>
-      ) : (
-        <ul className="space-y-2.5">
-          {active.map((g) => (
-            <li key={g.id}>
-              <GoalCard goal={g} onOpen={() => setOpenId(g.id)} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="grid grid-cols-2 gap-2.5 px-4">
+        {showGeneral && <GeneralTile general={general} onOpen={() => setOpenId(null)} />}
+        {active.map((g) => (
+          <GoalTile key={g.id} goal={g} onOpen={() => setOpenId(g.id)} />
+        ))}
+        {active.length === 0 && <NewGoalTile first={goals.length === 0} onClick={() => setEditing('new')} />}
+      </div>
 
       {reachedGoals.length > 0 && (
-        <ul className="space-y-2">
+        <ul className="mt-3.5 space-y-2 px-4">
           {reachedGoals.map((g) => (
             <li key={g.id}>
-              <button onClick={() => setOpenId(g.id)} className="flex w-full items-center gap-3 rounded-[18px] bg-card px-3.5 py-2.5 text-left text-sm text-muted">
-                <span className="text-lg">{g.icon || DEFAULT_ICON}</span>
-                <span className="min-w-0 flex-1 truncate">
-                  <span className="font-semibold text-ink">{g.name}</span> reached · <span className="tabular">{whole(g.saved_cents)}</span>
+              <button onClick={() => setOpenId(g.id)} className="flex w-full items-center gap-2.5 rounded-[20px] bg-card px-4 py-3 text-left">
+                <span className="text-xl leading-none">{g.icon || DEFAULT_ICON}</span>
+                <span className="min-w-0 flex-1 truncate font-semibold">
+                  {g.name} <span className="font-medium text-muted">reached</span>
                 </span>
-                <span>🎉</span>
+                <b className="tabular font-display">{whole(g.saved_cents)}</b>
+                <span className="rounded-full bg-gain/12 px-2 py-0.5 text-xs font-bold text-gain">Done</span>
               </button>
             </li>
           ))}
@@ -210,156 +212,236 @@ export default function Savings() {
   )
 }
 
-// The real money in the savings accounts, split into goals and General savings.
-// The ring shows progress towards all goal targets together.
-function TotalCard({ state }) {
-  const { goals, general, pot } = state
-  const inGoals = goals.reduce((s, g) => s + g.saved_cents, 0)
-  const target = goals.reduce((s, g) => s + g.target_cents, 0)
-  const ratio = target ? Math.min(1, Math.max(0, inGoals / target)) : 0
-  const r = 30
+// A ring with something in the middle. `track` and `color` are stroke colours.
+function Ring({ ratio, size, stroke, color, track, children, label }) {
+  const r = (size - stroke) / 2
   const c = 2 * Math.PI * r
-  const [euros, decimals] = formatCents(pot).split(',')
+  const shown = Math.min(1, Math.max(0, ratio))
   return (
-    <section className="relative overflow-hidden rounded-[26px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep p-[18px] pb-3.5 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
-      <LynxWatermark className="-bottom-14 -left-10" />
-      <div className="relative flex items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white/80">In savings</p>
-          <p className="tabular mt-0.5 truncate font-display leading-none font-bold">
-            <span className="text-[38px] tracking-tight">{euros}</span>
-            <span className="text-lg text-white/55">,{decimals}</span>
-          </p>
-        </div>
-        {goals.length > 0 && (
-          <div className="relative grid size-[74px] shrink-0 place-items-center" aria-label={`Goals ${Math.floor(ratio * 100)}% of their targets`}>
-            <svg width="74" height="74" viewBox="0 0 74 74" className="absolute inset-0 -rotate-90" aria-hidden="true">
-              <circle cx="37" cy="37" r={r} fill="none" strokeWidth="8" stroke="rgba(255,255,255,0.18)" />
-              {ratio > 0 && (
-                <circle cx="37" cy="37" r={r} fill="none" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - ratio)} stroke="#fff" />
-              )}
-            </svg>
-            <span className="tabular relative font-display text-[15px] font-extrabold">{Math.floor(ratio * 100)}%</span>
-          </div>
+    <span className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }} aria-label={label}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 -rotate-90" aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} stroke={track} />
+        {shown > 0 && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={c * (1 - shown)}
+            stroke={color}
+          />
         )}
-      </div>
-      <div className="relative mt-3.5 grid grid-cols-2 rounded-2xl bg-white/[.12]">
-        <HeroFact icon="target" label={goals.length ? `In goals · ${goals.length}` : 'In goals'} value={whole(inGoals)} />
-        <HeroFact icon="bank" label="General savings" value={whole(general.saved_cents)} divider />
-      </div>
-    </section>
+      </svg>
+      <span className="relative">{children}</span>
+    </span>
   )
 }
 
-function HeroFact({ icon, label, value, divider }) {
+// The real money in the savings accounts; the ring shows progress towards all goal targets together.
+function TotalHero({ state }) {
+  const { goals, pot } = state
+  const inGoals = goals.reduce((s, g) => s + g.saved_cents, 0)
+  const target = goals.reduce((s, g) => s + g.target_cents, 0)
+  const ratio = target ? inGoals / target : 0
+  const pct = Math.floor(Math.min(1, ratio) * 100)
+  const [euros, decimals] = formatCents(pot).split(',')
   return (
-    <div className={`flex items-center gap-2.5 px-3 py-2.5 ${divider ? 'border-l border-white/15' : ''}`}>
-      <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-white/15">
-        <Icon name={icon} size={16} strokeWidth={2.2} />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-[11px] font-semibold text-white/70">{label}</span>
-        <span className="tabular block truncate font-display text-[15px] font-bold">{value}</span>
-      </span>
+    <div className="flex items-center gap-3.5 pt-1">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-white/75">In savings</p>
+        <p className="tabular mt-1 truncate font-display leading-none font-bold tracking-tight">
+          <span className="text-[44px]">{euros}</span>
+          <span className="text-xl text-white/50">,{decimals}</span>
+        </p>
+        {goals.length > 0 && (
+          <span className="tabular mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/12 px-2.5 py-1 text-[13px] font-semibold">
+            <Icon name="target" size={14} />
+            {whole(inGoals)} in goals
+          </span>
+        )}
+      </div>
+      {goals.length > 0 && (
+        <Ring ratio={ratio} size={104} stroke={9} color="#fff" track="rgba(255,255,255,0.14)" label={`Goals ${pct}% of their targets`}>
+          <span className="block text-center">
+            <b className="tabular block font-display text-2xl leading-none">{pct}%</b>
+            <span className="text-[11px] text-white/70">of targets</span>
+          </span>
+        </Ring>
+      )}
     </div>
   )
 }
 
-// Bar chart: net money into the savings account(s) each month
-function SavingsChart({ flow }) {
+const CARD_SHADOW = 'shadow-[0_24px_40px_-24px_rgba(11,27,69,0.6)]'
+
+// Net money into the savings accounts this month, with the last 6 months as bars (tap one to read it)
+function SavedCard({ flow }) {
   const [picked, setPicked] = useState(null)
 
-  if (!flow) {
+  if (flow === null) {
     return (
-      <section className="rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to p-5 text-sm text-muted">
-        Mark an account as <span className="font-semibold text-ink">Savings</span> in Settings → Accounts & cards to see how much goes into it
-        each month.
-      </section>
+      <div className={`rounded-[24px] bg-card p-4 text-sm text-muted ${CARD_SHADOW}`}>
+        <p className="font-display text-base font-bold text-ink">Saved this month</p>
+        <p className="mt-1">
+          Mark an account as <span className="font-semibold text-ink">Savings</span> in Profile → Accounts & cards to see how much goes into it each
+          month.
+        </p>
+      </div>
     )
   }
+  if (flow === undefined) return <div className={`h-[150px] rounded-[24px] bg-card ${CARD_SHADOW}`} />
 
   const W = 300
-  const H = 150
-  const top = 18
-  const bottom = 22
+  const H = 64 // bar area; month names go under it
   const colW = W / flow.length
-  const barW = 26
+  const barW = 24
   const max = Math.max(0, ...flow.map((d) => d.cents))
   const min = Math.min(0, ...flow.map((d) => d.cents))
   const span = max - min || 1
-  const y = (v) => top + ((max - v) / span) * (H - top - bottom)
+  const y = (v) => ((max - v) / span) * H
   const zero = y(0)
-  const net = flow.reduce((s, d) => s + d.cents, 0)
-  const label = (cents) => (cents > 0 ? '+' : '−') + Math.round(Math.abs(cents) / 100)
-  const signed = (cents) => (cents > 0 ? '+' : '') + formatCents(cents)
-  const p = picked === null ? null : flow[picked]
+  const current = flow[flow.length - 1]
+  const shown = picked === null ? current : flow[picked]
+  const full = flow.filter((d) => !d.partial)
+  const usual = full.length ? Math.round(full.reduce((s, d) => s + d.cents, 0) / full.length) : 0
+  const signed = (cents) => (cents < 0 ? '−' : cents > 0 ? '+' : '') + whole(Math.abs(cents))
+  const ahead = current.cents >= usual
 
   return (
-    <section className="rounded-[24px] bg-gradient-to-br from-tint-from to-tint-to px-4 pt-3.5 pb-3 shadow-[0_16px_30px_-22px_rgba(31,79,224,0.7)]">
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-medium text-muted">
-          <Icon name="coins" size={15} className="shrink-0 text-cobalt" />
-          Savings account · last 6 months
-        </p>
-        <span className={`tabular shrink-0 rounded-full bg-card px-2 py-0.5 text-xs font-bold ${net < 0 ? 'text-loss' : 'text-gain'}`}>{signed(net)}</span>
+    <div className={`rounded-[24px] bg-card px-4 pt-3.5 pb-2.5 ${CARD_SHADOW}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-muted">{shown === current ? 'Saved this month' : `Saved in ${longMonth(shown.key)}`}</p>
+          <p className={`tabular mt-0.5 font-display text-[26px] leading-tight font-bold ${shown.cents < 0 ? 'text-orange-text' : ''}`}>{signed(shown.cents)}</p>
+        </div>
+        {usual !== 0 && (
+          <span
+            className={`tabular mt-0.5 flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${ahead ? 'bg-gain/12 text-gain' : 'bg-warn-bg text-orange-text'}`}
+          >
+            <Icon name={ahead ? 'arrowUp' : 'arrowDown'} size={12} strokeWidth={2.8} />
+            {usual < 0 ? '−' : ''}
+            {whole(Math.abs(usual))} avg
+          </span>
+        )}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 block h-auto w-full overflow-visible" role="img" aria-label="Monthly change of your savings account">
-        <line x1="0" x2={W} y1={zero} y2={zero} strokeWidth="1" stroke="var(--color-ink)" strokeOpacity=".15" />
+      <svg viewBox={`0 0 ${W} ${H + 20}`} className="mt-2 block h-auto w-full overflow-visible" role="img" aria-label="Money into your savings each month">
+        <line x1="0" x2={W} y1={zero} y2={zero} strokeWidth="1" stroke="var(--color-ink)" strokeOpacity=".12" />
         {flow.map((d, i) => {
           const pos = d.cents >= 0
           const x = i * colW + (colW - barW) / 2
-          const h = Math.max(2, Math.abs(y(d.cents) - zero))
+          const h = d.cents === 0 ? 0 : Math.max(3, Math.abs(y(d.cents) - zero))
+          const on = shown === d
           return (
-            <g key={d.key} onClick={() => setPicked(i)} className="cursor-pointer">
-              <rect x={i * colW} y="0" width={colW} height={H} fill="transparent" />
-              <rect
-                x={x}
-                y={pos ? zero - h : zero}
-                width={barW}
-                height={h}
-                rx="7"
-                fill={pos ? '#1f4fe0' : '#f08c00'}
-                opacity={d.partial ? 0.45 : 1}
-              />
-              {/* Value labels sit above the zero line for negative months, so they never touch the month names */}
-              {d.cents !== 0 && (
-                <text
-                  x={x + barW / 2}
-                  y={(pos ? zero - h : zero) - 5}
-                  textAnchor="middle"
-                  fontSize="10.5"
-                  fontWeight="600"
-                  fill={pos ? 'var(--color-ink)' : 'var(--color-orange-text)'}
-                >
-                  {label(d.cents)}
-                </text>
+            <g key={d.key} onClick={() => setPicked(i === flow.length - 1 ? null : i)} className="cursor-pointer">
+              <rect x={i * colW} y="0" width={colW} height={H + 20} fill="transparent" />
+              {h > 0 && (
+                <rect
+                  x={x}
+                  y={pos ? zero - h : zero}
+                  width={barW}
+                  height={h}
+                  rx="7"
+                  className={pos ? 'fill-cobalt' : 'fill-orange-text'}
+                  opacity={d.partial ? 0.45 : on || picked === null ? 1 : 0.55}
+                />
               )}
-              <text
-                x={x + barW / 2}
-                y={H - 4}
-                textAnchor="middle"
-                fontSize="11"
-                fontWeight={picked === i ? '700' : '400'}
-                className={picked === i ? 'fill-ink' : 'fill-muted'}
-              >
+              <text x={x + barW / 2} y={H + 16} textAnchor="middle" fontSize="11" fontWeight={on ? '700' : '400'} className={on ? 'fill-ink' : 'fill-muted'}>
                 {shortMonth(d.key)}
               </text>
             </g>
           )
         })}
       </svg>
-      <p className="mt-1 min-h-5 text-center text-[13px] text-muted">
-        {p ? (
+    </div>
+  )
+}
+
+const longMonth = (key) => new Date(Number(key.slice(0, 4)), Number(key.slice(5)) - 1, 1).toLocaleDateString('en-GB', { month: 'long' })
+
+// "Jun ’27", short enough for a half-width tile on a small phone
+const shortMonthYear = (iso) => `${shortMonth(iso.slice(0, 7))} ’${iso.slice(2, 4)}`
+
+// Soft circle in the corner of a tile
+function Corner({ color }) {
+  return <span className="pointer-events-none absolute -top-7 -right-7 size-24 rounded-full" style={{ backgroundColor: color }} />
+}
+
+const TILE = 'relative overflow-hidden rounded-[24px] p-3.5 text-left'
+
+// A goal: ring in its colour around the emoji, %, name, money of target, then the pace
+function GoalTile({ goal, onOpen }) {
+  const color = goalColor(goal.icon)
+  const text = goalTextColor(goal.icon)
+  const pct = Math.floor((goal.saved_cents / goal.target_cents) * 100)
+  const p = pace(goal)
+  return (
+    <button onClick={onOpen} className={`${TILE} bg-card shadow-[0_14px_30px_-24px_rgba(11,27,69,0.5)]`}>
+      <Corner color={`color-mix(in srgb, ${color} 11%, transparent)`} />
+      <span className="relative flex items-start justify-between">
+        <Ring ratio={goal.saved_cents / goal.target_cents} size={46} stroke={4.5} color={color} track={`color-mix(in srgb, ${color} 16%, transparent)`}>
+          <span className="text-xl leading-none">{goal.icon || DEFAULT_ICON}</span>
+        </Ring>
+        <b className="tabular font-display text-[15px]" style={{ color: text }}>
+          {pct}%
+        </b>
+      </span>
+      <b className="relative mt-3 block truncate font-display text-[15.5px]">{goal.name}</b>
+      <b className="tabular relative mt-0.5 block font-display text-[21px] leading-tight">{whole(goal.saved_cents)}</b>
+      <span className="tabular relative block text-[12.5px] text-muted">of {whole(goal.target_cents)}</span>
+      <span
+        className={`tabular relative mt-2.5 flex items-center gap-1 text-xs font-semibold ${p?.overdue ? 'text-loss' : p ? '' : 'text-muted'}`}
+        style={p && !p.overdue ? { color: text } : undefined}
+      >
+        {p?.overdue ? (
+          'Deadline passed'
+        ) : p ? (
           <>
-            {shortMonth(p.key)}
-            {p.partial && ' (so far)'}:{' '}
-            <span className={`tabular font-semibold ${p.cents < 0 ? 'text-orange-text' : 'text-ink'}`}>{signed(p.cents)}</span>
+            <Icon name="calendar" size={13} className="shrink-0" />
+            <span className="truncate">
+              {whole(p.perMonth)}/mo · {shortMonthYear(goal.deadline)}
+            </span>
           </>
         ) : (
-          'Tap a bar for details'
+          'No deadline'
         )}
-      </p>
-    </section>
+      </span>
+    </button>
+  )
+}
+
+// Savings money that isn't in a goal: the first tile, light blue
+function GeneralTile({ general, onOpen }) {
+  return (
+    <button onClick={onOpen} className={`${TILE} bg-gradient-to-br from-tint-from to-tint-to`}>
+      <Corner color="color-mix(in srgb, var(--color-cobalt) 10%, transparent)" />
+      <span className="relative grid size-[46px] place-items-center rounded-full bg-card text-cobalt">
+        <Icon name="bank" size={20} />
+      </span>
+      <b className="relative mt-3 block truncate font-display text-[15.5px]">{general.name}</b>
+      <b className="tabular relative mt-0.5 block font-display text-[21px] leading-tight">{whole(general.saved_cents)}</b>
+      <span className="relative block text-[12.5px] text-muted">Not in a goal yet</span>
+      <span className="relative mt-2.5 flex items-center gap-0.5 text-xs font-bold text-cobalt">
+        Give it a goal
+        <Icon name="chevronRight" size={13} strokeWidth={2.6} />
+      </span>
+    </button>
+  )
+}
+
+// Shown when there's no goal in progress
+function NewGoalTile({ first, onClick }) {
+  return (
+    <button onClick={onClick} className="grid min-h-[176px] place-items-center rounded-[24px] border-2 border-dashed border-line p-3 text-center font-bold text-cobalt">
+      <span>
+        <span className="mx-auto mb-2 grid size-11 place-items-center rounded-full bg-bubble">
+          <Icon name="plus" size={20} strokeWidth={2.6} />
+        </span>
+        {first ? 'First goal' : 'New goal'}
+      </span>
+    </button>
   )
 }
 
@@ -373,54 +455,6 @@ function ProgressBar({ goal, thick = false }) {
         style={{ width: `${Math.max(pct, goal.saved_cents > 0 ? 2 : 0)}%` }}
       />
     </div>
-  )
-}
-
-function GoalCard({ goal, onOpen }) {
-  const pct = Math.floor((goal.saved_cents / goal.target_cents) * 100)
-  const p = pace(goal)
-
-  return (
-    <button onClick={onOpen} className="block w-full rounded-[22px] bg-card p-4 text-left">
-      <span className="flex items-center gap-3">
-        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cobalt/10 text-2xl">{goal.icon || DEFAULT_ICON}</span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-display text-base font-bold">{goal.name}</span>
-          <span className="tabular block truncate text-xs text-muted">
-            <span className="font-semibold text-ink">{whole(goal.saved_cents)}</span> of {whole(goal.target_cents)}
-            {goal.deadline && ` · by ${formatMonthYear(goal.deadline)}`}
-          </span>
-        </span>
-        <span className="tabular font-display text-lg font-bold text-cobalt">{pct}%</span>
-      </span>
-      <span className="mt-3 block">
-        <ProgressBar goal={goal} />
-      </span>
-      <span className="mt-2.5 flex items-center justify-between gap-2 text-xs text-muted">
-        <span className="tabular">{formatCents(goal.target_cents - goal.saved_cents).replace(/,\d\d$/, '')} to go</span>
-        {p?.overdue ? (
-          <span className="rounded-full bg-loss/10 px-2 py-0.5 font-bold text-loss">Deadline passed</span>
-        ) : p ? (
-          <span className="tabular rounded-full bg-cobalt/10 px-2 py-0.5 font-bold text-cobalt">{formatCents(p.perMonth).replace(/,\d\d$/, '')} / month</span>
-        ) : (
-          <span className="rounded-full bg-warn-bg px-2 py-0.5 font-bold text-warn">No deadline</span>
-        )}
-      </span>
-    </button>
-  )
-}
-
-// Savings money that isn't set aside for a goal. No target; tap to move it into a goal.
-function GeneralCard({ general, onOpen }) {
-  return (
-    <button onClick={onOpen} className="flex w-full items-center gap-3 rounded-[22px] bg-card p-4 text-left">
-      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cobalt/10 text-2xl">{general.icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-display text-base font-bold">{general.name}</span>
-        <span className="block truncate text-xs text-muted">Not set aside for a goal</span>
-      </span>
-      <span className="tabular font-display text-lg font-bold">{whole(general.saved_cents)}</span>
-    </button>
   )
 }
 
