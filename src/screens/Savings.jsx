@@ -148,11 +148,11 @@ export default function Savings() {
         <TotalHero state={state} />
       </div>
 
-      <section className="relative z-10 -mt-[72px] px-4">
+      <section className="relative z-10 -mt-[76px] px-4">
         <SavedCard flow={flow} />
       </section>
 
-      <div className="flex items-center justify-between px-5 pt-6 pb-2.5">
+      <div className="flex items-center justify-between px-5 pt-8 pb-3">
         <h2 className="font-display text-lg font-bold">
           Goals {active.length > 0 && <span className="tabular text-base font-semibold text-muted">· {active.length}</span>}
         </h2>
@@ -165,7 +165,7 @@ export default function Savings() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 px-4">
+      <div className="grid grid-cols-2 gap-3 px-4">
         {showGeneral && <GeneralTile general={general} onOpen={() => setOpenId(null)} />}
         {active.map((g) => (
           <GoalTile key={g.id} goal={g} onOpen={() => setOpenId(g.id)} />
@@ -174,7 +174,7 @@ export default function Savings() {
       </div>
 
       {reachedGoals.length > 0 && (
-        <ul className="mt-3.5 space-y-2 px-4">
+        <ul className="mt-4 space-y-2.5 px-4">
           {reachedGoals.map((g) => (
             <li key={g.id}>
               <button onClick={() => setOpenId(g.id)} className="flex w-full items-center gap-2.5 rounded-[20px] bg-card px-4 py-3 text-left">
@@ -247,15 +247,15 @@ function TotalHero({ state }) {
   const pct = Math.floor(Math.min(1, ratio) * 100)
   const [euros, decimals] = formatCents(pot).split(',')
   return (
-    <div className="flex items-center gap-3.5 pt-1">
+    <div className="flex min-h-[138px] items-center gap-4 pt-2">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-white/75">In savings</p>
-        <p className="tabular mt-1 truncate font-display leading-none font-bold tracking-tight">
+        <p className="tabular mt-2 truncate font-display leading-none font-bold tracking-tight">
           <span className="text-[44px]">{euros}</span>
           <span className="text-xl text-white/50">,{decimals}</span>
         </p>
         {goals.length > 0 && (
-          <span className="tabular mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/12 px-2.5 py-1 text-[13px] font-semibold">
+          <span className="tabular mt-4 inline-flex items-center gap-1.5 rounded-full bg-white/12 px-3 py-1.5 text-[13px] font-semibold">
             <Icon name="target" size={14} />
             {whole(inGoals)} in goals
           </span>
@@ -309,7 +309,7 @@ function SavedCard({ flow }) {
   const ahead = current.cents >= usual
 
   return (
-    <div className={`rounded-[24px] bg-card px-4 pt-3.5 pb-2.5 ${CARD_SHADOW}`}>
+    <div className={`rounded-[26px] bg-card px-[18px] pt-4 pb-3 ${CARD_SHADOW}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-muted">{shown === current ? 'Saved this month' : `Saved in ${longMonth(shown.key)}`}</p>
@@ -325,7 +325,7 @@ function SavedCard({ flow }) {
           </span>
         )}
       </div>
-      <svg viewBox={`0 0 ${W} ${H + 20}`} className="mt-2 block h-auto w-full overflow-visible" role="img" aria-label="Money into your savings each month">
+      <svg viewBox={`0 0 ${W} ${H + 20}`} className="mt-3 block h-auto w-full overflow-visible" role="img" aria-label="Money into your savings each month">
         <line x1="0" x2={W} y1={zero} y2={zero} strokeWidth="1" stroke="var(--color-ink)" strokeOpacity=".12" />
         {flow.map((d, i) => {
           const pos = d.cents >= 0
@@ -367,7 +367,7 @@ function Corner({ color }) {
   return <span className="pointer-events-none absolute -top-7 -right-7 size-24 rounded-full" style={{ backgroundColor: color }} />
 }
 
-const TILE = 'relative overflow-hidden rounded-[24px] p-3.5 text-left'
+const TILE = 'relative overflow-hidden rounded-[24px] p-4 text-left'
 
 // A goal: ring in its colour around the emoji, %, name, money of target, then the pace
 function GoalTile({ goal, onOpen }) {
