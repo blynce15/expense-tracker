@@ -157,6 +157,14 @@ input:autofill {
   }
 }
 
+/* A step that replaces the one before it on the same screen (Add transaction step 2) */
+@keyframes step-in {
+  from {
+    transform: translateX(36px);
+    opacity: 0;
+  }
+}
+
 /* The logo's blue gradient, for one highlighted word in big titles */
 .brand-text {
   background: linear-gradient(135deg, #2b8ef7 0%, var(--color-cobalt) 55%, var(--color-cobalt-deep) 100%);

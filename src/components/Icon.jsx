@@ -55,6 +55,9 @@ const paths = {
   layers:'M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   investOut: 'M3 7l6 6 4-4 8 8M15 17h6v-6',
+  // Money leaving (expense ↗) and arriving (income ↙), for the Add transaction type tiles
+  moneyOut: 'M7 17 17 7M9 7h8v8',
+  moneyIn: 'M17 7 7 17M15 17H7V9',
 }
 
 export default function Icon({ name, size = 24, strokeWidth = 1.8, className = '' }) {

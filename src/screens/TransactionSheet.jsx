@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AccountMark, MiniCard } from '../components/BankCard'
+import { MiniCard } from '../components/BankCard'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import GoalPicker from '../components/GoalPicker'
+import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
-import { checkOverdraft, isInvest } from '../lib/balances'
+import { checkOverdraft, fetchAccountsWithBalances, isInvest } from '../lib/balances'
 import { formatDay, monthRange, todayISO } from '../lib/dates'
 import { checkGoals, savingsEffect } from '../lib/goals'
 import { defaultAccountId, fetchLastUsedAccountId, fetchLookups, lookupCache } from '../lib/lookups'
 import { centsToPad, formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
 import { supabase } from '../lib/supabase'
 
+// The four types as tiles. color = the tile and the amount card's wash; button = Next / Save.
 const TYPES = [
-  { value: 'expense', label: 'Expense' },
-  { value: 'income', label: 'Income' },
-  { value: 'transfer', label: 'Transfer' },
-  { value: 'invest', label: 'Invest', icon: 'invest' },
+  { value: 'expense', label: 'Expense', icon: 'moneyOut', color: 'var(--color-orange-text)', button: 'var(--color-cobalt)' },
+  { value: 'income', label: 'Income', icon: 'moneyIn', color: 'var(--color-gain)', button: 'var(--color-gain)' },
+  { value: 'transfer', label: 'Transfer', icon: 'swap', color: 'var(--color-cobalt)', button: 'var(--color-cobalt)' },
+  { value: 'invest', label: 'Invest', icon: 'invest', color: 'var(--color-teal)', button: 'var(--color-teal)' },
 ]
+
+const tint = (color, pct, base = 'transparent') => `color-mix(in srgb, ${color} ${pct}%, ${base})`
+// The big buttons: a gradient in the type's colour with a soft glow
+const buttonStyle = (color) => ({
+  background: `linear-gradient(135deg, ${color}, ${tint(color, 72, '#000')})`,
+  boxShadow: `0 12px 24px -12px ${color}`,
+})
 
 // Invest has two directions: put money in ('invest', it leaves the account) or take it out ('divest', it arrives)
 const DIRECTIONS = [
@@ -88,6 +97,7 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
   const [picking, setPicking] = useState(null) // null | 'account' | 'date'
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [balances, setBalances] = useState(null) // account id → cents, shown next to the cards (a nice extra)
 
   useEffect(() => {
     Promise.all([fetchLookups(), isNew ? fetchLastUsedAccountId() : null])
@@ -100,6 +110,9 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
     // Suggestions are a nice extra; the screen works without them
     fetchNameHistory()
       .then(setHistory)
+      .catch(() => {})
+    fetchAccountsWithBalances()
+      .then((list) => setBalances(new Map(list.map((a) => [a.id, a.balance_cents]))))
       .catch(() => {})
   }, [isNew])
 
@@ -262,6 +275,40 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
     savingsEffect(lookups.accounts, { type: rowType, amount_cents: 1, account_id: accountId, to_account_id: type === 'transfer' ? toAccountId : null }),
   )
 
+  const T = TYPES.find((t) => t.value === type)
+  const fromWord = (investing && direction === 'out') || type === 'income' ? 'Into' : 'From'
+  const amountText = `${sign}${formatCents(parseToCents(amount) ?? 0)}`
+  const toAccount = type === 'transfer' ? accountById(toAccountId) : null
+  const pickedCategory = type === 'transfer' || investing ? null : categories.find((c) => c.id === highlighted)
+  const otherAccounts = accounts.filter((a) => a.id !== accountId && (!a.archived || a.id === toAccountId))
+
+  // Step 2's preview: the row as it will look in Transactions
+  const previewLine =
+    type === 'transfer'
+      ? toAccount
+        ? `${account?.name} → ${toAccount.name}`
+        : `From ${account?.name}`
+      : investing
+        ? direction === 'out'
+          ? `Taken out · to ${account?.name}`
+          : `Invested · ${account?.name}`
+        : `${pickedCategory?.name ?? 'No category yet'} · ${account?.name}`
+  const previewColor = type === 'transfer' ? 'var(--color-cobalt)' : investing ? 'var(--color-teal)' : (pickedCategory?.color ?? '#868e96')
+  const previewGlyph =
+    type === 'transfer' ? (
+      <Icon name="swap" size={22} strokeWidth={2.2} />
+    ) : investing ? (
+      <Icon name={direction === 'out' ? 'investOut' : 'invest'} size={22} strokeWidth={2.2} />
+    ) : pickedCategory ? (
+      pickedCategory.icon
+    ) : name.trim() ? (
+      <span className="font-display font-extrabold">{name.trim()[0].toUpperCase()}</span>
+    ) : (
+      <Icon name="pencil" size={20} strokeWidth={2} />
+    )
+  const placeholder = investing ? 'Investing' : type === 'income' ? 'Salary' : type === 'transfer' ? 'To savings' : 'Pingo Doce'
+  const label = 'px-1 pb-2 text-xs font-bold tracking-[0.07em] text-muted uppercase'
+
   return (
     <div
       className="fixed inset-0 z-50 flex justify-center bg-paper motion-safe:animate-[sheet-up_220ms_ease-out]"
@@ -269,151 +316,183 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
       aria-modal="true"
       aria-label={title}
     >
-      <div className="relative flex h-full w-full max-w-lg flex-col px-4 pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+12px)]">
-        {/* Step 1: amount */}
-        <div className="flex h-14 shrink-0 items-center">
-          <button onClick={onClose} className="grid size-11 place-items-center rounded-full text-muted" aria-label="Close">
-            <Icon name="close" />
-          </button>
-          <div className="flex flex-1 justify-center gap-1.5" aria-hidden="true">
-            <span className="h-1 w-6 rounded-full bg-cobalt" />
-            <span className={`h-1 w-6 rounded-full ${step === 2 ? 'bg-cobalt' : 'bg-line'}`} />
-          </div>
-          <span className="w-11" />
-        </div>
-
-        <div className="flex justify-center">
-          <div className="flex rounded-full bg-line/70 p-1">
-            {TYPES.map((t) => (
-              <button
-                key={t.value}
-                onClick={() => changeType(t.value)}
-                aria-pressed={type === t.value}
-                className={`flex items-center gap-1 rounded-full px-3.5 py-2 text-sm font-semibold ${
-                  type === t.value ? (t.value === 'invest' ? 'bg-teal text-white' : 'bg-ink text-paper') : 'text-muted'
-                }`}
-              >
-                {t.icon && <Icon name={t.icon} size={15} strokeWidth={2.4} />}
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className={`flex min-h-0 flex-1 flex-col items-center justify-center ${investing ? 'gap-7' : 'gap-11'}`}>
-          <p
-            className={`tabular text-center font-display text-[64px] leading-none font-extrabold tracking-tight ${
-              !amount ? 'text-muted/40' : investing ? 'text-teal' : 'text-ink'
-            }`}
-            aria-live="polite"
-          >
-            <span className="mr-1 align-[0.55em] text-[28px] font-bold text-muted">€</span>
-            {formatTyping(amount)}
-          </p>
-          {investing && (
-            <div className="flex gap-0.5 rounded-[14px] bg-teal/12 p-[3px]" role="radiogroup" aria-label="Direction">
-              {DIRECTIONS.map((d) => (
-                <button
-                  key={d.value}
-                  role="radio"
-                  aria-checked={direction === d.value}
-                  onClick={() => setDirection(d.value)}
-                  className={`flex items-center gap-1.5 rounded-[11px] px-3.5 py-[7px] text-[13.5px] font-bold ${
-                    direction === d.value ? 'bg-card text-teal shadow-[0_2px_8px_-4px_rgba(11,27,69,0.3)]' : 'text-teal/70'
-                  }`}
-                >
-                  <Icon name={d.icon} size={15} strokeWidth={2.4} />
-                  {d.label}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center rounded-full bg-card text-sm text-muted">
-            <button onClick={() => setPicking('account')} className="flex h-10 items-center gap-1.5 pr-1.5 pl-4">
-              <AccountMark account={account} className="size-2.5 rounded-sm" logoClass="size-[18px]" />
-              {investing && direction === 'out' ? 'Into' : 'From'} <span className="font-semibold text-ink">{account?.name ?? 'Account'}</span>
-            </button>
-            <span aria-hidden="true">·</span>
-            <button onClick={() => setPicking('date')} className="flex h-10 items-center gap-1 pr-3.5 pl-1.5">
-              <span className="font-semibold text-ink">{dayLabel}</span>
-              <Icon name="chevronDown" size={16} />
-            </button>
-          </div>
-        </div>
-
-        <div className="grid shrink-0 grid-cols-3 gap-1.5">
-          {PAD_KEYS.map((k) => (
-            <button
-              key={k}
-              onClick={() => setAmount((a) => pressKey(a, k))}
-              className={`grid h-14 place-items-center rounded-2xl font-display text-[26px] font-semibold active:bg-line ${
-                k === '.' || k === 'back' ? '' : 'bg-card'
-              }`}
-              aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
-            >
-              {k === 'back' ? <Icon name="backspace" size={26} /> : k === '.' ? ',' : k}
-            </button>
-          ))}
-        </div>
-
-        {step === 1 && error && <p className="pt-2 text-center text-sm text-loss">{error}</p>}
-
-        <button
-          onClick={next}
-          className={`mt-3 flex w-full shrink-0 items-center justify-center gap-1 rounded-2xl py-4 text-base font-semibold text-white ${
-            investing ? 'bg-teal active:opacity-85' : 'bg-cobalt active:bg-cobalt-deep'
-          }`}
-        >
-          {investing ? 'Next' : type === 'transfer' ? 'Next: to which account' : 'Next: name and category'}
-          <Icon name="chevronRight" size={18} strokeWidth={2.4} />
-        </button>
-
-        {/* Step 2: name + category, then Save */}
-        {step === 2 && (
+      <div className="relative flex h-full w-full max-w-lg flex-col pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+12px)]">
+        {step === 1 ? (
           <>
-            <div className="absolute inset-0 bg-navy/50" onClick={() => setStep(1)} />
-            <div className="absolute inset-x-0 bottom-0 flex max-h-[88%] flex-col rounded-t-3xl bg-paper pb-[env(safe-area-inset-bottom)] motion-safe:animate-[sheet-up_200ms_ease-out]">
-              <div className="flex items-center px-3 pt-3">
-                <button onClick={() => setStep(1)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back to amount">
-                  <Icon name="chevronLeft" />
+            {/* Step 1: type, the amount on its card with the card and date under it, number pad */}
+            <div className="flex h-14 shrink-0 items-center px-3.5">
+              <button onClick={onClose} className="grid size-10 place-items-center rounded-full bg-card text-muted" aria-label="Close">
+                <Icon name="close" size={20} />
+              </button>
+              <h2 className="flex-1 text-center font-display text-[17px] font-bold">{title}</h2>
+              <span className="w-10" />
+            </div>
+
+            <div className="grid shrink-0 grid-cols-4 gap-2 px-4" role="radiogroup" aria-label="Type">
+              {TYPES.map((t) => {
+                const on = type === t.value
+                return (
+                  <button
+                    key={t.value}
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => changeType(t.value)}
+                    className="flex flex-col items-center gap-1.5 rounded-[18px] pt-2.5 pb-2 transition-colors"
+                    style={{ background: on ? tint(t.color, 10, 'var(--color-card)') : 'var(--color-card)', boxShadow: on ? `inset 0 0 0 2px ${t.color}` : undefined }}
+                  >
+                    <span
+                      className="grid size-8 place-items-center rounded-full"
+                      style={{ background: on ? t.color : tint(t.color, 14), color: on ? '#fff' : t.color }}
+                    >
+                      <Icon name={t.icon} size={16} strokeWidth={2.4} />
+                    </span>
+                    <span className="text-[12.5px] font-bold" style={{ color: on ? t.color : 'var(--color-muted)' }}>
+                      {t.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="relative mx-4 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[28px] bg-card">
+              <span
+                className="pointer-events-none absolute -top-16 -right-12 size-[190px] rounded-full transition-colors"
+                style={{ background: tint(T.color, 12) }}
+              />
+              <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+                <span className="text-xs font-bold tracking-[0.07em] uppercase" style={{ color: T.color }}>
+                  {investing ? (direction === 'out' ? 'Take out' : 'Put in') : T.label}
+                </span>
+                <p
+                  className={`tabular font-display leading-[1.1] font-extrabold tracking-tight ${!amount ? 'text-muted/40' : ''} ${
+                    // Long amounts get smaller so €9.999.999,99 still fits a small phone
+                    formatTyping(amount).length > 9 ? 'text-[42px]' : formatTyping(amount).length > 6 ? 'text-[52px]' : 'text-[62px]'
+                  }`}
+                  aria-live="polite"
+                >
+                  <span className="mr-1 align-[0.95em] text-[28px] text-muted">{amount ? sign : ''}€</span>
+                  {formatTyping(amount)}
+                </p>
+                {investing && (
+                  <div className="mt-3 flex gap-0.5 rounded-[14px] p-[3px]" style={{ background: tint('var(--color-teal)', 12) }} role="radiogroup" aria-label="Direction">
+                    {DIRECTIONS.map((d) => (
+                      <button
+                        key={d.value}
+                        role="radio"
+                        aria-checked={direction === d.value}
+                        onClick={() => setDirection(d.value)}
+                        className={`flex items-center gap-1.5 rounded-[11px] px-3.5 py-[7px] text-[13.5px] font-bold text-teal ${
+                          direction === d.value ? 'bg-card shadow-[0_2px_8px_-4px_rgba(11,27,69,0.3)]' : 'opacity-70'
+                        }`}
+                      >
+                        <Icon name={d.icon} size={15} strokeWidth={2.4} />
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="relative grid shrink-0 grid-cols-[1.3fr_1fr] border-t border-line">
+                <button onClick={() => setPicking('account')} className="flex min-w-0 items-center gap-2.5 border-r border-line px-4 py-3 text-left">
+                  {account && <MiniCard color={account.color} name={account.name} className="h-5 w-[30px] rounded-[5px]" />}
+                  <span className="min-w-0">
+                    <span className="block text-[11.5px] font-semibold text-muted">{fromWord}</span>
+                    <span className="block truncate text-[14.5px] font-bold">{account?.name ?? 'Account'}</span>
+                  </span>
                 </button>
-                <div className="flex-1 text-center">
-                  <p className={`text-xs font-semibold tracking-[0.1em] uppercase ${investing ? 'text-teal' : 'text-muted'}`}>
-                    {investing ? `Invest · ${direction === 'out' ? 'Take out' : 'Put in'}` : type}
-                  </p>
-                  <p className="tabular font-display text-3xl font-extrabold tracking-tight">
-                    {sign}
-                    {formatCents(parseToCents(amount))}
-                  </p>
-                  <p className="text-sm text-muted">
-                    {account?.name} · {dayLabel}
-                  </p>
-                </div>
-                <span className="w-11" />
+                <button onClick={() => setPicking('date')} className="flex min-w-0 items-center gap-2.5 px-4 py-3 text-left">
+                  <span className="grid size-[30px] shrink-0 place-items-center rounded-[10px] bg-bubble text-cobalt">
+                    <Icon name="calendar" size={16} strokeWidth={2} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[11.5px] font-semibold text-muted">Date</span>
+                    <span className="block truncate text-[14.5px] font-bold">{dayLabel}</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="shrink-0 px-4 pt-3">
+              <div className="grid grid-cols-3 gap-[7px]">
+                {PAD_KEYS.map((k) => (
+                  <button
+                    key={k}
+                    onClick={() => setAmount((a) => pressKey(a, k))}
+                    className={`grid h-[clamp(42px,6.2dvh,52px)] place-items-center rounded-2xl font-display text-[25px] font-semibold active:bg-line ${
+                      k === '.' || k === 'back' ? '' : 'bg-card'
+                    }`}
+                    aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
+                  >
+                    {k === 'back' ? <Icon name="backspace" size={25} /> : k === '.' ? ',' : k}
+                  </button>
+                ))}
+              </div>
+              {error && <p className="pt-2 text-center text-sm font-semibold text-loss">{error}</p>}
+              <button
+                onClick={next}
+                className="mt-2.5 flex w-full items-center justify-center gap-1 rounded-[18px] py-4 text-base font-semibold text-white active:opacity-90"
+                style={buttonStyle(T.button)}
+              >
+                Next
+                <Icon name="chevronRight" size={18} strokeWidth={2.4} />
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Step 2: a preview of the row, the name, then category / to card / goal, and Save */}
+            <div className="flex h-14 shrink-0 items-center px-3.5">
+              <button onClick={() => setStep(1)} className="grid size-10 place-items-center rounded-full bg-card text-ink" aria-label="Back to amount">
+                <Icon name="chevronLeft" size={20} />
+              </button>
+              <h2 className="flex-1 text-center font-display text-[17px] font-bold">
+                {T.label} · {dayLabel}
+              </h2>
+              <span className="w-10" />
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-3 motion-safe:animate-[step-in_240ms_ease-out]">
+              <div className="relative flex items-center gap-3 overflow-hidden rounded-[22px] bg-card p-3.5 shadow-[0_14px_30px_-24px_rgba(11,27,69,0.6)]">
+                <span className="pointer-events-none absolute -top-10 -right-8 size-[120px] rounded-full" style={{ background: tint(previewColor, 12) }} />
+                <MerchantIcon
+                  name={type === 'transfer' || investing ? '' : name}
+                  className="relative size-12 rounded-[15px] text-[23px]"
+                  style={{ background: tint(previewColor, 18), color: previewColor }}
+                >
+                  {previewGlyph}
+                </MerchantIcon>
+                <span className="relative min-w-0 flex-1">
+                  <span className={`block truncate text-[16.5px] font-bold ${name.trim() ? '' : 'text-muted/60'}`}>{name.trim() || placeholder}</span>
+                  <span className="block truncate text-[13px] text-muted">{previewLine}</span>
+                </span>
+                <span className={`tabular relative font-display text-[19px] font-extrabold ${type === 'income' ? 'text-gain' : investing ? 'text-teal' : ''}`}>
+                  {amountText}
+                </span>
               </div>
 
-              <div className="space-y-4 overflow-y-auto px-4 pt-4 pb-5">
-                <label className="block rounded-2xl border-[1.5px] border-line bg-card px-4 py-2 focus-within:border-cobalt">
-                  <span className="block text-xs font-medium text-muted">Name (optional)</span>
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={investing ? 'Investing' : type === 'income' ? 'Salary' : type === 'transfer' ? 'To savings' : 'Pingo Doce'}
-                    autoComplete="off"
-                    enterKeyHint="done"
-                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                    className="w-full bg-transparent font-display text-xl font-bold outline-none placeholder:font-semibold placeholder:text-muted/40"
-                  />
-                </label>
+              <h3 className={`${label} pt-[18px]`}>Name</h3>
+              <label className="flex items-center gap-2.5 rounded-[18px] bg-card px-4 py-3.5 text-muted">
+                <Icon name="pencil" size={18} strokeWidth={2} />
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={`${placeholder} (optional)`}
+                  autoComplete="off"
+                  enterKeyHint="done"
+                  onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  className="w-full bg-transparent text-[16.5px] font-semibold text-ink outline-none placeholder:font-medium placeholder:text-muted/55"
+                />
+              </label>
 
+              <div className="space-y-4 pt-[18px]">
                 {investing ? (
-                  <div className="flex items-center gap-3 rounded-2xl bg-teal/12 px-3.5 py-3">
-                    <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-card text-teal">
-                      <Icon name={direction === 'out' ? 'investOut' : 'invest'} size={19} strokeWidth={2.4} />
+                  <div className="flex items-center gap-3 rounded-[18px] px-3.5 py-3.5" style={{ background: tint('var(--color-teal)', 13) }}>
+                    <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-card text-teal">
+                      <Icon name={direction === 'out' ? 'investOut' : 'invest'} size={20} strokeWidth={2.4} />
                     </span>
                     <span className="min-w-0 flex-1 text-[13.5px] text-muted">
                       {investedAfter !== null && thisMonth && (
-                        <b className="tabular block text-[14.5px] text-teal">
+                        <b className="tabular block text-[15px] text-teal">
                           {investedAfter >= 0
                             ? `${formatCents(investedAfter).replace(/,00$/, '')} put in this month`
                             : `${formatCents(-investedAfter).replace(/,00$/, '')} taken out this month`}
@@ -422,85 +501,113 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                       Not counted as spending
                     </span>
                   </div>
-                ) : (
-                <>
-                <div className="flex items-baseline justify-between px-1">
-                  <h3 className="font-display text-base font-bold">{type === 'transfer' ? 'To account' : 'Category'}</h3>
-                  <span className="text-xs text-muted">
-                    {type !== 'transfer' && suggested && !categoryId ? 'Suggested from the name' : ''}
-                  </span>
-                </div>
-
-                {type === 'transfer' && accounts.filter((a) => a.id !== accountId && !a.archived).length === 0 ? (
-                  <p className="rounded-2xl bg-card px-4 py-5 text-center text-sm text-muted">
-                    Add a second account in Settings → Accounts & cards to move money between them.
-                  </p>
                 ) : type === 'transfer' ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {accounts
-                      .filter((a) => a.id !== accountId && (!a.archived || a.id === toAccountId))
-                      .map((a) => (
-                        <button
-                          key={a.id}
-                          onClick={() => {
-                            setToAccountId(a.id)
-                            setError(null)
-                          }}
-                          aria-pressed={highlighted === a.id}
-                          className={`flex items-center gap-2.5 rounded-2xl border-[1.5px] px-3 py-3.5 text-left ${
-                            highlighted === a.id ? 'border-cobalt bg-cobalt/10' : 'border-transparent bg-card'
-                          }`}
-                        >
-                          <MiniCard color={a.color} name={a.name} className="h-5 w-7 rounded" />
-                          <span className="truncate text-sm font-semibold">{a.name}</span>
-                        </button>
-                      ))}
+                  <div>
+                    <h3 className={label}>To card</h3>
+                    {otherAccounts.filter((a) => !a.archived).length === 0 ? (
+                      <p className="rounded-[18px] bg-card px-4 py-5 text-center text-sm text-muted">
+                        Add a second account in Profile → Accounts & cards to move money between them.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        {otherAccounts.map((a) => {
+                          const on = highlighted === a.id
+                          return (
+                            <button
+                              key={a.id}
+                              onClick={() => {
+                                setToAccountId(a.id)
+                                setError(null)
+                              }}
+                              aria-pressed={on}
+                              className="flex min-w-0 items-center gap-2.5 rounded-2xl px-3 py-[11px] text-left transition-colors"
+                              style={{
+                                background: on ? tint(a.color, 12, 'var(--color-card)') : 'var(--color-card)',
+                                boxShadow: on ? `inset 0 0 0 2px ${a.color}` : undefined,
+                              }}
+                            >
+                              <MiniCard color={a.color} name={a.name} className="h-[22px] w-8 rounded-[5px]" />
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-bold">{a.name}</span>
+                                {balances?.has(a.id) && <span className="tabular block text-xs text-muted">{formatCents(balances.get(a.id))}</span>}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  <div className="grid grid-cols-4 gap-2">
-                    {categories.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => {
-                          setCategoryId(c.id)
-                          setError(null)
-                        }}
-                        aria-pressed={highlighted === c.id}
-                        className={`flex flex-col items-center gap-1.5 rounded-2xl border-[1.5px] px-1 pt-2.5 pb-2 ${
-                          highlighted === c.id ? 'border-cobalt bg-cobalt/10' : 'border-transparent bg-card'
-                        }`}
-                      >
-                        <span className="grid size-10 place-items-center rounded-full text-xl" style={{ backgroundColor: `${c.color}26` }}>
-                          {c.icon}
+                  <div>
+                    <div className="flex items-baseline justify-between">
+                      <h3 className={label}>Category</h3>
+                      {suggested && !categoryId && (
+                        <span className="flex items-center gap-1 pr-1 text-xs font-semibold text-violet">
+                          <Icon name="sparkles" size={13} strokeWidth={2} />
+                          Suggested from the name
                         </span>
-                        <span className="w-full truncate text-center text-[11px] font-semibold">{c.name}</span>
-                      </button>
-                    ))}
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {categories.map((c) => {
+                        const on = highlighted === c.id
+                        return (
+                          <button
+                            key={c.id}
+                            onClick={() => {
+                              setCategoryId(c.id)
+                              setError(null)
+                            }}
+                            aria-pressed={on}
+                            className="relative flex flex-col items-center gap-[7px] rounded-[18px] px-1 pt-3 pb-2.5 transition-colors"
+                            style={{
+                              background: on ? tint(c.color, 15, 'var(--color-card)') : 'var(--color-card)',
+                              boxShadow: on ? `inset 0 0 0 2px ${c.color}` : undefined,
+                            }}
+                          >
+                            <span
+                              className="grid size-11 place-items-center rounded-full text-[22px] transition-colors"
+                              style={{ background: on ? c.color : tint(c.color, 16) }}
+                            >
+                              {c.icon}
+                            </span>
+                            <span
+                              className={`w-full truncate text-center text-xs ${on ? 'font-bold' : 'font-semibold'}`}
+                              style={on ? { color: tint(c.color, 70, 'var(--color-ink)') } : undefined}
+                            >
+                              {c.name}
+                            </span>
+                            {on && (
+                              <span className="absolute top-1.5 right-1.5 grid size-[18px] place-items-center rounded-full text-white" style={{ background: c.color }}>
+                                <Icon name={categoryId ? 'check' : 'sparkles'} size={11} strokeWidth={categoryId ? 3.4 : 2.4} />
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 )}
-                </>
-                )}
 
-                {goalDirection !== 0 && (
-                  <GoalPicker goals={lookups.goals ?? []} value={goalId} onChange={setGoalId} direction={goalDirection} />
-                )}
-
-                {error && <p className="text-center text-sm text-loss">{error}</p>}
-
-                <button
-                  onClick={save}
-                  disabled={busy}
-                  className={`w-full rounded-2xl py-4 text-base font-semibold text-white ${investing ? 'bg-teal active:opacity-85' : 'bg-cobalt active:bg-cobalt-deep'}`}
-                >
-                  Save
-                </button>
-
-                {!isNew && (
-                  <button onClick={remove} disabled={busy} className="w-full py-2 text-base font-medium text-loss">
-                    Delete transaction
-                  </button>
-                )}
+                {goalDirection !== 0 && <GoalPicker goals={lookups.goals ?? []} value={goalId} onChange={setGoalId} direction={goalDirection} />}
               </div>
+            </div>
+
+            <div className="shrink-0 px-4 pt-2">
+              {error && <p className="pb-2.5 text-center text-sm font-semibold text-loss">{error}</p>}
+              <button
+                onClick={save}
+                disabled={busy}
+                className="w-full rounded-[18px] py-4 text-base font-semibold text-white active:opacity-90 disabled:opacity-60"
+                style={buttonStyle(T.button)}
+              >
+                Save
+              </button>
+              {!isNew && (
+                <button onClick={remove} disabled={busy} className="w-full pt-3 pb-1 text-base font-semibold text-loss">
+                  Delete transaction
+                </button>
+              )}
             </div>
           </>
         )}
@@ -520,8 +627,8 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
       )}
 
       {picking === 'account' && (
-        <Sheet title={type === 'transfer' ? 'From account' : investing && direction === 'out' ? 'Into account' : 'Account'} onClose={() => setPicking(null)} tall>
-          <ul className="overflow-hidden rounded-2xl bg-card">
+        <Sheet title={fromWord === 'Into' ? 'Into which card' : 'From which card'} onClose={() => setPicking(null)}>
+          <ul className="overflow-hidden rounded-[20px] bg-card">
             {accounts.map((a) => (
               <li key={a.id} className="border-b border-line last:border-0">
                 <button
@@ -529,18 +636,24 @@ export default function TransactionSheet({ transaction, onClose, onSaved }) {
                     setAccountId(a.id)
                     setPicking(null)
                   }}
-                  className="flex w-full items-center gap-3 px-4 py-4 text-left"
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
                 >
-                  <MiniCard color={a.color} name={a.name} className="h-6 w-9 rounded" />
-                  <span className="flex-1 text-base font-medium">{a.name}</span>
-                  {a.id === accountId && <span className="text-sm font-semibold text-cobalt">Selected</span>}
+                  <MiniCard color={a.color} name={a.name} className="h-6 w-9 rounded-md" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-base font-semibold">{a.name}</span>
+                    {balances?.has(a.id) && <span className="tabular block text-[13px] text-muted">{formatCents(balances.get(a.id))}</span>}
+                  </span>
+                  {a.id === accountId && (
+                    <span className="text-cobalt">
+                      <Icon name="check" size={20} strokeWidth={2.6} />
+                    </span>
+                  )}
                 </button>
               </li>
             ))}
           </ul>
         </Sheet>
       )}
-
     </div>
   )
 }
