@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BigAmount, NavyPeriodBar, NavyPill, NavyTop, Overlap, pct, Section, usePeriod, useWorthExtras, whole, WORTH_PARTS } from '../components/AnalyticsKit'
-import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, prevLabel, verdictOf } from '../lib/analytics'
+import { cachedAnalytics, creepOf, fetchAnalytics, monthShort, periodLabel, prevLabel, verdictOf } from '../lib/analytics'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { netWorthOf } from '../lib/networth'
 import { navigate } from '../lib/useRoute'
@@ -54,7 +54,7 @@ export default function AnalyticsTrends() {
             <InOut a={a} />
           </Section>
           <Section n={2} title="Is spending creeping up?">
-            <Creep full={full} />
+            <Creep a={a} />
           </Section>
           <Section n={3} title="Which categories are changing">
             <Changing a={a} category={category} />
@@ -325,14 +325,10 @@ function InOut({ a }) {
 // ---------- 3 · Is spending creeping up ----------
 // Monthly spending (full months with activity) with a straight trend line through them; headline from the
 // last 6 months against the 6 before (or 3 vs 3 when there's less history).
-function Creep({ full }) {
-  if (full.length < 4) return <Empty>A few more months of history are needed to see a trend.</Empty>
-  const half = Math.min(6, Math.floor(full.length / 2))
-  const avg = (list) => list.reduce((s, t) => s + t.spent, 0) / list.length
-  const recent = avg(full.slice(-half))
-  const before = avg(full.slice(-2 * half, -half))
-  const diff = Math.round(recent - before)
-  const rise = before ? recent / before - 1 : 0
+function Creep({ a }) {
+  const c = creepOf(a)
+  if (!c) return <Empty>A few more months of history are needed to see a trend.</Empty>
+  const { full, half, recent, before, diff, rise } = c
   const headline = rise >= 0.05 ? 'Spending is creeping up' : rise <= -0.05 ? 'Spending is coming down' : 'Spending is steady'
   const tone = rise >= 0.05 ? 'bg-warn-bg text-orange-text' : rise <= -0.05 ? 'bg-gain/12 text-gain' : 'bg-line/70 text-muted'
 
