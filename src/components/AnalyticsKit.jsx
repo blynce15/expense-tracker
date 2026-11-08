@@ -70,11 +70,12 @@ export function PeriodBar({ period, onChange }) {
 export const HERO = 'radial-gradient(120% 90% at 85% 0%, #22408f 0%, #0b1b45 55%, #070d24 100%)'
 
 // The navy top: reaches up behind the top bar (the route sets navy: true); a white card overlaps its bottom edge
-export function NavyTop({ children, className = '' }) {
+// (`background` swaps the navy for another colour, e.g. Recurring's violet)
+export function NavyTop({ children, className = '', background = HERO }) {
   return (
     <div
       className={`-mt-[calc(3.5rem+env(safe-area-inset-top))] rounded-b-[34px] px-5 pt-[calc(3.5rem+env(safe-area-inset-top))] pb-[92px] text-white ${className}`}
-      style={{ background: HERO }}
+      style={{ background }}
     >
       {children}
     </div>

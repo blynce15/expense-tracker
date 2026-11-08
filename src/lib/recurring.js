@@ -77,3 +77,26 @@ export async function recordPayment(p, { amountCents, accountId, goalId = null }
   })
   if (rpcError) throw rpcError
 }
+
+// The days of month `key` ('2026-11') a recurring entry falls on, for the Analytics calendar.
+// Weekly: every 7 days in step with next_due. Due this month: its due date. Otherwise monthly: the start date's day (the 31st becomes the month's last day).
+// Yearly: that day, only in the start date's month. Nothing before the start date.
+export function dueDaysInMonth(p, key) {
+  const [y, m] = key.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  const start = p.start_date || p.next_due
+  if (!start || start.slice(0, 7) > key) return []
+  const startDay = Number(start.slice(8, 10))
+  const fromDay = start.slice(0, 7) === key ? startDay : 1
+  if (p.frequency === 'weekly') {
+    const [ny, nm, nd] = p.next_due.split('-').map(Number)
+    const base = Date.UTC(ny, nm - 1, nd)
+    const days = []
+    for (let d = fromDay; d <= last; d++) if (((((Date.UTC(y, m - 1, d) - base) / 86400000) % 7) + 7) % 7 === 0) days.push(d)
+    return days
+  }
+  // Due this month: its actual due date
+  if (p.next_due?.slice(0, 7) === key) return [Number(p.next_due.slice(8, 10))]
+  if (p.frequency === 'yearly' && Number(start.slice(5, 7)) !== m) return []
+  return [Math.min(startDay, last)]
+}

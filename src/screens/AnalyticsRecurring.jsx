@@ -4,22 +4,18 @@ import MerchantIcon from '../components/MerchantIcon'
 import { cachedAnalytics, currentPeriod, fetchAnalytics, monthShort } from '../lib/analytics'
 import { todayISO } from '../lib/dates'
 import { formatCents } from '../lib/money'
-import { monthlyCents } from '../lib/recurring'
+import { daysUntil, dueDaysInMonth, monthlyCents } from '../lib/recurring'
 import { navigate } from '../lib/useRoute'
-import { dueText } from './Recurring'
 
 const VIOLET = '#7c4dff'
-const PER = { weekly: 'a week', monthly: 'a month', yearly: 'a year' }
-// Days from `iso` to the end of its month, counting both (e.g. 25 Nov → 6)
-const daysInMonthLeft = (iso) => {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(y, m, 0).getDate() - d + 1
-}
+// The Recurring card's violet (Analytics → Explore), as the top of this page
+const VIOLET_TOP = 'radial-gradient(120% 90% at 85% 0%, #a58bff 0%, #6d3ff0 45%, #3a1aa8 100%)'
 const card = 'rounded-[24px] bg-card shadow-[0_14px_30px_-24px_rgba(11,27,69,0.45)]'
 
-// Analytics → Recurring: what your recurring payments cost (a month, a year, share of income), what's coming up,
-// everything you pay by size, what changed in the last 12 months, and what you paid on them each month.
-// Always today (no Month/Year): the payments as they are now.
+// Analytics → Recurring (owner chose "A · Donut + tiles" with the calendar on the edge, violet like its card, and
+// "W1 · Change cards", .harness/analytics-v5c-recurring.html): what your recurring payments cost (a month, a year,
+// share of income, a donut of what you pay), this month as a calendar with the next payment, everything you pay as
+// logo tiles, what changed in the last 12 months, and what you paid on them each month. Always today: no Month/Year.
 export default function AnalyticsRecurring() {
   const [period] = useState(() => currentPeriod('month'))
   const [data, setData] = useState(() => cachedAnalytics(period))
@@ -35,30 +31,17 @@ export default function AnalyticsRecurring() {
     }
   }, [period])
 
-  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your recurring payments: {error}</p>
+  if (error) return <p className="px-5 pt-6 text-loss">Couldn&apos;t load your recurring payments: {error}</p>
   const a = data && data.period === period ? data : null
   const pay = a ? (a.recurring ?? []).filter((r) => r.active && r.type !== 'income').sort((x, y) => monthlyCents(y) - monthlyCents(x)) : []
 
   return (
     <div className="pb-6">
-      <NavyTop>
-        {a ? (
-          <>
-            <BigAmount cents={a.recurringMonthly} label="Per month" />
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              <NavyPill>{whole(a.recurringMonthly * 12)} a year</NavyPill>
-              <NavyPill>{pay.length} active</NavyPill>
-              {a.avgIn > 0 && a.recurringMonthly > 0 && <NavyPill>{pct(a.recurringMonthly / a.avgIn)} of income</NavyPill>}
-            </div>
-          </>
-        ) : (
-          <div className="h-[92px]" />
-        )}
-      </NavyTop>
+      <NavyTop background={VIOLET_TOP}>{a ? <Top a={a} pay={pay} /> : <div className="h-[116px]" />}</NavyTop>
       {a && (
         <>
           <Overlap>
-            <ComingUp pay={pay} />
+            <Calendar pay={pay} />
           </Overlap>
           {pay.length > 0 && (
             <Section n={1} title="Everything you pay" right="per month">
@@ -77,114 +60,245 @@ export default function AnalyticsRecurring() {
   )
 }
 
-function Row({ r, sub, right, children }) {
+// ---------- The violet top: cost a month, a year, share of income, and a donut of what you pay ----------
+const WHITES = ['#fff', 'rgba(255,255,255,.78)', 'rgba(255,255,255,.6)', 'rgba(255,255,255,.46)', 'rgba(255,255,255,.34)', 'rgba(255,255,255,.24)']
+
+function Top({ a, pay }) {
+  const size = 112
+  const r = 46
+  const C = 2 * Math.PI * r
+  const total = pay.reduce((s, p) => s + monthlyCents(p), 0)
+  // The 5 biggest, then the rest together
+  const slices = [...pay.slice(0, 5).map((p) => monthlyCents(p)), pay.slice(5).reduce((s, p) => s + monthlyCents(p), 0)].filter((c) => c > 0)
+  const gap = slices.length > 1 ? 3 : 0
+  let at = 0
   return (
-    <button onClick={() => navigate('/recurring')} className="flex w-full items-center gap-3 border-t border-line px-4 py-3 text-left first:border-0">
-      <MerchantIcon name={r.name} className="size-10 rounded-[13px] bg-tint-from text-lg">
-        {r.icon}
+    <div className="flex items-center gap-4">
+      <div className="min-w-0 flex-1">
+        <BigAmount cents={a.recurringMonthly} label="Per month" />
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <NavyPill>{whole(a.recurringMonthly * 12)} a year</NavyPill>
+          {a.avgIn > 0 && a.recurringMonthly > 0 && <NavyPill>{pct(a.recurringMonthly / a.avgIn)} of income</NavyPill>}
+        </div>
+      </div>
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} aria-hidden="true">
+          <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,.14)" strokeWidth="14" />
+            {total > 0 &&
+              slices.map((c, i) => {
+                const len = (c / total) * C
+                const el = (
+                  <circle
+                    key={i}
+                    cx={size / 2}
+                    cy={size / 2}
+                    r={r}
+                    fill="none"
+                    stroke={WHITES[i]}
+                    strokeWidth="14"
+                    strokeDasharray={`${Math.max(0.5, len - gap)} ${C}`}
+                    strokeDashoffset={-at}
+                  />
+                )
+                at += len
+                return el
+              })}
+          </g>
+        </svg>
+        <span className="absolute inset-0 grid place-items-center text-center">
+          <span>
+            <b className="block font-display text-xl leading-none">{pay.length}</b>
+            <span className="text-[11px] text-white/75">active</span>
+          </span>
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ---------- This month as a calendar, with the next payment (the card on the violet edge) ----------
+function Calendar({ pay }) {
+  const today = todayISO()
+  const key = today.slice(0, 7)
+  const [y, m] = key.split('-').map(Number)
+  const days = new Date(y, m, 0).getDate()
+  const blank = (new Date(y, m - 1, 1).getDay() + 6) % 7 // Monday first
+  const todayDay = Number(today.slice(8, 10))
+  const byDay = new Map()
+  for (const p of pay) for (const d of dueDaysInMonth(p, key)) byDay.set(d, [...(byDay.get(d) ?? []), p])
+  // Still to pay this month: every day from today on
+  let left = 0
+  for (const [d, list] of byDay) if (d >= todayDay) left += list.reduce((s, p) => s + p.amount_cents, 0)
+  const next = pay.filter((p) => p.next_due >= today).sort((x, y2) => (x.next_due < y2.next_due ? -1 : 1))[0]
+  const monthName = new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long' })
+
+  return (
+    <div className={`${card} p-3.5`}>
+      <div className="flex items-baseline justify-between px-0.5">
+        <b className="font-display text-[17px]">{monthName}</b>
+        {left > 0 && <span className="tabular text-[12.5px] text-muted">{whole(left)} left this month</span>}
+      </div>
+      <div className="mt-2.5 grid grid-cols-7 gap-1">
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+          <span key={i} className="text-center text-[10px] font-bold text-muted">
+            {d}
+          </span>
+        ))}
+        {Array.from({ length: blank }, (_, i) => (
+          <span key={`b${i}`} />
+        ))}
+        {Array.from({ length: days }, (_, i) => {
+          const d = i + 1
+          const list = byDay.get(d)
+          const past = d < todayDay
+          return (
+            <span
+              key={d}
+              className={`relative flex h-10 flex-col items-center justify-center gap-px rounded-xl ${list ? 'bg-violet/10' : ''} ${past && list ? 'opacity-50' : ''} ${
+                d === todayDay ? 'ring-2 ring-violet ring-inset' : ''
+              }`}
+            >
+              <span className={`text-[9.5px] font-bold ${d === todayDay ? 'text-violet' : 'text-muted'}`}>{d}</span>
+              {list && (
+                <MerchantIcon name={list[0].name} className="size-[18px] rounded-md text-[13px] leading-none">
+                  {list[0].icon}
+                </MerchantIcon>
+              )}
+              {list?.length > 1 && (
+                <span className="absolute -top-1 -right-0.5 grid size-4 place-items-center rounded-full bg-violet text-[9px] font-bold text-white">
+                  {list.length}
+                </span>
+              )}
+            </span>
+          )
+        })}
+      </div>
+      {next ? (
+        <NextCard p={next} />
+      ) : (
+        <p className="mt-3 text-center text-[13px] text-muted">{pay.length ? 'Nothing more due this month.' : 'No recurring payments yet.'}</p>
+      )}
+    </div>
+  )
+}
+
+// The next payment: logo, name, date and amount, and a ring counting the days down
+function NextCard({ p }) {
+  const days = daysUntil(p.next_due)
+  const [y, m, d] = p.next_due.split('-').map(Number)
+  const date = new Date(y, m - 1, d).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+  const size = 54
+  const r = 23
+  const C = 2 * Math.PI * r
+  const fill = Math.max(0.04, 1 - Math.min(days, 30) / 30)
+  return (
+    <button
+      onClick={() => navigate('/recurring')}
+      className="mt-3 flex w-full items-center gap-3 rounded-[20px] bg-gradient-to-br from-violet/15 to-violet/[.04] p-3.5 text-left ring-1 ring-violet/20 ring-inset"
+    >
+      <MerchantIcon name={p.name} className="size-12 rounded-2xl bg-card text-[23px]">
+        {p.icon}
       </MerchantIcon>
       <span className="min-w-0 flex-1">
-        <b className="block truncate text-[15px]">{r.name}</b>
-        {sub && <span className="block truncate text-[12.5px] text-muted">{sub}</span>}
-        {children}
+        <span className="block text-[11px] font-extrabold tracking-[0.08em] text-violet">NEXT PAYMENT</span>
+        <b className="block truncate font-display text-lg leading-tight">{p.name}</b>
+        <span className="tabular text-[12.5px] text-muted">
+          {date} · <b className="text-ink">{formatCents(p.amount_cents)}</b>
+        </span>
       </span>
-      {right}
+      <span className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} aria-hidden="true" className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={VIOLET} strokeOpacity=".16" strokeWidth="6" />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={VIOLET} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${fill * C} ${C}`} />
+        </svg>
+        <span className="absolute inset-0 grid place-items-center text-center leading-none">
+          {days === 0 ? (
+            <b className="text-[12px] text-violet">Today</b>
+          ) : (
+            <span>
+              <b className="block font-display text-lg text-violet">{days}</b>
+              <span className="text-[9.5px] font-bold text-muted">{days === 1 ? 'day' : 'days'}</span>
+            </span>
+          )}
+        </span>
+      </span>
     </button>
   )
 }
 
-// The next payments due this month (the card on the navy edge)
-function ComingUp({ pay }) {
-  const today = todayISO()
-  const monthEnd = `${today.slice(0, 7)}-31`
-  const due = pay.filter((r) => r.next_due >= today && r.next_due <= monthEnd).sort((x, y) => (x.next_due < y.next_due ? -1 : 1))
-  // A weekly payment counts once for every week still to come this month
-  const times = (r) => (r.frequency === 'weekly' ? 1 + Math.floor((daysInMonthLeft(r.next_due) - 1) / 7) : 1)
-  const left = due.reduce((s, r) => s + r.amount_cents * times(r), 0)
-  return (
-    <div className={`${card} pb-1`}>
-      <div className="flex items-baseline justify-between px-4 pt-4 pb-1">
-        <b className="font-display text-[17px]">Coming up</b>
-        {left > 0 && <span className="tabular text-[12.5px] text-muted">{whole(left)} left this month</span>}
-      </div>
-      {due.length === 0 ? (
-        <p className="px-4 pt-1 pb-3 text-[13.5px] text-muted">{pay.length ? 'Nothing more due this month.' : 'No recurring payments yet.'}</p>
-      ) : (
-        due.slice(0, 3).map((r) => <Row key={r.id} r={r} sub={dueText(r)} right={<b className="tabular">{formatCents(r.amount_cents)}</b>} />)
-      )}
-    </div>
-  )
-}
-
-// Every active payment by what it costs a month, the biggest first
+// ---------- Everything you pay: logo tiles, the biggest first ----------
 function Everything({ pay }) {
   const [all, setAll] = useState(false)
   const max = monthlyCents(pay[0]) || 1
   const since = new Date(Date.now() - 31 * 86400000).toISOString().slice(0, 10)
-  const shown = all ? pay : pay.slice(0, 7)
+  const shown = all ? pay : pay.slice(0, 6)
   return (
-    <div className={card}>
-      {shown.map((r) => (
-        <Row
-          key={r.id}
-          r={r}
-          right={
-            <span className="text-right">
-              <b className="tabular block">{formatCents(monthlyCents(r))}</b>
-              {r.frequency !== 'monthly' && (
-                <span className="tabular text-xs text-muted">
-                  {formatCents(r.amount_cents)} {PER[r.frequency]}
-                </span>
-              )}
+    <>
+      <div className="grid grid-cols-2 gap-2.5">
+        {shown.map((r) => (
+          <button key={r.id} onClick={() => navigate('/recurring')} className={`${card} relative overflow-hidden p-3.5 text-left`}>
+            <span className="pointer-events-none absolute -top-6 -right-6 size-[70px] rounded-full bg-violet/[.08]" />
+            <span className="relative flex items-start justify-between">
+              <MerchantIcon name={r.name} className="size-10 rounded-[13px] bg-tint-from text-lg">
+                {r.icon}
+              </MerchantIcon>
+              {(r.created_at ?? '') >= since && <span className="rounded-full bg-violet/12 px-2 py-0.5 text-[11px] font-bold text-violet">new</span>}
             </span>
-          }
-        >
-          <span className="mt-1.5 flex items-center gap-2">
-            <span className="relative h-1.5 flex-1 rounded-full bg-line">
+            <b className="relative mt-2.5 block truncate text-[14.5px]">{r.name}</b>
+            <span className="relative block">
+              <b className="tabular font-display text-[19px]">{formatCents(monthlyCents(r)).replace(/,00$/, '')}</b>
+              <span className="text-xs text-muted"> /mo</span>
+            </span>
+            <span className="relative mt-2 block h-[5px] rounded-full bg-line">
               <span className="absolute inset-y-0 left-0 rounded-full bg-violet" style={{ width: `${(monthlyCents(r) / max) * 100}%` }} />
             </span>
-            {(r.created_at ?? '') >= since && <span className="rounded-full bg-violet/12 px-1.5 text-[11px] font-bold text-violet">new</span>}
-          </span>
-        </Row>
-      ))}
-      {pay.length > 7 && (
-        <button onClick={() => setAll(!all)} className="w-full border-t border-line py-3 text-center text-[13.5px] font-semibold text-cobalt">
+          </button>
+        ))}
+      </div>
+      {pay.length > 6 && (
+        <button onClick={() => setAll(!all)} className="mt-2.5 w-full py-1.5 text-center text-[13.5px] font-semibold text-cobalt">
           {all ? 'Show less' : `Show all ${pay.length}`}
         </button>
       )}
-    </div>
+    </>
   )
 }
 
-// Added in the last 12 months, price rises (a payment recorded for more than before), and paused ones
+// ---------- What changed: added in the last 12 months, price rises, paused ----------
+// Price rise = a payment recorded for more than before (expenses named like the recurring entry)
 function Changes({ a }) {
   const start = a.last12[0]
   const list = []
   for (const r of a.recurring ?? []) {
     if (r.type === 'income') continue
     const created = (r.created_at ?? '').slice(0, 10)
-    if (r.active && created.slice(0, 7) >= start) {
-      list.push({
-        key: `n${r.id}`,
-        r,
-        mark: '+',
-        note: `Added · ${monthShort(created.slice(0, 7))}`,
-        cents: monthlyCents(r),
-        date: created,
-        tone: VIOLET,
-      })
-    }
     if (!r.active) {
       list.push({
         key: `p${r.id}`,
         r,
-        mark: '−',
-        note: 'Paused',
+        tag: 'Paused',
+        from: formatCents(r.amount_cents),
+        to: null,
+        when: null,
         cents: -monthlyCents(r),
         date: '',
         tone: '#0f8a5f',
       })
       continue
+    }
+    if (created.slice(0, 7) >= start) {
+      list.push({
+        key: `n${r.id}`,
+        r,
+        tag: 'Added',
+        from: null,
+        to: formatCents(r.amount_cents),
+        when: shortDate(created),
+        cents: monthlyCents(r),
+        date: created,
+        tone: VIOLET,
+      })
     }
     const hist = [...(a.fixedHistory.get(r.name.trim().toLowerCase()) ?? [])].sort((x, y) => (x.date < y.date ? -1 : 1))
     if (hist.length < 2) continue
@@ -194,34 +308,58 @@ function Changes({ a }) {
       list.push({
         key: `u${r.id}`,
         r,
-        mark: '▲',
-        note: `${formatCents(earlier.cents)} → ${formatCents(lastPaid.cents)} · ${monthShort(lastPaid.date.slice(0, 7))}`,
+        tag: 'Price up',
+        from: formatCents(earlier.cents),
+        to: formatCents(lastPaid.cents),
+        when: monthShort(lastPaid.date.slice(0, 7)),
         cents: lastPaid.cents - earlier.cents,
         date: lastPaid.date,
-        tone: '#c26b00',
+        tone: '#e8590c',
       })
     }
   }
   list.sort((x, y) => (x.date < y.date ? 1 : -1))
   if (!list.length) return <p className={`${card} px-4 py-5 text-center text-sm text-muted`}>Nothing added, paused or pricier lately.</p>
   return (
-    <div className={card}>
+    <div className="grid gap-2.5">
       {list.slice(0, 8).map((c) => (
-        <Row
+        <button
           key={c.key}
-          r={c.r}
-          sub={c.note}
-          right={
-            <b className="tabular" style={{ color: c.tone }}>
-              {c.cents < 0 ? '−' : '+'}
-              {formatCents(Math.abs(c.cents))}
-              <span className="text-[11px] font-medium text-muted">/mo</span>
-            </b>
-          }
-        />
+          onClick={() => navigate('/recurring')}
+          className={`${card} relative flex items-center gap-3 overflow-hidden p-3.5 pl-[18px] text-left`}
+        >
+          <span className="absolute inset-y-3.5 left-0 w-1 rounded-r" style={{ background: c.tone }} />
+          <MerchantIcon name={c.r.name} className="size-11 rounded-[14px] text-[21px]" style={{ background: `${c.tone}1f` }}>
+            {c.r.icon}
+          </MerchantIcon>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1.5">
+              <b className="truncate text-[15px]">{c.r.name}</b>
+              <span className="shrink-0 rounded-full px-2 py-px text-[11px] font-bold" style={{ background: `${c.tone}1f`, color: c.tone }}>
+                {c.tag}
+              </span>
+            </span>
+            <span className="tabular mt-1 flex items-center gap-1.5 text-[13px]">
+              {c.from && <span className={`text-muted ${c.to ? '' : 'line-through'}`}>{c.from}</span>}
+              {c.from && c.to && <span style={{ color: c.tone }}>→</span>}
+              {c.to && <b>{c.to}</b>}
+              {c.when && <span className="text-muted">· {c.when}</span>}
+            </span>
+          </span>
+          <b className="tabular shrink-0 font-display text-[17px]" style={{ color: c.tone }}>
+            {c.cents < 0 ? '−' : '+'}
+            {whole(Math.abs(c.cents))}
+            <span className="font-sans text-[11px] font-medium text-muted">/mo</span>
+          </b>
+        </button>
       ))}
     </div>
   )
+}
+
+const shortDate = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
 }
 
 // Recurring payments paid each month (expenses named like one), with what they cost now dashed
