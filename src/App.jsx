@@ -23,6 +23,7 @@ const load = {
   accounts: () => import('./screens/Accounts'),
   analytics: () => import('./screens/Analytics'),
   analyticsCategories: () => import('./screens/AnalyticsCategories'),
+  analyticsRecurring: () => import('./screens/AnalyticsRecurring'),
   analyticsSaving: () => import('./screens/AnalyticsSaving'),
   analyticsSpending: () => import('./screens/AnalyticsSpending'),
   analyticsTrends: () => import('./screens/AnalyticsTrends'),
@@ -39,6 +40,7 @@ const Accounts = lazy(load.accounts)
 const Analytics = lazy(load.analytics)
 const AnalyticsCategories = lazy(load.analyticsCategories)
 const CategoryDetail = named(load.analyticsCategories, 'CategoryDetail')
+const AnalyticsRecurring = lazy(load.analyticsRecurring)
 const AnalyticsSaving = lazy(load.analyticsSaving)
 const AnalyticsSpending = lazy(load.analyticsSpending)
 const AnalyticsTrends = lazy(load.analyticsTrends)
@@ -197,15 +199,17 @@ function screenFor(route, session, dataVersion, tx) {
       }
     }
     case '/analytics':
-      return { title: 'Analytics', body: <Analytics key={dataVersion} /> }
+      return { title: 'Analytics', navy: true, body: <Analytics key={dataVersion} /> }
     case '/analytics/categories':
-      return { title: 'Categories', back: '/analytics', body: <AnalyticsCategories key={dataVersion} /> }
+      return { title: 'Categories', back: '/analytics/spending', body: <AnalyticsCategories key={dataVersion} /> }
     case '/analytics/saving':
-      return { title: 'What you keep', back: '/analytics', body: <AnalyticsSaving key={dataVersion} /> }
+      return { title: 'Savings & Investments', back: '/analytics', navy: true, body: <AnalyticsSaving key={dataVersion} /> }
     case '/analytics/trends':
-      return { title: 'Better or worse', back: '/analytics', body: <AnalyticsTrends key={dataVersion} /> }
+      return { title: 'Over time', back: '/analytics', navy: true, body: <AnalyticsTrends key={dataVersion} /> }
     case '/analytics/spending':
-      return { title: 'Where it goes', back: '/analytics', body: <AnalyticsSpending key={dataVersion} /> }
+      return { title: 'Spending', back: '/analytics', navy: true, body: <AnalyticsSpending key={dataVersion} /> }
+    case '/analytics/recurring':
+      return { title: 'Recurring', back: '/analytics', navy: true, body: <AnalyticsRecurring key={dataVersion} /> }
     case '/savings':
       return { title: 'Savings', navy: true, body: <Savings key={dataVersion} /> }
     case '/investments':

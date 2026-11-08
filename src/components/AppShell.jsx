@@ -17,7 +17,7 @@ export function TopBar({ title, back, action, navy = false, date, email }) {
     <header className={`${navy ? 'relative text-white' : 'sticky bg-paper/90 backdrop-blur'} top-0 z-20 pt-[env(safe-area-inset-top)]`}>
       <div className="relative flex h-14 items-center gap-1 px-2">
         {back ? (
-          <button onClick={() => goBack(back)} className="grid size-11 place-items-center rounded-full text-ink" aria-label="Back">
+          <button onClick={() => goBack(back)} className={`grid size-11 place-items-center rounded-full ${navy ? 'text-white' : 'text-ink'}`} aria-label="Back">
             <Icon name="chevronLeft" />
           </button>
         ) : (

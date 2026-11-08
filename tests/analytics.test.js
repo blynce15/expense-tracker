@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { buildAnalytics, placesFrom, shiftMonth, shiftPeriod, verdictOf } from '../src/lib/analytics'
+import { buildAnalytics, creepOf, placesFrom, shiftMonth, shiftPeriod, verdictOf } from '../src/lib/analytics'
 
 // "Today" is Saturday 17 October 2026: October is still running, September is a full month
 beforeEach(() => {
@@ -87,8 +87,13 @@ describe('Analytics: this month', () => {
     expect(w.change).toBe(200000 - 21299 + 4000)
     expect(w.bank).toBe(100000)
     expect(w.savings).toBe(20000)
-    expect(w.line.at(-1)).toEqual({ key: '2026-10', cents: 120000 })
-    expect(w.line.at(-2)).toEqual({ key: '2026-09', cents: 120000 - (200000 - 21299 + 4000) })
+    expect(w.line.at(-1)).toEqual({ key: '2026-10', cents: 120000, savings: 20000 })
+    expect(w.line.at(-2)).toEqual({ key: '2026-09', cents: 120000 - (200000 - 21299 + 4000), savings: 30000 })
+  })
+
+  test('net worth line: the savings part back in time (money moved out of savings in October is added back)', () => {
+    // September: €300 into savings; October: €100 out. Before September there was nothing in savings.
+    expect(a().worth.line.find((p) => p.key === '2026-08').savings).toBe(0)
   })
 
   test('where kept money went, by savings goal (untagged = General savings)', () => {
@@ -124,5 +129,21 @@ describe('places', () => {
     const p = placesFrom(rows.filter((r) => r.type === 'expense'))
     expect(p[0]).toMatchObject({ name: 'Continente', cents: 70000, count: 2 })
     expect(p.find((x) => x.name === 'Netflix')).toMatchObject({ cents: 2598, count: 2 })
+  })
+})
+
+describe('Is spending creeping up', () => {
+  const month = (k, spent) => t(`${k}-15`, 'expense', spent, { category_id: 'food' })
+  const keys = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']
+  test('needs 4 full months', () => {
+    const few = buildAnalytics(october, accounts, [], keys.slice(-3).map((k) => month(k, 1000)))
+    expect(creepOf(few)).toBeNull()
+  })
+  test('last 3 full months vs the 3 before (this month left out)', () => {
+    const r = [...keys.map((k, i) => month(k, i < 3 ? 1000 : 1200)), month('2026-10', 99999)]
+    const c = creepOf(buildAnalytics(october, accounts, [], r))
+    expect(c.half).toBe(3)
+    expect(c.diff).toBe(200)
+    expect(c.trend).toBe('up')
   })
 })

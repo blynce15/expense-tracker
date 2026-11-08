@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
+import { BigAmount, NavyPeriodBar, NavyPill, NavyTop, Overlap, pct, Section, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
 import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel, verdictOf } from '../lib/analytics'
@@ -18,8 +18,9 @@ const dayMonth = (iso) => {
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
 }
 
-// Analytics → Where it goes: one section per question: how much you spent, what it went on, where exactly,
-// fixed or not, when you spend, the big ones. Month view works in days; Year view in months.
+/// Analytics → Spending: the navy top with the total (vs your usual), the spending pace card on its edge, then
+// one section per question: what it went on, where exactly, fixed or not, when you spend, the big ones.
+// Month view works in days; Year view in months.
 export default function AnalyticsSpending() {
   const [period, setPeriod] = usePeriod()
   const [data, setData] = useState(() => cachedAnalytics(period))
@@ -40,55 +41,46 @@ export default function AnalyticsSpending() {
     }
   }, [period])
 
-  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your spending: {error}</p>
+  if (error) return <p className="px-5 pt-6 text-loss">Couldn&apos;t load your spending: {error}</p>
 
   const a = data && data.period === period && categories ? data : null
   const category = (id) => categories?.find((c) => c.id === id)
 
   return (
-    <div className="px-4 pt-1 pb-6">
-      <PeriodBar period={period} onChange={setPeriod} />
+    <div className="pb-6">
+      <NavyTop>
+        <NavyPeriodBar period={period} onChange={setPeriod} />
+        {a ? <Top a={a} /> : <div className="h-[92px]" />}
+      </NavyTop>
       {a && (
         <>
-          <Section n={1} title="How much you spent">
-            <HowMuch a={a} />
-          </Section>
+          <Overlap>
+            <Pace a={a} />
+          </Overlap>
           {a.expenses.length > 0 ? (
             <>
-              <Section n={2} title="What it went on">
+              <Section n={1} title="What it went on" right={a.period.kind === 'year' ? `vs ${prevLabel(a.period)}` : 'vs usual'}>
                 <WentOn a={a} category={category} />
               </Section>
-              <Section n={3} title="Where exactly">
+              <Section n={2} title="Where exactly">
                 <Places a={a} category={category} />
               </Section>
-              <Section n={4} title="Fixed or not">
+              <Section n={3} title="Fixed or everyday">
                 <Fixed a={a} />
               </Section>
-              <Section n={5} title="When you spend">
+              <Section n={4} title="When you spend">
                 <When a={a} />
               </Section>
-              <Section n={6} title="The big ones">
+              <Section n={5} title="The big ones">
                 <Biggest a={a} category={category} />
               </Section>
             </>
           ) : (
-            <p className="mt-4 rounded-[24px] bg-card px-4 py-6 text-center text-sm text-muted">No spending in {periodLabel(a.period)}.</p>
+            <p className="mx-4 mt-4 rounded-[24px] bg-card px-4 py-6 text-center text-sm text-muted">No spending in {periodLabel(a.period)}.</p>
           )}
         </>
       )}
     </div>
-  )
-}
-
-function Section({ n, title, children }) {
-  return (
-    <section>
-      <h2 className="mt-5 mb-2.5 flex items-center gap-2 px-1 text-[11.5px] font-bold tracking-[0.08em] text-muted uppercase">
-        <span className="grid size-5 place-items-center rounded-full bg-[#e8590c] text-[11px] tracking-normal text-white">{n}</span>
-        {title}
-      </h2>
-      {children}
-    </section>
   )
 }
 
@@ -109,25 +101,47 @@ function Change({ now, usual, isNew = false }) {
   if (Math.abs(c) < 0.03) return <span className="min-w-[58px] rounded-full bg-line/70 px-2 py-0.5 text-center text-xs font-bold text-muted">= same</span>
   const up = c > 0
   return (
-    <span className={`tabular min-w-[58px] rounded-full px-2 py-0.5 text-center text-xs font-bold ${up ? 'bg-warn-bg text-orange-text' : 'bg-gain/12 text-gain'}`}>
+    <span
+      className={`tabular min-w-[58px] rounded-full px-2 py-0.5 text-center text-xs font-bold ${up ? 'bg-warn-bg text-orange-text' : 'bg-gain/12 text-gain'}`}
+    >
       {up ? '▲' : '▼'} {size >= 200 ? `${Math.round(now / usual)}×` : `${size}%`}
     </span>
   )
 }
 
-// ---------- 1 · How much you spent ----------
-// The running total through the period against your usual pace (month: your usual month as a straight line;
-// year: last year month by month), dashed on to where it's heading.
-function HowMuch({ a }) {
+// ---------- The navy top: how much you spent ----------
+function Top({ a }) {
   const year = a.period.kind === 'year'
   const v = verdictOf(a)
-  const spent = a.totals.spent
+  const c = v.spending.change
+  const label = year ? a.period.key : periodLabel(a.period).split(' ')[0]
+  return (
+    <>
+      <BigAmount cents={a.totals.spent} label={a.current ? 'Spent so far' : `Spent in ${label}`} />
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {c !== null && Math.abs(c) >= 0.03 && (
+          <NavyPill tone={c < 0 ? 'good' : 'bad'}>
+            {c < 0 ? '▼' : '▲'} {Math.round(Math.abs(c) * 100)}% vs {year ? prevLabel(a.period) : 'usual'}
+            {a.current ? ' by now' : ''}
+          </NavyPill>
+        )}
+        {a.spending.onTrack !== null && a.current && <NavyPill>On track for {whole(a.spending.onTrack)}</NavyPill>}
+      </div>
+    </>
+  )
+}
+
+// ---------- The pace card (on the navy edge) ----------
+// The running total through the period against your usual pace (month: your usual month as a straight line;
+// year: last year month by month), dotted on to where it's heading.
+function Pace({ a }) {
+  const year = a.period.kind === 'year'
+  const v = verdictOf(a)
   const { pace } = a.spending
-  const [euros, decimals] = formatCents(spent).split(',')
   const usualTotal = year ? (pace.previous.at(-1) ?? 0) : (a.avgOut ?? 0)
 
   const W = 300
-  const H = 74
+  const H = 90
   const n = pace.length
   const cur = pace.current
   const top = Math.max(1, a.spending.onTrack ?? 0, usualTotal, ...cur, ...(year ? pace.previous : [])) * 1.05
@@ -142,69 +156,74 @@ function HowMuch({ a }) {
     : usualTotal > 0
       ? `M0,${H} L${W},${y(usualTotal).toFixed(1)}`
       : null
-  const chipUp = v.spending.change !== null && v.spending.change >= 0.03
-  const chipDown = v.spending.change !== null && v.spending.change <= -0.03
   const start = year ? `Jan` : `1 ${monthShort(a.period.key)}`
   const end = year ? `Dec` : `${n} ${monthShort(a.period.key)}`
-  const label = year ? a.period.key : periodLabel(a.period).split(' ')[0]
+  const stats = [
+    [year ? 'Per month' : 'Per day', whole(a.spending.perDay * (year ? 30.44 : 1))],
+    a.current
+      ? [year ? `${prevLabel(a.period)} by now` : 'Usual by now', v.spending.usual !== null ? whole(v.spending.usual) : '—']
+      : [year ? prevLabel(a.period) : 'Usual month', usualTotal ? whole(usualTotal) : '—'],
+    a.current
+      ? [year ? 'Months left' : 'Days left', String(year ? 12 - Number(todayISO().slice(5, 7)) : a.days.total - a.days.passed)]
+      : ['Biggest day', a.spending.biggestDay ? whole(a.spending.biggestDay.cents) : '—'],
+  ]
 
   return (
-    <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#ff9f43] to-[#e8590c] p-4 text-white shadow-[0_18px_30px_-20px_rgba(232,89,12,0.9)]">
-      <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/[.12]" />
-      <div className="relative flex items-center justify-between gap-2">
-        <p className="text-[13.5px] font-semibold text-white/90">Spent in {label}</p>
-        {(chipUp || chipDown) && (
-          <span className={`tabular rounded-full bg-white px-2.5 py-0.5 text-xs font-bold ${chipUp ? 'text-[#c26b00]' : 'text-[#0f8a5f]'}`}>
-            {chipUp ? '▲' : '▼'} {Math.round(Math.abs(v.spending.change) * 100)}% vs {year ? prevLabel(a.period) : 'usual'}
+    <div className="rounded-[24px] bg-card p-4 shadow-[0_14px_30px_-22px_rgba(11,27,69,0.45)]">
+      <div className="flex items-baseline justify-between gap-2">
+        <b className="font-display text-[17px]">Spending pace</b>
+        <span className="flex items-center gap-3 text-[11.5px] text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="h-[3px] w-3 rounded-full bg-[#e8590c]" /> {year ? a.period.key : 'You'}
           </span>
-        )}
-      </div>
-      <p className="tabular relative truncate font-display leading-tight font-bold">
-        <span className="text-[36px]">{euros}</span>
-        <span className="text-lg text-white/60">,{decimals}</span>
-      </p>
-      <p className="relative text-[12.5px] text-white/90">
-        {whole(a.spending.perDay * (year ? 30.44 : 1))} a {year ? 'month' : 'day'}
-        {a.spending.onTrack !== null && a.current && (
-          <>
-            {' '}
-            · on track for <b>{whole(a.spending.onTrack)}</b>
-          </>
-        )}
-        {usualTotal > 0 && (
-          <>
-            {' '}
-            · {year ? `${prevLabel(a.period)}` : 'usual month'} {whole(usualTotal)}
-          </>
-        )}
-      </p>
-      {cur.length > 0 && (
-        <svg viewBox={`-4 -6 ${W + 8} ${H + 24}`} className="relative mt-2.5 block h-auto w-full overflow-visible" role="img" aria-label="Spending through the period">
-          {usualPath && <path d={usualPath} fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="1.5" strokeDasharray="4 5" />}
-          {cur.length > 1 && <path d={`${line} L${x(lastI)},${H} L0,${H} Z`} fill="rgba(255,255,255,.18)" />}
-          <path d={line} fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          {a.spending.onTrack !== null && a.current && lastI < n - 1 && (
-            <line x1={x(lastI)} y1={y(cur[lastI])} x2={W} y2={y(a.spending.onTrack)} stroke="#fff" strokeWidth="2" strokeDasharray="2 5" strokeLinecap="round" opacity=".75" />
+          {usualPath && (
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 border-t-[1.5px] border-dashed border-muted" /> {year ? prevLabel(a.period) : 'Usual'}
+            </span>
           )}
-          <circle cx={x(lastI)} cy={y(cur[lastI])} r="5" fill="#fff" />
-          <text x="0" y={H + 15} fontSize="10.5" fill="rgba(255,255,255,.8)">
+        </span>
+      </div>
+      {cur.length > 0 && (
+        <svg viewBox={`-4 -6 ${W + 8} ${H + 24}`} className="mt-3 block h-auto w-full overflow-visible" role="img" aria-label="Spending through the period">
+          <defs>
+            <linearGradient id="pace-fill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" stopColor={DEEP} stopOpacity=".22" />
+              <stop offset="1" stopColor={DEEP} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {usualPath && <path d={usualPath} fill="none" stroke="var(--color-muted)" strokeOpacity=".7" strokeWidth="1.6" strokeDasharray="4 5" />}
+          {cur.length > 1 && <path d={`${line} L${x(lastI)},${H} L0,${H} Z`} fill="url(#pace-fill)" />}
+          <path d={line} fill="none" stroke={DEEP} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          {a.spending.onTrack !== null && a.current && lastI < n - 1 && (
+            <line
+              x1={x(lastI)}
+              y1={y(cur[lastI])}
+              x2={W}
+              y2={y(a.spending.onTrack)}
+              stroke={DEEP}
+              strokeWidth="2"
+              strokeDasharray="2 5"
+              strokeLinecap="round"
+              opacity=".55"
+            />
+          )}
+          <circle cx={x(lastI)} cy={y(cur[lastI])} r="5" fill={DEEP} stroke="var(--color-card)" strokeWidth="2" />
+          <text x="0" y={H + 15} fontSize="10.5" className="fill-muted">
             {start}
           </text>
-          <text x={W} y={H + 15} fontSize="10.5" fill="rgba(255,255,255,.8)" textAnchor="end">
+          <text x={W} y={H + 15} fontSize="10.5" className="fill-muted" textAnchor="end">
             {end}
           </text>
         </svg>
       )}
-      <p className="relative mt-1 flex gap-4 text-[11.5px] text-white/90">
-        <span className="flex items-center gap-1.5">
-          <span className="h-[3px] w-3 rounded-full bg-white" /> {label}
-        </span>
-        {usualPath && (
-          <span className="flex items-center gap-1.5">
-            <span className="w-3 border-t-[1.5px] border-dashed border-white/80" /> {year ? prevLabel(a.period) : 'your usual pace'}
-          </span>
-        )}
-      </p>
+      <div className="mt-3 grid grid-cols-3 text-center">
+        {stats.map(([l, val], i) => (
+          <div key={l} className={i ? 'border-l border-line' : ''}>
+            <span className="block text-xs text-muted">{l}</span>
+            <b className="tabular font-display text-base">{val}</b>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -239,7 +258,19 @@ function WentOn({ a, category }) {
         <div className="relative shrink-0">
           <svg width="112" height="112" className="-rotate-90" aria-hidden="true">
             {segs.map(([f, col], i) => {
-              const el = <circle key={i} cx="56" cy="56" r={r} fill="none" stroke={col} strokeWidth="16" strokeDasharray={`${Math.max(0, f * C - (segs.length > 1 ? 2 : 0))} ${C}`} strokeDashoffset={-off * C} />
+              const el = (
+                <circle
+                  key={i}
+                  cx="56"
+                  cy="56"
+                  r={r}
+                  fill="none"
+                  stroke={col}
+                  strokeWidth="16"
+                  strokeDasharray={`${Math.max(0, f * C - (segs.length > 1 ? 2 : 0))} ${C}`}
+                  strokeDashoffset={-off * C}
+                />
+              )
               off += f
               return el
             })}
@@ -274,7 +305,13 @@ function WentOn({ a, category }) {
                 <span className="min-w-0 flex-1">
                   <b className="block truncate text-[14.5px]">{cat?.name ?? 'No category'}</b>
                   <span className="mt-1 block h-[5px] overflow-hidden rounded-full bg-paper">
-                    <span className="block h-full rounded-full" style={{ width: `${(c.cents / total) * 100}%`, background: colorOf(c.id) }} />
+                    <span
+                      className="block h-full rounded-full"
+                      style={{
+                        width: `${(c.cents / total) * 100}%`,
+                        background: colorOf(c.id),
+                      }}
+                    />
                   </span>
                 </span>
                 <b className="tabular w-14 text-right font-display text-[15px]">{whole(c.cents)}</b>
@@ -441,7 +478,10 @@ function When({ a }) {
               <span className={`tabular text-[10px] ${i === topDay && v > 0 ? 'font-bold text-[#e8590c]' : 'text-muted'}`}>{whole(v)}</span>
               <div
                 className="mt-0.5 rounded-md"
-                style={{ height: Math.max(3, (v / maxAvg) * 44), background: i === topDay && v > 0 ? 'linear-gradient(180deg,#ff9f43,#e8590c)' : 'rgba(232,89,12,.18)' }}
+                style={{
+                  height: Math.max(3, (v / maxAvg) * 44),
+                  background: i === topDay && v > 0 ? 'linear-gradient(180deg,#ff9f43,#e8590c)' : 'rgba(232,89,12,.18)',
+                }}
               />
             </div>
           ))}
@@ -470,7 +510,12 @@ function MonthCalendar({ a, today }) {
   const lead = (new Date(y, m - 1, 1).getDay() + 6) % 7
   const days = Array.from({ length: a.days.total }, (_, i) => {
     const date = `${a.period.key}-${pad(i + 1)}`
-    return { date, n: i + 1, cents: a.spentByDay.get(date) ?? 0, future: i >= a.days.passed }
+    return {
+      date,
+      n: i + 1,
+      cents: a.spentByDay.get(date) ?? 0,
+      future: i >= a.days.passed,
+    }
   })
   const past = days.filter((d) => !d.future)
   const max = Math.max(1, ...past.map((d) => d.cents))
@@ -519,7 +564,10 @@ function MonthCalendar({ a, today }) {
             </>
           ) : top && top.cents > 0 ? (
             <>
-              Priciest day: <b className="text-ink">{dayMonth(top.date)} · {whole(top.cents)}</b>
+              Priciest day:{' '}
+              <b className="text-ink">
+                {dayMonth(top.date)} · {whole(top.cents)}
+              </b>
             </>
           ) : (
             'Tap a day'
@@ -541,7 +589,11 @@ function YearTiles({ a }) {
   const thisMonth = todayISO().slice(0, 7)
   const months = Array.from({ length: 12 }, (_, i) => {
     const k = `${a.period.key}-${pad(i + 1)}`
-    return { key: k, cents: a.byMonth.get(k)?.spent ?? 0, future: k > thisMonth }
+    return {
+      key: k,
+      cents: a.byMonth.get(k)?.spent ?? 0,
+      future: k > thisMonth,
+    }
   })
   const past = months.filter((m) => !m.future && m.cents > 0)
   const max = Math.max(1, ...past.map((m) => m.cents))
@@ -549,7 +601,17 @@ function YearTiles({ a }) {
   const low = past.length > 1 ? past.reduce((b, m) => (m.cents < b.cents ? m : b)) : null
   return (
     <>
-      <Title right={low && <>Cheapest: <b className="text-gain">{monthShort(low.key)}</b></>}>{a.period.key} by month</Title>
+      <Title
+        right={
+          low && (
+            <>
+              Cheapest: <b className="text-gain">{monthShort(low.key)}</b>
+            </>
+          )
+        }
+      >
+        {a.period.key} by month
+      </Title>
       <div className="mt-2.5 grid grid-cols-4 gap-1.5">
         {months.map((m) => (
           <div
@@ -557,7 +619,9 @@ function YearTiles({ a }) {
             className={`rounded-xl px-2 py-2 ${m.future ? 'ring-1 ring-line ring-inset' : ''} ${m.key === thisMonth ? 'ring-2 ring-ink ring-inset' : ''}`}
             style={m.future ? undefined : { background: heat(m.cents, max) }}
           >
-            <span className={`block text-[11px] font-semibold ${m.future ? 'text-muted/50' : m.cents / max > 0.55 ? 'text-white/85' : 'text-muted'}`}>{monthShort(m.key)}</span>
+            <span className={`block text-[11px] font-semibold ${m.future ? 'text-muted/50' : m.cents / max > 0.55 ? 'text-white/85' : 'text-muted'}`}>
+              {monthShort(m.key)}
+            </span>
             <b className={`tabular block font-display text-[13px] ${m.future ? 'text-muted/40' : m.cents / max > 0.55 ? 'text-white' : 'text-ink'}`}>
               {m.future ? '—' : whole(m.cents)}
             </b>
@@ -566,7 +630,10 @@ function YearTiles({ a }) {
       </div>
       {top && (
         <p className="mt-2 text-[11.5px] text-muted">
-          Priciest month: <b className="tabular text-ink">{monthShort(top.key)} · {whole(top.cents)}</b>
+          Priciest month:{' '}
+          <b className="tabular text-ink">
+            {monthShort(top.key)} · {whole(top.cents)}
+          </b>
         </p>
       )}
     </>

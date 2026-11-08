@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
+import { BigAmount, NavyPeriodBar, NavyPill, NavyTop, Overlap, pct, Section, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import PutInChart from '../components/PutInChart'
 import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, shiftMonth } from '../lib/analytics'
@@ -14,8 +14,9 @@ const signed = (cents) => (cents < 0 ? `−${whole(-cents)}` : `+${whole(cents)}
 const TEAL = '#0c8599'
 const BLUE = '#1f4fe0'
 
-// Analytics → What you keep: money kept = saved (net into savings accounts) + invested (Invest − Take out).
-// One section per question: how much you kept, where it went, getting better, how consistent,
+/// Analytics → Savings & Investments: money kept = saved (net into savings accounts) + invested (Invest − Take out).
+// The navy top: how much you kept and your rate against your usual; the saved/invested split on its edge; then
+// one section per question: where it went, what you put into investments, getting better, how consistent,
 // what it adds up to, what it's for (savings goals).
 export default function AnalyticsSaving() {
   const [period, setPeriod] = usePeriod()
@@ -43,20 +44,31 @@ export default function AnalyticsSaving() {
       .catch(() => setGoals(null))
   }, [])
 
-  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load what you keep: {error}</p>
+  if (error) return <p className="px-5 pt-6 text-loss">Couldn&apos;t load your savings: {error}</p>
   const a = data && data.period === period ? data : null
+  const hasGoals = goals?.goals?.length > 0
 
   return (
-    <div className="px-4 pt-1 pb-6">
-      <PeriodBar period={period} onChange={setPeriod} />
+    <div className="pb-6">
+      <NavyTop>
+        <NavyPeriodBar period={period} onChange={setPeriod} />
+        {a ? <Hero a={a} /> : <div className="h-[110px]" />}
+      </NavyTop>
       {a && (
         <>
-          <Section n={1} title="How much you kept">
-            <Hero a={a} />
-          </Section>
-          <Section n={2} title="Where it went">
+          <Overlap>
+            <Split a={a} />
+          </Overlap>
+          <Section n={1} title="Where it went">
             <WhereItWent a={a} />
           </Section>
+          <PutInChart
+            wrap={(chart) => (
+              <Section n={2} title="Put into investments" right="portfolio + pension">
+                {chart}
+              </Section>
+            )}
+          />
           <Section n={3} title="Getting better?">
             <Better a={a} />
           </Section>
@@ -66,27 +78,14 @@ export default function AnalyticsSaving() {
           <Section n={5} title="What it adds up to">
             <AddsUp a={a} />
           </Section>
-          {goals?.goals?.length > 0 && (
+          {hasGoals && (
             <Section n={6} title="What it's for">
               <Goals state={goals} />
             </Section>
           )}
-          <PutInChart wrap={(chart) => <Section n={goals?.goals?.length > 0 ? 7 : 6} title="Put into investments">{chart}</Section>} />
         </>
       )}
     </div>
-  )
-}
-
-function Section({ n, title, children }) {
-  return (
-    <section>
-      <h2 className="mt-5 mb-2.5 flex items-center gap-2 px-1 text-[11.5px] font-bold tracking-[0.08em] text-muted uppercase">
-        <span className="grid size-5 place-items-center rounded-full bg-teal text-[11px] tracking-normal text-white">{n}</span>
-        {title}
-      </h2>
-      {children}
-    </section>
   )
 }
 
@@ -96,18 +95,30 @@ const card = 'rounded-[24px] bg-card p-4'
 function monthRows(a) {
   const thisMonth = todayISO().slice(0, 7)
   return a.last12.map((k) => {
-    const m = a.byMonth.get(k) ?? { income: 0, saved: 0, invested: 0, spent: 0 }
+    const m = a.byMonth.get(k) ?? {
+      income: 0,
+      saved: 0,
+      invested: 0,
+      spent: 0,
+    }
     const kept = m.saved + m.invested
-    return { key: k, ...m, kept, rate: m.income > 0 ? kept / m.income : null, partial: k === thisMonth, future: k > thisMonth }
+    return {
+      key: k,
+      ...m,
+      kept,
+      rate: m.income > 0 ? kept / m.income : null,
+      partial: k === thisMonth,
+      future: k > thisMonth,
+    }
   })
 }
 
-// ---------- 1 · How much you kept ----------
+// ---------- The navy top: how much you kept ----------
 function Hero({ a }) {
   const { totals, saving } = a
   const income = totals.income
-  const size = 118
-  const r = 48
+  const size = 96
+  const r = 40
   const c = 2 * Math.PI * r
   const saved = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
   const invested = income > 0 ? Math.max(0, Math.min(1 - saved, totals.invested / income)) : 0
@@ -115,61 +126,86 @@ function Hero({ a }) {
   const ang = (usual ?? 0) * 2 * Math.PI - Math.PI / 2
   const tick = (d) => [size / 2 + Math.cos(ang) * (r + d), size / 2 + Math.sin(ang) * (r + d)]
   const diff = saving.rate !== null && usual !== null ? Math.round((saving.rate - usual) * 100) : null
-  const [euros, decimals] = formatCents(saving.kept).split(',')
+  const label = a.period.kind === 'year' ? a.period.key : periodLabel(a.period).split(' ')[0]
 
   return (
-    <div className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#17b3c6] to-[#0a6f80] p-4 text-white shadow-[0_18px_30px_-20px_rgba(12,133,153,0.9)]">
-      <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/10" />
-      <div className="relative flex items-center gap-4">
-        <div className="relative shrink-0" style={{ width: size, height: size }}>
-          <svg width={size} height={size} aria-hidden="true">
-            <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
-              <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,.2)" strokeWidth="12" />
-              {saved > 0 && <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#fff" strokeWidth="12" strokeDasharray={`${saved * c} ${c}`} />}
-              {invested > 0 && (
-                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#a5f0f7" strokeWidth="12" strokeDasharray={`${invested * c} ${c}`} strokeDashoffset={-saved * c} />
-              )}
-            </g>
-            {usual !== null && usual > 0 && <line x1={tick(12)[0]} y1={tick(12)[1]} x2={tick(-12)[0]} y2={tick(-12)[1]} stroke="#ffd43b" strokeWidth="3" strokeLinecap="round" />}
-          </svg>
-          <span className="absolute inset-0 grid place-items-center text-center">
-            <span>
-              <b className="tabular block font-display text-[26px] leading-none">{saving.rate !== null ? pct(Math.max(0, saving.rate)) : '—'}</b>
-              <span className="text-[11px] text-white/85">of income</span>
-            </span>
-          </span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-white/90">You kept</p>
-          <p className="tabular truncate font-display leading-tight font-bold">
-            <span className="text-[32px]">{euros}</span>
-            <span className="text-lg text-white/60">,{decimals}</span>
-          </p>
-          <p className="text-[12.5px] text-white/90">{income > 0 ? `of ${whole(income)} income` : 'No income recorded'}</p>
-          {diff !== null && (
-            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-white/90">
-              <span className={`rounded-full bg-white px-2 py-0.5 font-bold ${diff >= 0 ? 'text-[#0f8a5f]' : 'text-[#c26b00]'}`}>
-                {diff === 0 ? '= same' : `${diff > 0 ? '▲' : '▼'} ${Math.abs(diff)} pts`}
-              </span>
-              vs usual {pct(usual)}
-            </p>
+    <div className="flex items-center gap-4">
+      <div className="min-w-0 flex-1">
+        <BigAmount cents={saving.kept} label={a.current ? 'You kept' : `Kept in ${label}`} />
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          <NavyPill>{income > 0 ? `of ${whole(income)} income` : 'No income yet'}</NavyPill>
+          {diff !== null && diff !== 0 && (
+            <NavyPill tone={diff > 0 ? 'good' : 'bad'}>
+              {diff > 0 ? '▲' : '▼'} {Math.abs(diff)} pts vs usual
+            </NavyPill>
           )}
         </div>
       </div>
-      <div className="relative mt-3 flex flex-wrap gap-x-3.5 gap-y-1 text-xs text-white/95">
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-[3px] bg-white" /> Saved {whole(totals.saved)}
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} aria-hidden="true">
+          <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,.14)" strokeWidth="10" />
+            {saved > 0 && <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#8fb4ff" strokeWidth="10" strokeDasharray={`${saved * c} ${c}`} />}
+            {invested > 0 && (
+              <circle
+                cx={size / 2}
+                cy={size / 2}
+                r={r}
+                fill="none"
+                stroke="#5fd4e4"
+                strokeWidth="10"
+                strokeDasharray={`${invested * c} ${c}`}
+                strokeDashoffset={-saved * c}
+              />
+            )}
+          </g>
+          {usual !== null && usual > 0 && (
+            <line x1={tick(9)[0]} y1={tick(9)[1]} x2={tick(-9)[0]} y2={tick(-9)[1]} stroke="#ffd43b" strokeWidth="3" strokeLinecap="round" />
+          )}
+        </svg>
+        <span className="absolute inset-0 grid place-items-center text-center">
+          <span>
+            <b className="tabular block font-display text-[21px] leading-none">{saving.rate !== null ? pct(Math.max(0, saving.rate)) : '—'}</b>
+            <span className="text-[10.5px] text-white/70">of income</span>
+          </span>
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-[3px] bg-[#a5f0f7]" /> Invested {whole(totals.invested)}
-        </span>
-        {usual !== null && usual > 0 && (
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-[3px] rounded-[1px] bg-[#ffd43b]" /> Your usual
+      </div>
+    </div>
+  )
+}
+
+// ---------- Saved and invested (the card on the navy edge) ----------
+function Split({ a }) {
+  const { totals, saving } = a
+  const saved = Math.max(0, totals.saved)
+  const invested = Math.max(0, totals.invested)
+  return (
+    <div className="rounded-[24px] bg-card p-4 shadow-[0_14px_30px_-22px_rgba(11,27,69,0.45)]">
+      <div className="flex items-baseline justify-between gap-2">
+        <b className="font-display text-[17px]">Saved and invested</b>
+        {saving.avgRate !== null && (
+          <span className="flex items-center gap-1.5 text-[11.5px] text-muted">
+            <span className="h-2.5 w-[3px] rounded-[1px] bg-[#f5b800]" /> usual {pct(saving.avgRate)}
           </span>
         )}
       </div>
-      {saving.kept < 0 && <p className="relative mt-2 text-xs text-white/90">More came out of savings and investments than went in.</p>}
+      {saved + invested > 0 ? (
+        <span className="mt-3 flex h-3.5 gap-[3px]">
+          {saved > 0 && <span className="rounded-md bg-cobalt" style={{ flex: saved }} />}
+          {invested > 0 && <span className="rounded-md bg-teal" style={{ flex: invested }} />}
+        </span>
+      ) : (
+        <span className="mt-3 block h-3.5 rounded-md bg-line" />
+      )}
+      <div className="tabular mt-2.5 flex justify-between text-[13.5px]">
+        <span>
+          <b className="text-cobalt">Saved</b> {signed(totals.saved)}
+        </span>
+        <span>
+          <b className="text-teal">Invested</b> {signed(totals.invested)}
+        </span>
+      </div>
+      {saving.kept < 0 && <p className="mt-2 text-xs text-muted">More came out of savings and investments than went in.</p>}
     </div>
   )
 }
@@ -179,7 +215,15 @@ function WhereItWent({ a }) {
   const goalOf = (id) => a.goalList.find((g) => g.id === id)
   const parts = []
   if (a.totals.invested) {
-    parts.push({ key: 'invest', name: 'Investments', sub: 'Put in minus taken out', cents: a.totals.invested, color: TEAL, to: '/investments', getquin: true })
+    parts.push({
+      key: 'invest',
+      name: 'Investments',
+      sub: 'Put in minus taken out',
+      cents: a.totals.invested,
+      color: TEAL,
+      to: '/investments',
+      getquin: true,
+    })
   }
   for (const [id, cents] of a.flowByGoal) {
     if (!cents) continue
@@ -283,7 +327,9 @@ function Better({ a }) {
       <div className="flex items-center justify-between gap-2">
         <b className="font-display text-[17px]">{headline}</b>
         {change !== null && change !== 0 && (
-          <span className={`tabular shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${change > 0 ? 'bg-gain/12 text-gain' : 'bg-warn-bg text-orange-text'}`}>
+          <span
+            className={`tabular shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${change > 0 ? 'bg-gain/12 text-gain' : 'bg-warn-bg text-orange-text'}`}
+          >
             {change > 0 ? '▲' : '▼'} {Math.abs(change)} pts
           </span>
         )}

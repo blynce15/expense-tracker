@@ -1,38 +1,25 @@
 import { useEffect, useState } from 'react'
-import { pct, resetPeriod, whole } from '../components/AnalyticsKit'
+import { BigAmount, NavyPill, NavyTop, Overlap, pct, resetPeriod, useWorthExtras, whole, WORTH_PARTS } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
-import { cachedAnalytics, currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, prevLabel, shiftMonth, verdictOf } from '../lib/analytics'
+import MerchantIcon from '../components/MerchantIcon'
+import { cachedAnalytics, creepOf, currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, verdictOf } from '../lib/analytics'
 import { todayISO } from '../lib/dates'
-import { cachedUsdRate, cashEntries, cashOn, cashTotal, fetchUsdRate } from '../lib/cash'
-import { cachedPortfolio, fetchPortfolio } from '../lib/getquin'
 import { fetchLookups, lookupCache } from '../lib/lookups'
-import { fetchPension, pensionValueOn } from '../lib/pension'
-import { recall, remember } from '../lib/memory'
 import { formatCents } from '../lib/money'
-import { fetchProfile } from '../lib/profile'
+import { netWorthOf } from '../lib/networth'
+import { monthlyCents } from '../lib/recurring'
 import { navigate } from '../lib/useRoute'
+import { dueText } from './Recurring'
 
-// Analytics answers five questions, top to bottom: where you stand (net worth with investments), how this
-// period is going against your usual (verdict), what's worth noticing, then Explore: where it goes, what you
-// keep and better or worse, each opening its details page. Always this month: other months and years are
-// on the details pages (net worth in the past can only be estimated for investments).
+// Analytics, always this month, top to bottom: net worth on the navy top (accounts, savings, investments,
+// pension), this month against your usual, what's worth noticing, then Explore: Spending, Savings &
+// Investments, Over time and Recurring, each opening its page (other months and years live there).
 export default function Analytics() {
   const [period] = useState(() => currentPeriod('month'))
   const [data, setData] = useState(() => cachedAnalytics(period))
   const [categories, setCategories] = useState(() => lookupCache.lookups?.categories ?? null)
-  // { portfolio, since, cash, rate } from getquin and the cash at the brokers, or {} when not linked
-  const [invest, setInvestState] = useState(() => recall('analytics:invest'))
-  const setInvest = (value) => setInvestState(remember('analytics:invest', value))
-  // The pension fund's monthly entries (by hand), for net worth
-  const [pension, setPensionState] = useState(() => recall('analytics:pension'))
-  const setPension = (value) => setPensionState(remember('analytics:pension', value))
+  const { invest, pension } = useWorthExtras()
   const [error, setError] = useState(null)
-
-  useEffect(() => {
-    fetchPension()
-      .then((p) => setPension(p.entries))
-      .catch(() => setPension([]))
-  }, [])
 
   useEffect(() => {
     resetPeriod()
@@ -49,47 +36,26 @@ export default function Analytics() {
     }
   }, [period])
 
-  // The getquin portfolio, for net worth: the last answer kept on the phone, else a fresh one
-  useEffect(() => {
-    fetchProfile()
-      .then((p) => {
-        const link = p?.answers?.getquinUrl
-        const since = p?.answers?.getquinSince ?? null
-        if (!link) return setInvest({})
-        const cash = cashEntries(p)
-        let now = { portfolio: cachedPortfolio(link), since, cash, rate: cachedUsdRate()?.rate ?? null }
-        const update = (patch) => setInvest((now = { ...now, ...patch }))
-        update({})
-        // Fresh numbers (and the value history) in the background
-        fetchPortfolio(link)
-          .then((portfolio) => update({ portfolio }))
-          .catch(() => {})
-        if (cash.some((e) => e.currency === 'USD')) {
-          fetchUsdRate()
-            .then((r) => update({ rate: r.rate }))
-            .catch(() => {})
-        }
-      })
-      .catch(() => setInvest({}))
-  }, [])
-
   if (error) return <p className="px-5 pt-6 text-loss">Couldn't load analytics: {error}</p>
 
   const ready = data && data.period === period && categories && invest && pension
   const category = (id) => categories?.find((c) => c.id === id)
 
   return (
-    <div className="px-4 pt-1 pb-6">
+    <div className="pb-6">
+      <NavyTop>{ready ? <Standing a={data} invest={invest} pension={pension} /> : <div className="h-[230px]" />}</NavyTop>
       {ready && (
         <>
-          <Standing a={data} invest={invest} pension={pension} />
-          <Verdict a={data} />
+          <Overlap>
+            <MonthCard a={data} />
+          </Overlap>
           <Noticing items={noticings(data, category, whole)} />
-          <h2 className="mt-6 mb-2.5 px-1 font-display text-[19px] font-bold">Explore</h2>
-          <WhereItGoes a={data} category={category} />
-          <div className="mt-2.5 grid grid-cols-2 gap-2.5">
-            <KeepTile a={data} />
-            <TrendTile a={data} />
+          <h2 className="mt-6 mb-2.5 px-5 font-display text-[19px] font-bold">Explore</h2>
+          <div className="grid grid-cols-2 gap-2.5 px-4">
+            <SpendTile a={data} category={category} />
+            <SaveTile a={data} />
+            <TimeTile a={data} />
+            <RecurringTile a={data} />
           </div>
         </>
       )}
@@ -97,214 +63,191 @@ export default function Analytics() {
   )
 }
 
-// ---------- 1 · Where you stand ----------
-
-// Net worth = accounts + the getquin portfolio. Back in time the portfolio is its real value at the end of each
-// month (getquin's value history). If getquin can't give the history: today's value minus what was put in after
-// that month (getquin's trades before getquinSince, your Invest transactions after).
-// Cash at the brokers counts with the investments (only when getquin is linked): back in time, what you had
-// entered by the end of each month (dollars at today's rate).
-// The pension fund counts too: back in time, its last monthly entry by the end of each month.
-function standingOf(a, invest, pension = []) {
-  const cash = invest.portfolio ? (invest.cash ?? []) : []
-  const value = (invest.portfolio?.value_cents ?? 0) + cashTotal(cash, invest.rate)
-  const put = new Map()
-  const add = (k, cents) => put.set(k, (put.get(k) ?? 0) + cents)
-  const p = invest.portfolio
-  if (p && invest.since) {
-    if (p.days) for (const d of p.days) d.date < invest.since && add(d.date.slice(0, 7), d.cents)
-    else if (p.months) for (const m of p.months) m.key < invest.since.slice(0, 7) && add(m.key, m.cents)
-  }
-  for (const [k, m] of a.byMonth) if (m.investNet) add(k, m.investNet)
-  const history = p?.history?.length ? p.history : null
-  const thisMonth = a.worth.line.at(-1)?.key
-  const positions = p?.value_cents ?? 0
-  const positionsAt = (k) => {
-    if (!positions) return 0
-    if (history) {
-      if (k >= thisMonth) return positions
-      // The value at the end of month k (the last one known up to then; before the first one, nothing)
-      let found = 0
-      for (const h of history) if (h.date.slice(0, 7) <= k) found = h.cents
-      return found
-    }
-    let after = 0
-    for (const [key, cents] of put) if (key > k) after += cents
-    return Math.max(0, positions - after)
-  }
-  const cashAt = (k) => (k >= thisMonth ? cashTotal(cash, invest.rate) : cashOn(cash, `${k}-31`, invest.rate))
-  const pensionAt = (k) => pensionValueOn(pension, k >= thisMonth ? todayISO() : `${k}-31`)
-  const investedAt = (k) => positionsAt(k) + cashAt(k) + pensionAt(k)
-  const pensionNow = pensionValueOn(pension, todayISO())
-  const endKey = a.period.kind === 'year' ? `${a.period.key}-12` : a.period.key
-  const prevKey = a.period.kind === 'year' ? `${Number(a.period.key) - 1}-12` : shiftMonth(a.period.key, -1)
-  const end = a.worth.end + investedAt(endKey)
-  const before = a.worth.end - a.worth.change + investedAt(prevKey)
-  return {
-    end,
-    change: end - before,
-    line: a.worth.line.map((pt) => ({ key: pt.key, cents: pt.cents + investedAt(pt.key) })),
-    parts: [
-      { label: 'Accounts', cents: a.worth.bank, color: '#fff' },
-      { label: 'Savings', cents: a.worth.savings, color: '#9cc3ff' },
-      { label: 'Investments', cents: value, color: '#7fe3ee' },
-      { label: 'Pension', cents: pensionNow, color: '#c4b5fd' },
-    ].filter((x) => x.cents > 0),
-    hasInvestments: value + pensionNow > 0,
-  }
-}
+// ---------- Net worth (navy top) ----------
 
 function Standing({ a, invest, pension }) {
-  const s = standingOf(a, invest, pension)
-  const [euros, decimals] = formatCents(s.end).split(',')
-  const values = s.line.map((pt) => pt.cents)
+  const w = netWorthOf(a, invest, pension)
+  const values = w.line.map((pt) => pt.cents)
   const W = 300
-  const H = 52
+  const H = 58
   const max = Math.max(...values)
   const min = Math.min(...values)
-  const pts = values.map((v, i) => [values.length > 1 ? (i / (values.length - 1)) * W : W, H - ((v - min) / (max - min || 1)) * (H - 6) - 3])
+  const pts = values.map((v, i) => [values.length > 1 ? (i / (values.length - 1)) * W : W, H - ((v - min) / (max - min || 1)) * (H - 8) - 4])
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')
-  const labelAt = [0, 3, 6, 9, values.length - 1].filter((i, n, all) => i < values.length && all.indexOf(i) === n)
-  const total = s.parts.reduce((sum, x) => sum + x.cents, 0) || 1
+  const first = values[0]
+  // As a % only when it started from a real amount (a start near €0 gives silly percentages)
+  const yearPct = values.length > 1 && first > 0 && Math.abs(values.at(-1) / first - 1) < 2 ? (values.at(-1) - first) / first : null
+  const parts = WORTH_PARTS.map((p) => ({
+    ...p,
+    cents: w.parts[p.key],
+  })).filter((p) => p.cents > 0)
+  const total = parts.reduce((s, p) => s + p.cents, 0) || 1
 
   return (
-    <section className="relative mt-1 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#2b8ef7] via-cobalt to-cobalt-deep px-[18px] pt-[18px] pb-4 text-white shadow-[0_18px_30px_-20px_rgba(31,79,224,0.9)]">
-      <span className="pointer-events-none absolute -top-16 -right-14 size-48 rounded-full bg-white/[.08]" />
-      <div className="relative flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-white/85">
-          <Icon name="chart" size={15} strokeWidth={2.3} />
-          Where you stand
-        </p>
-        {s.change !== 0 && (
-          <span className="tabular rounded-full bg-white/[.18] px-2.5 py-1 text-xs font-bold">
-            {s.change > 0 ? '▲' : '▼'} {whole(Math.abs(s.change))} vs {prevLabel(a.period)}
-          </span>
+    <>
+      <BigAmount cents={w.end} label="Net worth" />
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {w.change !== 0 && (
+          <NavyPill tone={w.change > 0 ? 'good' : 'bad'}>
+            {w.change > 0 ? '▲' : '▼'} {whole(Math.abs(w.change))} this month
+          </NavyPill>
+        )}
+        {yearPct !== null && Math.round(yearPct * 100) !== 0 && (
+          <NavyPill>
+            {yearPct > 0 ? '▲' : '▼'} {Math.abs(Math.round(yearPct * 100))}% in {values.length - 1} {values.length === 2 ? 'month' : 'months'}
+          </NavyPill>
         )}
       </div>
-      <p className="tabular relative mt-0.5 truncate font-display leading-tight font-bold tracking-tight">
-        <span className="text-[36px]">{euros}</span>
-        <span className="text-lg text-white/55">,{decimals}</span>
-      </p>
-      <p className="relative text-[12.5px] text-white/80">
-        Net worth · {s.hasInvestments ? 'accounts, savings and investments' : 'accounts and savings'}
-      </p>
       {values.length > 1 && (
         <>
-          <svg viewBox={`0 0 ${W} ${H}`} className="relative mt-2.5 block h-auto w-full overflow-visible" aria-hidden="true">
-            <path d={`${line} L${W} ${H} L0 ${H} Z`} fill="#fff" fillOpacity=".13" />
-            <path d={line} fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx={pts.at(-1)[0]} cy={pts.at(-1)[1]} r="4" fill="#fff" />
+          <svg viewBox={`0 0 ${W} ${H}`} className="mt-4 block h-auto w-full overflow-visible" aria-hidden="true">
+            <defs>
+              <linearGradient id="worth-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0" stopColor="#8fb4ff" stopOpacity=".35" />
+                <stop offset="1" stopColor="#8fb4ff" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={`${line} L${W} ${H} L0 ${H} Z`} fill="url(#worth-fill)" />
+            <path d={line} fill="none" stroke="#8fb4ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx={pts.at(-1)[0]} cy={pts.at(-1)[1]} r="4" fill="#8fb4ff" stroke="#0b1b45" strokeWidth="2" />
           </svg>
-          <div className="relative mt-1 flex justify-between text-[10.5px] text-white/60">
-            {labelAt.map((i) => (
-              <span key={i}>{monthShort(s.line[i].key)}</span>
-            ))}
+          <div className="mt-1 flex justify-between text-[10.5px] text-white/50">
+            <span>{monthShort(w.line[0].key)}</span>
+            <span>{monthShort(w.line.at(-1).key)}</span>
           </div>
         </>
       )}
-      {s.parts.length > 0 && (
+      {parts.length > 1 && (
         <>
-          <div className="relative mt-3 flex h-2.5 gap-0.5 overflow-hidden rounded-full">
-            {s.parts.map((x) => (
-              <span key={x.label} style={{ flex: x.cents / total, background: x.color }} />
+          <div className="mt-3 flex h-[7px] gap-[3px]">
+            {parts.map((p) => (
+              <span key={p.key} className="rounded-full" style={{ flex: p.cents / total, background: p.color }} />
             ))}
           </div>
-          <div className="relative mt-2 flex justify-between gap-2 text-xs text-white/90">
-            {s.parts.map((x) => (
-              <span key={x.label} className="min-w-0">
-                <span className="flex items-center gap-1.5">
-                  <span className="size-2 rounded-full" style={{ background: x.color }} />
-                  {x.label}
-                </span>
-                <b className="tabular block truncate text-sm">{whole(x.cents)}</b>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] text-white/70">
+            {parts.map((p) => (
+              <span key={p.key} className="flex items-center gap-1.5">
+                <span className="size-2 rounded-[3px]" style={{ background: p.color }} />
+                {p.label}
               </span>
             ))}
           </div>
         </>
       )}
-    </section>
+    </>
   )
 }
 
-// ---------- 2 · October so far ----------
+// ---------- This month (the card overlapping the navy) ----------
 
-const GOOD = { bg: 'bg-gain/12', text: 'text-gain' }
-const BAD = { bg: 'bg-warn-bg', text: 'text-orange-text' }
-const SAME = { bg: 'bg-line/70', text: 'text-muted' }
-
-// "▼ 8%" (good when down for spending), "▲ 8 pts", "= same"
-function chipFor(change, { goodWhenDown = false, points = false } = {}) {
+// "▼ 13%" chips: green when it's the good way, orange when not
+function Chip({ change, goodWhenDown = false, points = false }) {
   if (change === null) return null
-  const size = Math.round(change * 100)
-  if (Math.abs(change) < (points ? 0.02 : 0.03) || size === 0) return { text: '= same', tone: SAME }
+  const size = Math.round(Math.abs(change) * 100)
+  if (Math.abs(change) < (points ? 0.02 : 0.03) || size === 0)
+    return <span className="rounded-full bg-line/70 px-2 py-0.5 text-xs font-bold text-muted">= same</span>
   const up = change > 0
   const good = goodWhenDown ? !up : up
-  return { text: `${up ? '▲' : '▼'} ${Math.abs(size)}${points ? ' pts' : '%'}`, tone: good ? GOOD : BAD }
-}
-
-function Verdict({ a }) {
-  const v = verdictOf(a)
-  const year = a.period.kind === 'year'
-  const label = a.current
-    ? `${year ? a.period.key : periodLabel(a.period).split(' ')[0]} so far · day ${a.days.passed} of ${a.days.total}`
-    : periodLabel(a.period)
-  // Spending is compared up to the same day; income with a whole usual month (it usually arrives at once)
-  const usual = (cents, byNow) =>
-    cents === null ? 'Not enough history yet' : year ? `${prevLabel(a.period)} by now ${whole(cents)}` : `usual ${whole(cents)}${byNow && a.current ? ' by now' : ''}`
-  const spend = chipFor(v.spending.change, { goodWhenDown: true })
-  const dot = spend?.tone === GOOD ? '#0f8a5f' : spend?.tone === BAD ? '#f08c00' : '#1f4fe0'
-
   return (
-    <section className="mt-3 rounded-[24px] bg-card px-4 pt-4 pb-1.5">
-      <p className="flex items-center gap-2 text-xs font-bold tracking-[0.08em] text-muted uppercase">
-        <span className="size-2 rounded-full" style={{ background: dot, boxShadow: `0 0 0 4px ${dot}22` }} />
-        {label}
-      </p>
-      <p className="mt-2 mb-3 font-display text-[21px] leading-tight font-bold">{v.sentence}</p>
-      <VerdictRow icon="card" color="#f08c00" label="Spending" value={whole(v.spending.now)} sub={usual(v.spending.usual, true)} chip={spend} />
-      <VerdictRow
-        icon="savings"
-        color="#0c8599"
-        label="Kept"
-        value={v.kept.rate !== null ? pct(Math.max(0, v.kept.rate)) : '—'}
-        sub={v.kept.usual !== null ? `usual ${pct(v.kept.usual)}` : 'Not enough history yet'}
-        chip={chipFor(v.kept.change, { points: true })}
-      />
-      <VerdictRow icon="plus" color="#0f8a5f" label="Income" value={whole(v.income.now)} sub={usual(v.income.usual)} chip={chipFor(v.income.change)} />
-    </section>
+    <span className={`tabular shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${good ? 'bg-gain/12 text-gain' : 'bg-warn-bg text-orange-text'}`}>
+      {up ? '▲' : '▼'} {size}
+      {points ? ' pts' : '%'}
+    </span>
   )
 }
 
-function VerdictRow({ icon, color, label, value, sub, chip }) {
+function MonthCard({ a }) {
+  const v = verdictOf(a)
+  const spendTone = v.spending.change === null ? null : v.spending.change <= -0.03 ? 'good' : v.spending.change >= 0.03 ? 'bad' : null
+  const tile = spendTone === 'good' ? 'bg-gain/12 text-gain' : spendTone === 'bad' ? 'bg-warn-bg text-orange-text' : 'bg-bubble text-cobalt'
+  const kept = a.saving.kept
+  const keptUsual = v.kept.usual !== null && a.totals.income > 0 ? v.kept.usual * a.totals.income : null
   return (
-    <div className="flex items-center gap-3 border-t border-line py-2.5">
-      <span className="grid size-[34px] shrink-0 place-items-center rounded-[11px]" style={{ background: `${color}1f`, color }}>
-        <Icon name={icon} size={17} strokeWidth={2.3} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <b className="block text-[14.5px]">{label}</b>
-        <span className="tabular block truncate text-xs text-muted">{sub}</span>
-      </span>
-      <b className="tabular font-display text-base">{value}</b>
-      <span className={`tabular min-w-[62px] rounded-full px-2 py-[3px] text-center text-xs font-bold ${chip ? `${chip.tone.bg} ${chip.tone.text}` : 'invisible'}`}>
-        {chip?.text ?? '—'}
-      </span>
+    <div className="rounded-[24px] bg-card pb-2 shadow-[0_14px_30px_-22px_rgba(11,27,69,0.45)]">
+      <div className="flex items-center gap-3 px-[18px] pt-4 pb-1.5">
+        <span className={`grid size-[34px] shrink-0 place-items-center rounded-[11px] ${tile}`}>
+          <Icon name={spendTone === 'bad' ? 'arrowUp' : spendTone === 'good' ? 'arrowDown' : 'calendar'} size={17} strokeWidth={2.4} />
+        </span>
+        <span className="min-w-0">
+          <b className="block font-display text-[17px] leading-tight">{v.sentence}</b>
+          <span className="text-[12.5px] text-muted">
+            {periodLabel(a.period).split(' ')[0]} · day {a.days.passed} of {a.days.total}
+          </span>
+        </span>
+      </div>
+      <MonthRow
+        label="Spending"
+        color="#e8590c"
+        value={whole(v.spending.now)}
+        now={v.spending.now}
+        usual={v.spending.usual}
+        note={v.spending.usual !== null ? `usual by now ${whole(v.spending.usual)}` : 'Not enough history yet'}
+        chip={<Chip change={v.spending.change} goodWhenDown />}
+      />
+      <MonthRow
+        label="Income"
+        color="#2b8a3e"
+        value={whole(v.income.now)}
+        now={v.income.now}
+        usual={v.income.usual}
+        note={v.income.usual !== null ? `usual ${whole(v.income.usual)}` : 'Not enough history yet'}
+        chip={<Chip change={v.income.change} />}
+      />
+      <MonthRow
+        label="Kept"
+        color="#0c8599"
+        value={kept < 0 ? `−${whole(-kept)}` : whole(kept)}
+        now={Math.max(0, kept)}
+        usual={keptUsual}
+        note={
+          v.kept.rate !== null ? `${pct(Math.max(0, v.kept.rate))} of income${v.kept.usual !== null ? ` · usual ${pct(v.kept.usual)}` : ''}` : 'No income yet'
+        }
+        chip={<Chip change={v.kept.change} points />}
+      />
     </div>
   )
 }
 
-// ---------- 3 · Worth noticing ----------
+// One row: label, note, amount; a bar of this month with a mark at your usual
+function MonthRow({ label, color, value, now, usual, note, chip }) {
+  const max = Math.max(1, now, usual ?? 0) * 1.15
+  return (
+    <div className="px-[18px] py-2.5">
+      <div className="flex items-baseline gap-2">
+        <b className="text-[15px]">{label}</b>
+        <span className="tabular min-w-0 flex-1 truncate text-[12.5px] text-muted">{note}</span>
+        <b className="tabular font-display text-[17px]">{value}</b>
+      </div>
+      <div className="mt-2 flex items-center gap-2.5">
+        <div className="relative h-2 flex-1 rounded-full bg-line">
+          <span className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${(now / max) * 100}%`, background: color }} />
+          {usual !== null && usual > 0 && <span className="absolute -inset-y-1 w-[2.5px] rounded-full bg-ink" style={{ left: `${(usual / max) * 100}%` }} />}
+        </div>
+        {chip}
+      </div>
+    </div>
+  )
+}
 
-const TONES = { up: '#e8590c', down: '#0f8a5f', new: '#7c4dff', week: '#1f4fe0', invest: '#0c8599', big: '#495057' }
-const CARD_STEP = 246 // card width + gap, for the dots
+// ---------- Worth noticing ----------
+
+const TONES = {
+  up: '#e8590c',
+  down: '#0f8a5f',
+  new: '#7c4dff',
+  week: '#1f4fe0',
+  invest: '#0c8599',
+  big: '#5a6b8c',
+}
+const CARD_STEP = 222 // card width + gap, for the dots
 
 function Noticing({ items }) {
   const [shown, setShown] = useState(0)
   if (!items.length) return null
   return (
     <section>
-      <div className="mt-6 mb-2.5 flex items-center justify-between px-1">
-        <h2 className="font-display text-[18px] font-bold">Worth noticing</h2>
+      <div className="mt-6 mb-2.5 flex items-center justify-between px-5">
+        <h2 className="font-display text-[19px] font-bold">Worth noticing</h2>
         {items.length > 1 && (
           <span className="flex gap-1" aria-hidden="true">
             {items.map((x, i) => (
@@ -314,7 +257,7 @@ function Noticing({ items }) {
         )}
       </div>
       <div
-        className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex snap-x snap-mandatory scroll-px-4 gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         onScroll={(e) => setShown(Math.min(items.length - 1, Math.round(e.currentTarget.scrollLeft / CARD_STEP)))}
       >
         {items.map((x) => {
@@ -323,14 +266,13 @@ function Noticing({ items }) {
             <button
               key={x.key}
               onClick={() => x.to && navigate(x.to)}
-              className={`relative w-[236px] shrink-0 snap-start overflow-hidden rounded-[22px] bg-card p-3.5 text-left ${x.to ? 'active:scale-[0.98]' : 'cursor-default'} transition`}
+              className={`w-[212px] shrink-0 snap-start rounded-[22px] bg-card p-3.5 text-left shadow-[0_14px_30px_-24px_rgba(11,27,69,0.45)] transition ${x.to ? 'active:scale-[0.98]' : 'cursor-default'}`}
             >
-              <span className="pointer-events-none absolute -top-6 -right-6 size-[84px] rounded-full" style={{ background: `${color}14` }} />
-              <span className="relative grid size-[34px] place-items-center rounded-[11px] text-white" style={{ background: color }}>
-                <Icon name={x.icon} size={17} strokeWidth={2.3} />
+              <span className="grid size-9 place-items-center rounded-xl" style={{ background: `${color}22`, color }}>
+                <Icon name={x.icon} size={18} strokeWidth={2.3} />
               </span>
-              <b className="relative mt-2.5 block text-[15px] leading-snug">{x.title}</b>
-              <span className="tabular relative mt-0.5 block text-[12.5px] text-muted">{x.sub}</span>
+              <b className="mt-2.5 block text-[15px] leading-snug">{x.title}</b>
+              <span className="tabular mt-0.5 block text-[13px] leading-snug text-muted">{x.sub}</span>
             </button>
           )
         })}
@@ -339,156 +281,202 @@ function Noticing({ items }) {
   )
 }
 
-// ---------- 4 · Explore ----------
+// ---------- Explore ----------
 
-function Halo() {
-  return <span className="pointer-events-none absolute -top-12 -right-10 size-36 rounded-full bg-white/[.12]" />
-}
-function TileHead({ icon, title, inline = false }) {
+function Tile({ to, wide = false, children }) {
   return (
-    <div className={`relative flex items-center ${inline ? 'gap-2.5' : 'justify-between'}`}>
-      <span className="grid size-[34px] place-items-center rounded-[11px] bg-white/20">
-        <Icon name={icon} size={17} strokeWidth={2.3} />
-      </span>
-      {inline && <span className="flex-1 text-[13.5px] font-bold text-white/90">{title}</span>}
-      <span className="grid size-[26px] place-items-center rounded-full bg-white/[.18]">
-        <Icon name="chevronRight" size={14} strokeWidth={2.6} />
-      </span>
-    </div>
+    <button
+      onClick={() => navigate(to)}
+      className={`min-w-0 rounded-[24px] bg-card p-3.5 text-left shadow-[0_14px_30px_-24px_rgba(11,27,69,0.45)] transition active:scale-[0.98] ${wide ? 'col-span-2' : ''}`}
+    >
+      {children}
+    </button>
   )
 }
 
-// Where it goes (orange): spent, fixed vs everyday, the top categories. Tap → Spending; a category → its page.
-function WhereItGoes({ a, category }) {
-  const spent = a.totals.spent
-  const fixed = Math.min(a.spending.fixed, spent)
-  const top = a.categories.slice(0, 3)
-  const rest = Math.max(0, spent - top.reduce((s, c) => s + c.cents, 0))
-  const shades = ['#fff', 'rgba(255,255,255,.72)', 'rgba(255,255,255,.48)']
+function TileHead({ icon, color, title, chevron = false }) {
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => navigate('/analytics/spending')}
-      onKeyDown={(e) => e.key === 'Enter' && navigate('/analytics/spending')}
-      className="relative cursor-pointer overflow-hidden rounded-[24px] bg-gradient-to-br from-[#ff9f43] to-[#e8590c] p-4 text-white shadow-[0_16px_28px_-20px_rgba(232,89,12,0.9)] active:scale-[0.99]"
-    >
-      <Halo />
-      <TileHead icon="card" title="Where it goes" inline />
-      <div className="relative mt-2.5 flex flex-wrap items-baseline gap-x-2">
-        <b className="tabular font-display text-[27px]">{whole(spent)}</b>
-        <span className="text-[12.5px] text-white/90">
-          {spent ? (
-            <>
-              spent · <b>{whole(fixed)} fixed</b> · <b>{whole(spent - fixed)} everyday</b>
-            </>
-          ) : (
-            'Nothing spent yet'
-          )}
-        </span>
-      </div>
-      {spent > 0 && (
+    <span className="flex items-center gap-2">
+      <span className="grid size-8 shrink-0 place-items-center rounded-[10px]" style={{ background: `${color}24`, color }}>
+        <Icon name={icon} size={17} strokeWidth={2.4} />
+      </span>
+      <b className="min-w-0 flex-1 text-[14px] leading-tight">{title}</b>
+      {chevron && <Icon name="chevronRight" size={16} className="text-muted" />}
+    </span>
+  )
+}
+
+const Big = ({ children }) => <b className="tabular mt-2.5 block truncate font-display text-[21px] leading-tight">{children}</b>
+const Sub = ({ children }) => <span className="tabular block min-h-[32px] text-xs leading-snug text-muted">{children}</span>
+
+function SpendTile({ a, category }) {
+  const v = verdictOf(a)
+  const c = v.spending.change
+  const sub = !a.totals.spent
+    ? 'Nothing spent yet'
+    : c === null
+      ? 'so far this month'
+      : Math.abs(c) < 0.03
+        ? 'about your usual by now'
+        : `${Math.round(Math.abs(c) * 100)}% ${c < 0 ? 'under' : 'over'} usual by now`
+  const top = a.categories.slice(0, 5)
+  return (
+    <Tile to="/analytics/spending">
+      <TileHead icon="moneyOut" color="#e8590c" title="Spending" />
+      <Big>{whole(a.totals.spent)}</Big>
+      <Sub>{sub}</Sub>
+      {top.length > 0 && (
         <>
-          <div className="relative mt-3 flex h-[9px] gap-0.5 overflow-hidden rounded-full bg-white/20">
-            {top.map((c, i) => (
-              <span key={c.id ?? 'none'} style={{ flex: c.cents, background: shades[i] }} />
+          <span className="mt-2 flex h-2 gap-0.5">
+            {top.map((x) => (
+              <span
+                key={x.id ?? 'none'}
+                className="rounded-[3px]"
+                style={{
+                  flex: x.cents,
+                  background: category(x.id)?.color ?? '#94a3c4',
+                }}
+              />
             ))}
-            {rest > 0 && <span style={{ flex: rest, background: 'rgba(255,255,255,.26)' }} />}
-          </div>
-          <div className="relative mt-2.5 grid grid-cols-3 gap-2 text-[12.5px]">
-            {top.map((c) => {
-              const cat = category(c.id)
-              return (
-                <button
-                  key={c.id ?? 'none'}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    navigate(`/analytics/categories/${c.id ?? 'none'}`)
-                  }}
-                  className="min-w-0 text-left"
-                >
-                  <b className="block truncate">
-                    {cat?.icon ?? '❔'} {cat?.name ?? 'No category'}
-                  </b>
-                  <span className="tabular text-white/85">{whole(c.cents)}</span>
-                </button>
-              )
-            })}
-          </div>
+          </span>
+          <span className="mt-1.5 block truncate text-[11.5px] text-muted">
+            {top
+              .slice(0, 3)
+              .map((x) => category(x.id)?.icon ?? '❔')
+              .join(' ')}{' '}
+            top {Math.min(3, top.length)}
+          </span>
         </>
       )}
-    </div>
+    </Tile>
   )
 }
 
-// What you keep (teal): saved + invested, as a share of income. Tap → Saving.
-function KeepTile({ a }) {
+function SaveTile({ a }) {
   const { totals, saving } = a
-  const income = totals.income
-  const saved = income > 0 ? Math.max(0, Math.min(1, totals.saved / income)) : 0
-  const invested = income > 0 ? Math.max(0, Math.min(1 - saved, totals.invested / income)) : 0
+  const saved = Math.max(0, totals.saved)
+  const invested = Math.max(0, totals.invested)
   return (
-    <button
-      onClick={() => navigate('/analytics/saving')}
-      className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#17b3c6] to-[#0a6f80] p-[15px] text-left text-white shadow-[0_16px_28px_-20px_rgba(12,133,153,0.9)] active:scale-[0.98]"
-    >
-      <Halo />
-      <TileHead icon="savings" />
-      <span className="relative mt-3 block text-[13px] font-bold text-white/90">What you keep</span>
-      <b className="tabular relative block font-display text-2xl">{whole(saving.kept)}</b>
-      <span className="relative mt-2.5 flex h-2 overflow-hidden rounded-full bg-white/20">
-        <span style={{ width: `${saved * 100}%`, background: '#fff' }} />
-        <span style={{ width: `${invested * 100}%`, background: '#a5f0f7' }} />
-      </span>
-      <span className="relative mt-1.5 block text-[11.5px] text-white/85">
-        {income > 0 && saving.rate !== null ? `${pct(Math.max(0, saving.rate))} of income` : 'No income yet'}
-      </span>
-    </button>
+    <Tile to="/analytics/saving">
+      <TileHead icon="savings" color="#0c8599" title="Savings & Investments" />
+      <Big>{saving.kept < 0 ? `−${whole(-saving.kept)}` : whole(saving.kept)}</Big>
+      <Sub>{saving.rate !== null ? `kept · ${pct(Math.max(0, saving.rate))} of income` : 'kept this month'}</Sub>
+      {saved + invested > 0 && (
+        <span className="mt-2 flex h-2 gap-0.5">
+          {saved > 0 && <span className="rounded-[3px] bg-cobalt" style={{ flex: saved }} />}
+          {invested > 0 && <span className="rounded-[3px] bg-teal" style={{ flex: invested }} />}
+        </span>
+      )}
+      {(totals.saved !== 0 || totals.invested !== 0) && (
+        <span className="tabular mt-1.5 flex gap-2.5 text-[11.5px] text-muted">
+          <span className="flex items-center gap-1">
+            <span className="size-2 rounded-[3px] bg-cobalt" />
+            {whole(totals.saved)}
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="size-2 rounded-[3px] bg-teal" />
+            {whole(totals.invested)}
+          </span>
+        </span>
+      )}
+    </Tile>
   )
 }
 
-// Better or worse (navy): spending against your usual, with the 12 months as bars, your usual month dashed and
-// this month solid so far + faded up to where it's heading. Tap → Trends.
-function TrendTile({ a }) {
-  const v = verdictOf(a)
-  const chip = chipFor(v.spending.change, { goodWhenDown: true })
-  const W = 140
-  const H = 34
-  const usual = a.avgOut ?? 0
-  const onTrack = a.period.kind === 'month' ? (a.spending.onTrack ?? 0) : 0
-  const max = Math.max(1, usual, onTrack, ...a.trend.map((t) => t.spent))
-  const step = W / a.trend.length
-  const bw = step * 0.56
-  const y = (c) => H - (Math.min(c, max) / max) * H
-  const better = chip?.tone === GOOD
+function TimeTile({ a }) {
+  const rows = a.trend.filter((t) => !t.future)
+  const inTotal = rows.reduce((s, t) => s + t.income, 0)
+  const outTotal = rows.reduce((s, t) => s + t.spent, 0)
+  const creep = creepOf(a)
+  const W = 180
+  const H = 70
+  const step = W / 12
+  const bw = step * 0.3
+  const max = Math.max(1, ...rows.map((t) => Math.max(t.income, t.spent)))
+  const y = (c) => H - (c / max) * H
+  const label = {
+    up: 'spending creeping up',
+    down: 'spending coming down',
+    steady: 'spending steady',
+  }
+  const tone = {
+    up: 'bg-warn-bg text-orange-text',
+    down: 'bg-gain/12 text-gain',
+    steady: 'bg-line/70 text-muted',
+  }
   return (
-    <button
-      onClick={() => navigate('/analytics/trends')}
-      className="relative overflow-hidden rounded-[24px] bg-gradient-to-br from-[#3a4a7a] to-[#1b2550] p-[15px] text-left text-white shadow-[0_16px_28px_-20px_rgba(27,37,80,0.9)] active:scale-[0.98]"
-    >
-      <Halo />
-      <TileHead icon="bars" />
-      <span className="relative mt-3 block text-[13px] font-bold text-white/90">Better or worse</span>
-      <b className="tabular relative block font-display text-2xl">{chip?.text ?? '—'}</b>
-      <svg viewBox={`0 0 ${W} ${H}`} className="relative mt-2 block h-auto w-full overflow-visible" aria-hidden="true">
-        {a.trend.map((t, i) => {
-          const x = i * step + (step - bw) / 2
-          if (t.future || (!t.partial && !t.spent)) return null
-          if (t.partial) {
+    <Tile to="/analytics/trends" wide>
+      <TileHead icon="invest" color="#1f4fe0" title="Over time" chevron />
+      <span className="mt-2.5 flex items-end gap-3.5">
+        <span className="min-w-[124px]">
+          <span className="block text-xs text-muted">Last 12 months</span>
+          <span className="tabular mt-1 block text-[13px]">
+            <b className="text-gain">In</b> {whole(inTotal)}
+          </span>
+          <span className="tabular block text-[13px]">
+            <b className="text-orange-text">Out</b> {whole(outTotal)}
+          </span>
+          {creep && <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11.5px] font-bold ${tone[creep.trend]}`}>{label[creep.trend]}</span>}
+        </span>
+        <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto min-w-0 flex-1" aria-hidden="true">
+          {rows.map((t, i) => {
+            const x = i * step + step / 2 - bw - 0.5
             return (
-              <g key={t.key}>
-                {onTrack > t.spent && <rect x={x} y={y(onTrack)} width={bw} height={H - y(onTrack)} rx={bw / 3} fill={better ? 'rgba(126,240,180,.3)' : 'rgba(255,184,77,.3)'} />}
-                <rect x={x} y={y(t.spent)} width={bw} height={Math.max(2, H - y(t.spent))} rx={bw / 3} fill={better ? '#7ef0b4' : '#ffb84d'} />
+              <g key={t.key} opacity={t.partial ? 0.45 : 1}>
+                {t.income > 0 && <rect x={x} y={y(t.income)} width={bw} height={H - y(t.income)} rx="2" fill="#2b8a3e" />}
+                {t.spent > 0 && <rect x={x + bw + 1} y={y(t.spent)} width={bw} height={H - y(t.spent)} rx="2" fill="#e8590c" />}
               </g>
             )
-          }
-          return <rect key={t.key} x={x} y={y(t.spent)} width={bw} height={Math.max(2, H - y(t.spent))} rx={bw / 3} fill="rgba(255,255,255,.28)" />
-        })}
-        {usual > 0 && <line x1="0" x2={W} y1={y(usual)} y2={y(usual)} stroke="rgba(255,255,255,.75)" strokeWidth="1.3" strokeDasharray="3 4" />}
-      </svg>
-      <span className="relative mt-1.5 block text-[11.5px] text-white/85">
-        spending vs {a.period.kind === 'year' ? prevLabel(a.period) : 'usual'}
+          })}
+        </svg>
       </span>
-    </button>
+    </Tile>
+  )
+}
+
+// Recurring: what the payments cost a month and a year, their logos, what was added this month, the next one
+function RecurringTile({ a }) {
+  const today = todayISO()
+  const pay = (a.recurring ?? []).filter((r) => r.active && r.type !== 'income').sort((x, y) => monthlyCents(y) - monthlyCents(x))
+  const added = pay.filter((r) => (r.created_at ?? '').slice(0, 7) === today.slice(0, 7)).reduce((s, r) => s + monthlyCents(r), 0)
+  const next = pay.filter((r) => r.next_due >= today).sort((x, y) => (x.next_due < y.next_due ? -1 : 1))[0]
+  const shown = pay.slice(0, 6)
+  return (
+    <Tile to="/analytics/recurring" wide>
+      <TileHead icon="repeat" color="#7c4dff" title="Recurring" chevron />
+      {pay.length === 0 ? (
+        <span className="mt-2 block text-[13px] text-muted">No recurring payments yet.</span>
+      ) : (
+        <>
+          <span className="mt-2.5 flex items-baseline gap-2">
+            <b className="tabular font-display text-2xl">{whole(a.recurringMonthly)}</b>
+            <span className="text-[13px] text-muted">a month</span>
+            <span className="tabular ml-auto text-[13px] text-muted">{whole(a.recurringMonthly * 12)} a year</span>
+          </span>
+          <span className="mt-3 flex items-center">
+            {shown.map((r, i) => (
+              <span key={r.id} className="relative rounded-full ring-[2.5px] ring-card" style={{ marginLeft: i ? -8 : 0, zIndex: 10 - i }}>
+                <MerchantIcon name={r.name} className="size-[34px] rounded-full bg-tint-from text-base">
+                  {r.icon}
+                </MerchantIcon>
+              </span>
+            ))}
+            {pay.length > shown.length && <span className="ml-2 text-[13px] font-semibold text-muted">+{pay.length - shown.length}</span>}
+            {added > 0 && <span className="tabular ml-auto rounded-full bg-violet/12 px-2 py-0.5 text-xs font-bold text-violet">▲ {whole(added)} new</span>}
+          </span>
+          {next && (
+            <span className="mt-3 flex items-center gap-2.5 rounded-[14px] bg-tint-from px-3 py-2.5">
+              <MerchantIcon name={next.name} className="size-6 rounded-lg text-sm">
+                {next.icon}
+              </MerchantIcon>
+              <span className="min-w-0 flex-1 truncate text-[13px]">
+                <b>Next: {next.name}</b> <span className="text-muted">· {dueText(next).split(' · ')[0].toLowerCase()}</span>
+              </span>
+              <b className="tabular text-[13.5px]">{formatCents(next.amount_cents)}</b>
+            </span>
+          )}
+        </>
+      )}
+    </Tile>
   )
 }

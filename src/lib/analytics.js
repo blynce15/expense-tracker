@@ -124,7 +124,7 @@ export function buildAnalytics(p, accounts, recurring, rows) {
   // While a period is still running, compare with the one before only up to the same day
   // (e.g. 1–12 Oct with 1–12 Sep), else a part month always looks cheaper than a full one
   const cutoff = isCurrentPeriod(p) ? sameDayBefore(p) : null
-  // The same month last year, up to the same day while this month is running (Better or worse)
+  // The same month last year, up to the same day while this month is running (Over time)
   const lyKey = p.kind === 'month' ? shiftMonth(p.key, -12) : null
   const lyCutoff = lyKey && isCurrentPeriod(p) ? `${lyKey}-${todayISO().slice(8, 10)}` : null
   const lastYear = { income: 0, spent: 0, kept: 0, any: false }
@@ -206,7 +206,14 @@ export function buildAnalytics(p, accounts, recurring, rows) {
     for (const [key, m] of byMonth) if (key > k) change += m.income - m.spent - m.investNet
     return nowTotal - change
   }
-  const worthLine = last12.filter((k) => k <= now).map((k) => ({ key: k, cents: afterMonth(k) }))
+  // The savings accounts' part of it, worked out the same way (money into savings after M is taken off)
+  const savingsNow = accounts.filter((a) => a.type === 'savings').reduce((s, a) => s + a.balance_cents, 0)
+  const savingsAfter = (k) => {
+    let change = 0
+    for (const [key, m] of byMonth) if (key > k) change += m.saved
+    return savingsNow - change
+  }
+  const worthLine = last12.filter((k) => k <= now).map((k) => ({ key: k, cents: afterMonth(k), savings: savingsAfter(k) }))
   const worthEnd = afterMonth(endMonth)
   const worthBefore = afterMonth(p.kind === 'year' ? `${Number(p.key) - 1}-12` : shiftMonth(p.key, -1))
   const byType = (types) => accounts.filter((a) => types.includes(a.type)).reduce((s, a) => s + a.balance_cents, 0)
@@ -451,7 +458,7 @@ export function noticings(a, category, euros) {
     if (!day || !r.active || added >= 2) continue
     if (year ? day.slice(0, 4) !== a.period.key : day.slice(0, 7) !== a.period.key) continue
     const per = { weekly: 'a week', monthly: 'a month', yearly: 'a year' }[r.frequency] ?? 'a month'
-    out.push({ key: `rec-${r.id}`, icon: 'repeat', tone: 'new', title: `New recurring: ${r.name}`, sub: `${euros(r.amount_cents)} ${per} since ${dayMonth(day)}`, to: '/recurring' })
+    out.push({ key: `rec-${r.id}`, icon: 'repeat', tone: 'new', title: `New recurring: ${r.name}`, sub: `${euros(r.amount_cents)} ${per} since ${dayMonth(day)}`, to: '/analytics/recurring' })
     added += 1
   }
 
@@ -520,4 +527,18 @@ export function noticings(a, category, euros) {
     out.push({ key: 'big', icon: 'card', tone: 'big', title: `Biggest purchase: ${big.note?.trim() || name(big.category_id)}`, sub: `${euros(big.amount_cents)} on ${dayMonth(big.date)}` })
   }
   return out.slice(0, 5)
+}
+
+// "Is spending creeping up?": the full months with any activity in the 12 months, the last 6 (or fewer with
+// less history) against the ones before. null with fewer than 4 full months. rise = recent ÷ before − 1;
+// trend: 'up' (≥ +5%), 'down' (≤ −5%) or 'steady'.
+export function creepOf(a) {
+  const full = a.trend.filter((t) => !t.partial && !t.future && (t.income || t.spent))
+  if (full.length < 4) return null
+  const half = Math.min(6, Math.floor(full.length / 2))
+  const avg = (list) => list.reduce((s, t) => s + t.spent, 0) / list.length
+  const recent = avg(full.slice(-half))
+  const before = avg(full.slice(-2 * half, -half))
+  const rise = before ? recent / before - 1 : 0
+  return { full, half, recent, before, diff: Math.round(recent - before), rise, trend: rise >= 0.05 ? 'up' : rise <= -0.05 ? 'down' : 'steady' }
 }

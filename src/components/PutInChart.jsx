@@ -7,7 +7,7 @@ import { putInMonths, shiftMonth } from '../lib/portfolio'
 import { fetchProfile } from '../lib/profile'
 import { supabase } from '../lib/supabase'
 
-// Analytics → What you keep → Put into investments: money put in each of the last 12 months.
+// Analytics → Savings & Investments → Put into investments: money put in each of the last 12 months.
 // Portfolio = getquin's trades before you connected it, your Invest − Take out after (src/lib/portfolio.js);
 // Pension = what you entered as put in each month. Dashed line = the average full month.
 const whole = (cents) => formatCents(cents).replace(/,\d\d$/, '')
