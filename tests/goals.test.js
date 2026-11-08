@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { goalProblem, holdings, savingsAccounts, savingsEffect, transactionGoalProblem } from '../src/lib/goals'
+import { goalHistory, goalProblem, holdings, savingsAccounts, savingsEffect, transactionGoalProblem } from '../src/lib/goals'
 
 // Two savings accounts (€300 + €200 to start, all General savings) and a bank account
 const accounts = [
@@ -93,5 +93,30 @@ describe('Money rule: no goal (General included) below €0', () => {
 
   test('a change that only adds money is always fine', () => {
     expect(transactionGoalProblem(state, null, tx('transfer', 1, 'main', 's1', 'car'))).toBeNull()
+  })
+})
+
+describe('goalHistory: the moves in and out of one goal', () => {
+  const s = {
+    ...state,
+    transactions: state.transactions.map((t, i) => ({ ...t, date: `2026-10-0${i + 1}` })),
+    moves: [{ id: 'm1', from_goal_id: 'trip', to_goal_id: null, amount_cents: 8000, date: '2026-10-09' }],
+  }
+
+  test('lists tagged transfers and goal moves, newest first, with + in and − out', () => {
+    expect(goalHistory(s, 'trip').map((h) => [h.label, h.cents])).toEqual([
+      ['To General savings', -8000],
+      ['To Main card', -5000],
+      ['From Main card', 40000],
+    ])
+  })
+
+  test('General savings sees the move from the goal; transactions outside savings never show', () => {
+    expect(goalHistory(s, null).map((h) => [h.label, h.cents])).toEqual([['From Trip', 8000]])
+  })
+
+  test('the history adds up to the goal\'s money moved by transactions and moves', () => {
+    const sum = goalHistory(s, 'trip').reduce((a, h) => a + h.cents, 0)
+    expect(sum).toBe(holds(s, 'trip'))
   })
 })

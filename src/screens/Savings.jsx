@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import AmountPad from '../components/AmountPad'
 import DatePicker from '../components/DatePicker'
 import Icon from '../components/Icon'
 import Sheet from '../components/Sheet'
 import { MiniCard, shade } from '../components/BankCard'
 import { checkOverdraft } from '../lib/balances'
-import { todayISO } from '../lib/dates'
+import { formatDay, formatDayMonth, todayISO } from '../lib/dates'
 import { goalColor, goalTextColor } from '../lib/goalColors'
-import { fetchGoalsState, goalProblem, moveBetweenGoals, savingsAccounts, transactionGoalProblem } from '../lib/goals'
-import { centsToPad, formatCents, parseToCents } from '../lib/money'
+import { fetchGoalsState, goalHistory, goalProblem, moveBetweenGoals, savingsAccounts, transactionGoalProblem } from '../lib/goals'
+import { centsToPad, formatCents, formatTyping, PAD_KEYS, parseToCents, pressKey } from '../lib/money'
 import { recall, remember } from '../lib/memory'
 import { supabase } from '../lib/supabase'
 
@@ -19,8 +19,6 @@ const GOAL_EMOJIS = [
   '🐷', '💰', '🛟', '🛡️', '✈️', '🏖️', '🌍', '🏠', '🛋️', '🚗', '🚲', '💻', '📱',
   '🎓', '💍', '👶', '🐶', '🎁', '🎸', '📷', '⛷️', '🏕️', '🎮', '🩺', '📈',
 ]
-
-const inputClass ='w-full rounded-xl border border-line bg-card px-4 py-3 text-base outline-none focus:border-cobalt'
 
 function formatDeadline(iso) {
   const [y, m, d] = iso.split('-').map(Number)
@@ -455,20 +453,8 @@ function NewGoalTile({ first, onClick }) {
   )
 }
 
-function ProgressBar({ goal, thick = false }) {
-  const pct = Math.min(100, (goal.saved_cents / goal.target_cents) * 100)
-  const done = goal.saved_cents >= goal.target_cents
-  return (
-    <div className={`${thick ? 'h-3.5' : 'h-2.5'} overflow-hidden rounded-full bg-paper`}>
-      <div
-        className={`h-full rounded-full ${done ? 'bg-gain' : 'bg-gradient-to-r from-[#2b8ef7] to-cobalt'}`}
-        style={{ width: `${Math.max(pct, goal.saved_cents > 0 ? 2 : 0)}%` }}
-      />
-    </div>
-  )
-}
-
-// Goal details: add money to it or take money out.
+// Goal details: where it stands, Add money / Take out, and its history.
+// Add money / Take out opens a second step: amount on the number pad and where the money comes from or goes.
 // A card as the other side records a real transfer between the card and a savings account (tagged with
 // this goal); another goal (or General savings) as the other side only moves money between goals.
 function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
@@ -476,14 +462,27 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
   const savings = savingsAccounts(state.accounts)
   const cards = savings.length ? state.accounts.filter((a) => !a.archived && (a.type === 'debit' || a.type === 'cash')) : []
   const others = [state.general, ...state.goals].filter((g) => g.id !== goal.id)
-  const [mode, setMode] = useState('add') // 'add' | 'out'
-  const [pick, setPick] = useState(() => defaultPick('add'))
+  const [mode, setMode] = useState(null) // null = overview, 'add' | 'out'
+  const [pick, setPick] = useState(null)
   const [amount, setAmount] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [message, setMessage] = useState(null)
-  const done = !isGeneral && goal.saved_cents >= goal.target_cents
-  const p = isGeneral ? null : pace(goal)
+  const [shown, setShown] = useState(8) // history rows shown
+  const chipsRef = useRef(null)
+  // The picked "From" / "To" choice may sit off to the right: bring it into view when the step opens
+  useEffect(() => {
+    const el = chipsRef.current?.querySelector('[aria-pressed="true"]')
+    if (el) chipsRef.current.scrollLeft = el.offsetLeft - chipsRef.current.offsetLeft - 20
+  }, [mode])
+  const history = goalHistory(state, goal.id)
+  const color = isGeneral ? null : goalColor(goal.icon)
+  const accent = isGeneral ? 'var(--color-cobalt)' : color
+  const text = isGeneral ? 'var(--color-cobalt)' : goalTextColor(goal.icon)
+  // Filled buttons: the goal's colour (General savings: the app's blue)
+  const gradient = isGeneral ? 'linear-gradient(135deg, #2b8ef7, var(--color-cobalt))' : `linear-gradient(135deg, ${color}, ${shade(color, 0.75)})`
+  const title = isGeneral ? goal.name : `${goal.icon || DEFAULT_ICON} ${goal.name}`
+  const canMove = savings.length > 0 || others.length > 0
 
   // Adding: from the first card; taking out: back to General savings (or to a card from General)
   function defaultPick(m) {
@@ -493,24 +492,26 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
     return others.length ? { kind: 'goal', id: others[0].id } : null
   }
 
-  function switchMode(m) {
+  function open(m) {
     setMode(m)
     setPick(defaultPick(m))
+    setAmount('')
     setError(null)
     setMessage(null)
   }
 
   async function submit() {
     const cents = parseToCents(amount)
-    if (!cents) return setError('Enter an amount, like 50 or 12,50.')
+    if (!cents) return setError('Enter an amount first.')
     if (!pick) return setError(mode === 'add' ? 'Choose where the money comes from.' : 'Choose where the money goes.')
     setBusy(true)
     setError(null)
     try {
       const text = pick.kind === 'goal' ? await moveGoals(cents) : await moveCard(cents)
       if (text) {
-        setAmount('')
         setMessage(text)
+        setMode(null)
+        setAmount('')
         onChanged()
       }
     } catch (e) {
@@ -528,7 +529,7 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
     const problem = goalProblem(state, { moves: [...state.moves, move] })
     if (problem) return void setError(problem)
     await moveBetweenGoals(from.id, to.id, cents)
-    return `Moved ${formatCents(cents)} from ${from.name} to ${to.name}`
+    return `${mode === 'add' ? 'Added' : 'Took out'} ${formatCents(cents).replace(/,00$/, '')} ${mode === 'add' ? 'from' : 'to'} ${other.name}`
   }
 
   // Between this goal and a card: a transfer to or from a savings account, tagged with this goal
@@ -542,109 +543,266 @@ function GoalSheet({ goal, state, onClose, onChanged, onEdit }) {
     if (problem) return void setError(problem)
     const { error } = await supabase.from('transactions').insert(transfer)
     if (error) throw error
-    return `Moved ${formatCents(cents)} from ${from.name} to ${to.name}`
+    return `${mode === 'add' ? 'Added' : 'Took out'} ${formatCents(cents).replace(/,00$/, '')} ${mode === 'add' ? 'from' : 'to'} ${card.name}`
   }
 
-  const chips = [
-    ...cards.map((a) => ({ kind: 'card', id: a.id, label: a.name, cents: a.balance_cents, account: a })),
-    ...others.map((g) => ({ kind: 'goal', id: g.id, label: g.name, cents: g.saved_cents, icon: g.icon || DEFAULT_ICON })),
-  ]
-
-  return (
-    <Sheet title={`${goal.icon || DEFAULT_ICON} ${goal.name}`} onClose={onClose}>
-      <div className="space-y-5">
-        <div>
-          <p className="tabular font-display text-4xl font-bold tracking-tight">
-            {formatCents(goal.saved_cents)}
-            {!isGeneral && <span className="ml-2 text-lg font-semibold text-muted">of {formatCents(goal.target_cents)}</span>}
+  // ── Step 2: amount and where the money comes from / goes ──
+  if (mode) {
+    const add = mode === 'add'
+    const cents = parseToCents(amount) ?? 0
+    const after = goal.saved_cents + (add ? cents : -cents)
+    const tooMuch = !add && cents > Math.max(goal.saved_cents, 0)
+    const chips = [
+      ...cards.map((a) => ({ kind: 'card', id: a.id, label: a.name, cents: a.balance_cents, account: a })),
+      ...others.map((g) => ({ kind: 'goal', id: g.id, label: g.name, cents: g.saved_cents, goal: g })),
+    ]
+    const picked = chips.find((c) => c.kind === pick?.kind && c.id === pick?.id)
+    return (
+      <Sheet title={add ? `Add to ${goal.name}` : `Take out of ${goal.name}`} onClose={onClose} onBack={() => setMode(null)}>
+        <div className="pt-1 text-center">
+          <p className={`tabular truncate font-display text-[46px] leading-tight font-bold tracking-tight ${tooMuch ? 'text-loss' : amount ? '' : 'text-muted/45'}`}>
+            €{formatTyping(amount)}
           </p>
-          {isGeneral ? (
-            <p className="mt-2 text-sm text-muted">Savings money that isn&apos;t set aside for a goal. Move it into a goal whenever you like.</p>
-          ) : (
-            <>
-              <div className="mt-3">
-                <ProgressBar goal={goal} thick />
-              </div>
-              <p className={`mt-2 text-sm ${p?.overdue ? 'text-loss' : 'text-muted'}`}>
-                {done ? '🎉 Goal reached!' : p ? p.text : `${formatCents(goal.target_cents - goal.saved_cents)} to go`}
-              </p>
-            </>
-          )}
+          <p className="tabular mt-0.5 min-h-5 text-sm">
+            {tooMuch ? (
+              <span className="font-semibold text-loss">
+                {goal.name} only has {whole(Math.max(goal.saved_cents, 0))}
+              </span>
+            ) : (
+              <>
+                <span className="text-muted">{whole(goal.saved_cents)} → </span>
+                <b style={{ color: text }}>{whole(after)}</b>
+                {!isGeneral && (
+                  <span className="text-muted">
+                    {' '}
+                    of {whole(goal.target_cents)} · {Math.floor((Math.max(after, 0) / goal.target_cents) * 100)}%
+                  </span>
+                )}
+              </>
+            )}
+          </p>
         </div>
 
-        {savings.length === 0 && others.length === 0 ? (
-          <p className="rounded-2xl bg-card px-4 py-4 text-sm text-muted">
-            Add a savings account first (Profile → Accounts & cards), so the money has somewhere to go.
-          </p>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 rounded-full bg-line/70 p-1">
-              {[
-                ['add', 'Add money'],
-                ['out', 'Take out'],
-              ].map(([m, label]) => (
-                <button
-                  key={m}
-                  onClick={() => switchMode(m)}
-                  aria-pressed={mode === m}
-                  className={`rounded-full py-2 text-sm font-semibold ${mode === m ? 'bg-ink text-paper' : 'text-muted'}`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="relative">
-              <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted">€</span>
-              <input
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value)
-                  setMessage(null)
+        <p className="px-1 pt-4 pb-2 text-xs font-bold tracking-wider text-muted uppercase">{add ? 'From' : 'To'}</p>
+        <div ref={chipsRef} className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
+          {chips.map((c) => {
+            const on = picked === c
+            return (
+              <button
+                key={`${c.kind}-${c.id}`}
+                type="button"
+                onClick={() => {
+                  setPick({ kind: c.kind, id: c.id })
+                  setError(null)
                 }}
-                placeholder="0,00"
-                aria-label="Amount"
-                className={`${inputClass} tabular pl-9 text-lg`}
-              />
-            </div>
-            <p className="text-sm font-medium text-muted">{mode === 'add' ? 'From' : 'To'}</p>
-            <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1">
-              {chips.map((c) => (
-                <SourceChip
-                  key={`${c.kind}-${c.id}`}
-                  on={pick?.kind === c.kind && pick?.id === c.id}
-                  onClick={() => setPick({ kind: c.kind, id: c.id })}
-                  label={c.label}
-                  sub={formatCents(Math.max(c.cents, 0))}
-                >
-                  {c.kind === 'card' ? (
-                    <MiniCard color={c.account.color} name={c.account.name} className="h-3.5 w-5 rounded-[4px] ring-0" />
-                  ) : (
-                    <span className="text-base leading-none">{c.icon}</span>
-                  )}
-                </SourceChip>
-              ))}
-            </div>
-            <button
-              onClick={submit}
-              disabled={busy}
-              className="w-full rounded-2xl bg-cobalt py-3.5 text-base font-semibold text-white active:bg-cobalt-deep disabled:opacity-50"
-            >
-              {mode === 'add' ? 'Add money' : 'Take out'}
-            </button>
-            {error && <p className="text-sm text-loss">{error}</p>}
-            {message && <p className="text-sm font-medium text-gain">{message}</p>}
-          </div>
+                aria-pressed={on}
+                className="flex shrink-0 items-center gap-2 rounded-2xl bg-card px-3 py-2 text-left"
+                style={on ? { boxShadow: `inset 0 0 0 2px ${accent}`, background: `color-mix(in srgb, ${accent} 8%, var(--color-card))` } : undefined}
+              >
+                {c.kind === 'card' ? <MiniCard color={c.account.color} name={c.account.name} className="h-5 w-[30px] rounded-[5px] ring-0" /> : <GoalBadge goal={c.goal} />}
+                <span>
+                  <span className="block text-[13.5px] font-semibold whitespace-nowrap">{c.label}</span>
+                  <span className="tabular block text-xs whitespace-nowrap text-muted">{whole(Math.max(c.cents, 0))}</span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        {picked && (
+          <p className="mt-2.5 px-2 text-center text-[12.5px] text-muted">
+            {picked.kind === 'card'
+              ? add
+                ? `Moves real money from ${picked.label} into your savings account`
+                : `Moves real money from your savings account to ${picked.label}`
+              : add
+                ? `No money moves: ${picked.label} hands it to ${isGeneral ? 'General savings' : 'this goal'}`
+                : `No money moves: it goes to ${picked.label}`}
+          </p>
         )}
 
-        {!isGeneral && (
-          <button onClick={onEdit} className="flex w-full items-center justify-center gap-1 py-2 text-base font-medium text-cobalt">
-            Edit goal
-            <Icon name="chevronRight" size={18} />
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          {PAD_KEYS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => {
+                setAmount(pressKey(amount, k))
+                setError(null)
+              }}
+              className={`grid h-12 place-items-center rounded-2xl font-display text-[22px] font-semibold active:bg-line ${k === '.' || k === 'back' ? '' : 'bg-card'}`}
+              aria-label={k === 'back' ? 'Delete digit' : k === '.' ? 'Decimal point' : k}
+            >
+              {k === 'back' ? <Icon name="backspace" size={22} /> : k === '.' ? ',' : k}
+            </button>
+          ))}
+        </div>
+
+        {error && <p className="mt-3 px-1 text-sm text-loss">{error}</p>}
+
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy || !cents || tooMuch}
+          className={`mt-4 w-full rounded-[18px] py-4 text-[17px] font-semibold ${cents && !tooMuch ? 'text-white' : 'bg-line text-muted'}`}
+          style={cents && !tooMuch ? { background: gradient, boxShadow: `0 12px 24px -12px ${accent}` } : undefined}
+        >
+          {add ? 'Add' : 'Take out'} {cents ? formatCents(cents).replace(/,00$/, '') : 'money'}
+        </button>
+      </Sheet>
+    )
+  }
+
+  // ── Overview ──
+  const ratio = isGeneral ? 0 : goal.saved_cents / goal.target_cents
+  const pct = Math.floor(Math.min(1, ratio) * 100)
+  const p = isGeneral ? null : pace(goal)
+  const done = !isGeneral && goal.saved_cents >= goal.target_cents
+  return (
+    <Sheet
+      title={title}
+      onClose={onClose}
+      action={
+        !isGeneral && (
+          <button onClick={onEdit} className="grid size-10 place-items-center rounded-full bg-card text-muted" aria-label="Edit goal">
+            <Icon name="pencil" size={18} />
           </button>
+        )
+      }
+    >
+      <div className={`${TILE} flex items-center gap-3.5 bg-card p-4`}>
+        <Corner color={`color-mix(in srgb, ${accent} 11%, transparent)`} />
+        {isGeneral ? (
+          <span className="relative grid size-[66px] shrink-0 place-items-center rounded-full bg-bubble text-cobalt">
+            <Icon name="bank" size={26} />
+          </span>
+        ) : (
+          <Ring ratio={ratio} size={66} stroke={6.5} color={color} track={`color-mix(in srgb, ${color} 16%, transparent)`}>
+            <span className="text-[28px] leading-none">{goal.icon || DEFAULT_ICON}</span>
+          </Ring>
+        )}
+        <span className="relative min-w-0 flex-1">
+          <b className="tabular block truncate font-display text-[30px] leading-tight">{whole(goal.saved_cents)}</b>
+          <span className="tabular block truncate text-[13.5px] text-muted">{isGeneral ? 'Not in a goal yet' : `of ${whole(goal.target_cents)} · ${pct}%`}</span>
+          <span
+            className={`tabular mt-1 flex items-center gap-1 text-[12.5px] font-semibold ${p?.overdue ? 'text-loss' : p || done ? '' : 'text-muted'}`}
+            style={(p && !p.overdue) || done ? { color: done ? 'var(--color-gain)' : text } : undefined}
+          >
+            {isGeneral ? (
+              'Move it into a goal whenever you like'
+            ) : done ? (
+              '🎉 Goal reached'
+            ) : p?.overdue ? (
+              'Deadline passed'
+            ) : p ? (
+              <>
+                <Icon name="calendar" size={13} className="shrink-0" />
+                <span className="truncate">
+                  {whole(p.perMonth)}/mo · {formatMonthYear(goal.deadline)}
+                </span>
+              </>
+            ) : (
+              'No deadline'
+            )}
+          </span>
+        </span>
+        {!isGeneral && (
+          <b className="tabular relative self-start font-display" style={{ color: text }}>
+            {pct}%
+          </b>
         )}
       </div>
+
+      {message && (
+        <p className="mt-3 flex items-center gap-2 rounded-2xl bg-gain/12 px-3.5 py-2.5 text-[13.5px] font-semibold text-gain">
+          <Icon name="check" size={16} strokeWidth={3} />
+          {message}
+        </p>
+      )}
+
+      {canMove ? (
+        <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+          <button
+            onClick={() => open('add')}
+            className="rounded-[20px] p-4 text-left text-white"
+            style={{ background: gradient, boxShadow: `0 12px 24px -12px ${accent}` }}
+          >
+            <span className="grid size-[38px] place-items-center rounded-full bg-white/20">
+              <Icon name="plus" size={20} strokeWidth={2.6} />
+            </span>
+            <b className="mt-3 block text-base">Add money</b>
+            <span className="text-[12.5px] text-white/80">From a card or goal</span>
+          </button>
+          <button onClick={() => open('out')} className="rounded-[20px] bg-card p-4 text-left">
+            <span className="grid size-[38px] place-items-center rounded-full" style={{ backgroundColor: `color-mix(in srgb, ${accent} 14%, transparent)`, color: text }}>
+              <Icon name="minus" size={20} strokeWidth={2.6} />
+            </span>
+            <b className="mt-3 block text-base">Take out</b>
+            <span className="text-[12.5px] text-muted">To a card or goal</span>
+          </button>
+        </div>
+      ) : (
+        <p className="mt-3.5 rounded-2xl bg-card px-4 py-4 text-sm text-muted">Add a savings account first (Profile → Accounts & cards), so the money has somewhere to go.</p>
+      )}
+
+      <p className="px-1 pt-5 pb-2 text-xs font-bold tracking-wider text-muted uppercase">History</p>
+      {history.length === 0 ? (
+        <p className="rounded-[20px] bg-card px-4 py-4 text-center text-sm text-muted">
+          {isGeneral ? 'Money that arrives in savings without a goal shows here.' : 'Nothing yet. Add money to get it going.'}
+        </p>
+      ) : (
+        <ul className="overflow-hidden rounded-[20px] bg-card">
+          {history.slice(0, shown).map((h) => {
+            const inn = h.cents > 0
+            return (
+              <li key={h.key} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0">
+                <span className={`grid size-8 shrink-0 place-items-center rounded-full ${inn ? 'bg-gain/14 text-gain' : 'bg-warn-bg text-orange-text'}`}>
+                  <Icon name={inn ? 'plus' : 'minus'} size={15} strokeWidth={2.6} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <b className="block truncate text-[14.5px]">{h.label}</b>
+                  <span className="block text-[12.5px] text-muted">{historyDay(h.date)}</span>
+                </span>
+                <b className={`tabular shrink-0 ${inn ? 'text-gain' : 'text-orange-text'}`}>
+                  {inn ? '+' : '−'}
+                  {formatCents(Math.abs(h.cents)).replace(/,00$/, '')}
+                </b>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {history.length > shown && (
+        <button onClick={() => setShown((n) => n + 20)} className="mt-2 w-full py-2 text-[15px] font-semibold text-cobalt">
+          Show more
+        </button>
+      )}
     </Sheet>
+  )
+}
+
+// "Today", "Yesterday", "2 Nov", or "2 Nov 2025" for another year
+function historyDay(iso) {
+  const day = formatDay(iso)
+  if (day === 'Today' || day === 'Yesterday') return day
+  return iso.slice(0, 4) === todayISO().slice(0, 4) ? formatDayMonth(iso) : `${formatDayMonth(iso)} ${iso.slice(0, 4)}`
+}
+
+// A goal (or General savings) as a small round badge in its colour
+function GoalBadge({ goal }) {
+  if (goal.id === null) {
+    return (
+      <span className="grid size-[30px] shrink-0 place-items-center rounded-full bg-bubble text-cobalt">
+        <Icon name="bank" size={15} />
+      </span>
+    )
+  }
+  return (
+    <span
+      className="grid size-[30px] shrink-0 place-items-center rounded-full text-base leading-none"
+      style={{ backgroundColor: `color-mix(in srgb, ${goalColor(goal.icon)} 16%, transparent)` }}
+    >
+      {goal.icon || DEFAULT_ICON}
+    </span>
   )
 }
 
@@ -905,22 +1063,5 @@ function RowValue({ value, placeholder }) {
     <b className="tabular block truncate text-[15px] font-semibold">{value}</b>
   ) : (
     <span className="block text-[15px] font-medium text-muted/60">{placeholder}</span>
-  )
-}
-
-// One "From" / "To" choice in a goal: a card or another goal
-function SourceChip({ on, onClick, label, sub, children }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={on}
-      className={`flex shrink-0 items-center gap-2 rounded-2xl border-2 px-3 py-2 text-left ${on ? 'border-cobalt bg-bubble' : 'border-transparent bg-card'}`}
-    >
-      {children}
-      <span>
-        <span className="block text-sm font-semibold whitespace-nowrap">{label}</span>
-        <span className="tabular block text-xs whitespace-nowrap text-muted">{sub}</span>
-      </span>
-    </button>
   )
 }

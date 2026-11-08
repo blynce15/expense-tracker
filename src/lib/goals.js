@@ -1,5 +1,6 @@
 import { balanceChanges, fetchAccountsWithBalances } from './balances'
 import { fetchAll } from './fetchAll'
+import { todayISO } from './dates'
 import { formatCents } from './money'
 import { supabase } from './supabase'
 
@@ -49,7 +50,7 @@ export async function fetchGoalsState(alsoAccountIds = []) {
     ? fetchAll(() =>
         supabase
           .from('transactions')
-          .select('id, type, amount_cents, date, account_id, to_account_id, goal_id')
+          .select('id, type, amount_cents, date, account_id, to_account_id, goal_id, note, created_at')
           .or(`account_id.in.(${ids.join(',')}),to_account_id.in.(${ids.join(',')})`),
       )
     : []
@@ -94,6 +95,34 @@ export async function checkGoals(before, after) {
 
 // Moves money from one goal to another inside savings (null = General savings)
 export async function moveBetweenGoals(fromId, toId, cents) {
-  const { error } = await supabase.from('goal_moves').insert({ from_goal_id: fromId, to_goal_id: toId, amount_cents: cents })
+  const { error } = await supabase.from('goal_moves').insert({ from_goal_id: fromId, to_goal_id: toId, amount_cents: cents, date: todayISO() })
   if (error) throw error
+}
+
+// Every move in or out of one goal (null = General savings), newest first: transactions that move the
+// savings accounts and are tagged with it, and goal moves to or from it. Each item:
+// { key, date, created_at, cents (+ in, − out), label } — label like "From Main card" or "To Trip".
+export function goalHistory(state, goalId) {
+  const id = goalId ?? null
+  const accountName = (aid) => state.accounts.find((a) => a.id === aid)?.name ?? 'an account'
+  const name = (gid) => goalName(state, gid ?? null)
+  const items = []
+  for (const t of state.transactions) {
+    if ((t.goal_id ?? null) !== id) continue
+    const cents = savingsEffect(state.accounts, t)
+    if (!cents) continue
+    let label
+    if (t.type === 'transfer') label = cents > 0 ? `From ${accountName(t.account_id)}` : `To ${accountName(t.to_account_id)}`
+    else label = t.note?.trim() || { income: 'Income', expense: 'Expense', invest: 'Invested', divest: 'Taken out of investments' }[t.type] || 'Transaction'
+    items.push({ key: `t${t.id}`, date: t.date, created_at: t.created_at ?? '', cents, label })
+  }
+  for (const m of state.moves) {
+    const from = m.from_goal_id ?? null
+    const to = m.to_goal_id ?? null
+    if (from === to) continue
+    const date = m.date ?? m.created_at?.slice(0, 10) ?? todayISO()
+    if (to === id) items.push({ key: `m${m.id}`, date, created_at: m.created_at ?? '', cents: m.amount_cents, label: `From ${name(from)}` })
+    else if (from === id) items.push({ key: `m${m.id}`, date, created_at: m.created_at ?? '', cents: -m.amount_cents, label: `To ${name(to)}` })
+  }
+  return items.sort((a, b) => (b.date + b.created_at).localeCompare(a.date + a.created_at))
 }
