@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import AmountPad from '../components/AmountPad'
 import FullPage from '../components/FullPage'
 import Icon from '../components/Icon'
+import MerchantIcon from '../components/MerchantIcon'
 import Sheet from '../components/Sheet'
 import { todayISO } from '../lib/dates'
 import { centsToPad, formatCents, parseToCents } from '../lib/money'
@@ -256,9 +257,14 @@ export function PensionCard({ fund, summary: s, entries = [], onFund, small = fa
     >
       <span className="pointer-events-none absolute -top-[110px] -right-[90px] size-60 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.22),transparent_65%)]" />
       <button onClick={onFund} disabled={!onFund} className="relative flex w-full items-center gap-2.5 text-left">
-        <span className="grid size-10 shrink-0 place-items-center rounded-[13px] bg-white/15 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.2)]">
+        {/* The provider's logo when it's a known name (Ageas, Fidelidade…), else a bank icon */}
+        <MerchantIcon
+          name={fund.provider || fund.name}
+          className="size-10 rounded-[13px]"
+          style={{ background: 'rgba(255,255,255,0.15)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.2)' }}
+        >
           <Icon name="bank" size={small ? 17 : 20} strokeWidth={1.9} />
-        </span>
+        </MerchantIcon>
         <span className="min-w-0 flex-1">
           <span className={`block truncate text-[15.5px] font-bold ${fund.name ? '' : 'opacity-45'}`}>{fund.name || 'Fund name'}</span>
           <span className="block truncate text-[12.5px] font-semibold opacity-70">{fund.provider || 'Provider'}</span>
