@@ -23,6 +23,7 @@ const load = {
   accounts: () => import('./screens/Accounts'),
   analytics: () => import('./screens/Analytics'),
   analyticsCategories: () => import('./screens/AnalyticsCategories'),
+  analyticsIncome: () => import('./screens/AnalyticsIncome'),
   analyticsRecurring: () => import('./screens/AnalyticsRecurring'),
   analyticsSaving: () => import('./screens/AnalyticsSaving'),
   analyticsSpending: () => import('./screens/AnalyticsSpending'),
@@ -40,6 +41,7 @@ const Accounts = lazy(load.accounts)
 const Analytics = lazy(load.analytics)
 const AnalyticsCategories = lazy(load.analyticsCategories)
 const CategoryDetail = named(load.analyticsCategories, 'CategoryDetail')
+const AnalyticsIncome = lazy(load.analyticsIncome)
 const AnalyticsRecurring = lazy(load.analyticsRecurring)
 const AnalyticsSaving = lazy(load.analyticsSaving)
 const AnalyticsSpending = lazy(load.analyticsSpending)
@@ -208,6 +210,8 @@ function screenFor(route, session, dataVersion, tx) {
       return { title: 'Over time', back: '/analytics', navy: true, body: <AnalyticsTrends key={dataVersion} /> }
     case '/analytics/spending':
       return { title: 'Spending', back: '/analytics', navy: true, body: <AnalyticsSpending key={dataVersion} /> }
+    case '/analytics/income':
+      return { title: 'Income', back: '/analytics', navy: true, body: <AnalyticsIncome key={dataVersion} /> }
     case '/analytics/recurring':
       return { title: 'Recurring', back: '/analytics', navy: true, body: <AnalyticsRecurring key={dataVersion} /> }
     case '/savings':

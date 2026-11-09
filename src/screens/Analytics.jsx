@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { BigAmount, NavyPill, NavyTop, Overlap, pct, resetPeriod, useWorthExtras, whole, WORTH_PARTS } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
-import { cachedAnalytics, currentPeriod, fetchAnalytics, monthShort, noticings, periodLabel, verdictOf } from '../lib/analytics'
+import { cachedAnalytics, currentPeriod, incomeSources, fetchAnalytics, monthShort, noticings, periodLabel, verdictOf } from '../lib/analytics'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { netWorthOf } from '../lib/networth'
 import { monthlyCents } from '../lib/recurring'
@@ -54,6 +54,7 @@ export default function Analytics() {
             <SaveTile a={data} />
             <TimeTile w={w} />
             <RecurringTile a={data} />
+            <IncomeTile a={data} />
           </div>
         </>
       )}
@@ -433,5 +434,58 @@ function RecurringTile({ a }) {
         </span>
       )}
     </ColourCard>
+  )
+}
+
+// Income: a wide green card under the four (owner's choice with the Income page, .harness/analytics-v8-income.html):
+// this month's income vs usual, how many sources, and the 12 months as small white bars
+function IncomeTile({ a }) {
+  const c = verdictOf(a).income.change
+  const n = incomeSources(a).list.length
+  const sub = [
+    !a.totals.income
+      ? 'Nothing yet this month'
+      : c === null
+        ? 'so far this month'
+        : Math.abs(c) < 0.03
+          ? 'about your usual'
+          : `${Math.round(Math.abs(c) * 100)}% ${c < 0 ? 'below' : 'above'} usual`,
+    n ? `${n} ${n === 1 ? 'source' : 'sources'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const rows = a.trend
+  const max = Math.max(1, ...rows.map((t) => t.income))
+  return (
+    <button
+      onClick={() => navigate('/analytics/income')}
+      className="relative col-span-2 flex items-center gap-3.5 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#5fd38f] to-[#2b8a3e] p-3.5 text-left text-white shadow-[0_16px_28px_-20px_#2b8a3e] transition active:scale-[0.98]"
+    >
+      <span className="pointer-events-none absolute -top-10 -right-8 size-[120px] rounded-full bg-white/[.12]" />
+      <span className="relative grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-white/20">
+        <Icon name="moneyIn" size={17} strokeWidth={2.4} />
+      </span>
+      <span className="relative min-w-0 flex-1">
+        <b className="block text-[13.5px] text-white/90">Income</b>
+        <b className="tabular block truncate font-display text-[22px] leading-tight">{whole(a.totals.income)}</b>
+        <span className="block truncate text-[11.5px] text-white/85">{sub}</span>
+      </span>
+      <svg viewBox="0 0 110 44" className="relative block w-[110px] shrink-0" aria-hidden="true">
+        {rows.map((t, i) =>
+          t.future ? null : (
+            <rect
+              key={t.key}
+              x={i * (110 / 12) + 2}
+              y={44 - Math.max(2, (t.income / max) * 44)}
+              width="5"
+              height={Math.max(2, (t.income / max) * 44)}
+              rx="2"
+              fill="#fff"
+              opacity={t.partial ? 0.55 : 0.95}
+            />
+          ),
+        )}
+      </svg>
+    </button>
   )
 }

@@ -119,6 +119,10 @@ export function buildAnalytics(p, accounts, recurring, rows) {
   const spentByDay = new Map() // date → cents
   const catBy = new Map() // `${monthKey}|${categoryId}` → cents
   const fixedNames = new Set(recurring.filter((r) => r.type !== 'income').map((r) => r.name.trim().toLowerCase()))
+  // Income: per month and income category, and how much of it is regular (named like a recurring income)
+  const regularNames = new Set(recurring.filter((r) => r.type === 'income').map((r) => r.name.trim().toLowerCase()))
+  const incomeBy = new Map() // `${monthKey}|${categoryId}` → cents
+  const regularBy = new Map() // `${monthKey}|${categoryId}` → cents of it that is regular
   const fixedBy = new Map() // monthKey → cents of expenses that are recurring payments
   const weekday = Array(7).fill(0) // Mon..Sun, spending over the 12 months
   // While a period is still running, compare with the one before only up to the same day
@@ -154,6 +158,9 @@ export function buildAnalytics(p, accounts, recurring, rows) {
     const inLastYear = k === lyKey && (!lyCutoff || t.date <= lyCutoff)
     if (t.type === 'income') {
       m.income += t.amount_cents
+      const ik = `${k}|${t.category_id}`
+      incomeBy.set(ik, (incomeBy.get(ik) ?? 0) + t.amount_cents)
+      if (t.note && regularNames.has(t.note.trim().toLowerCase())) regularBy.set(ik, (regularBy.get(ik) ?? 0) + t.amount_cents)
       moveInto(m, t.account_id, t.amount_cents, k)
     } else if (t.type === 'expense') {
       m.spent += t.amount_cents
@@ -292,6 +299,9 @@ export function buildAnalytics(p, accounts, recurring, rows) {
     // Spending per category per month (`${monthKey}|${categoryId}` → cents), the 12 months up to
     // the period's end, and which of them are full months with any activity (for "usual month")
     catBy,
+    // Income per month and income category, and the regular part of it (named like a recurring income)
+    incomeBy,
+    regularBy,
     last12,
     activeMonths: active.map((t) => t.key),
     // Spending on recurring payments per month, and what the active ones cost per month today
@@ -542,3 +552,26 @@ export function creepOf(a) {
   const rise = before ? recent / before - 1 : 0
   return { full, half, recent, before, diff: Math.round(recent - before), rise, trend: rise >= 0.05 ? 'up' : rise <= -0.05 ? 'down' : 'steady' }
 }
+
+// Income by source (income category) over the period: [{ id, cents, regular (cents named like a recurring income),
+// months: cents per month of the 12 }], biggest first; plus the period's regular and extra totals
+export function incomeSources(a) {
+  const months = a.period.kind === 'year' ? a.last12.filter((k) => k.slice(0, 4) === a.period.key) : [a.period.key]
+  const byId = new Map()
+  const get = (id) => byId.get(id) ?? byId.set(id, { id: id === 'null' ? null : id, cents: 0, regular: 0, months: a.last12.map(() => 0) }).get(id)
+  for (const [key, cents] of a.incomeBy) {
+    const [k, id] = key.split('|')
+    const i = a.last12.indexOf(k)
+    if (i >= 0) get(id).months[i] += cents
+    if (months.includes(k)) {
+      const src = get(id)
+      src.cents += cents
+      src.regular += a.regularBy.get(key) ?? 0
+    }
+  }
+  const list = [...byId.values()].filter((x) => x.cents > 0).sort((x, y) => y.cents - x.cents)
+  const regular = list.reduce((s, x) => s + x.regular, 0)
+  const total = list.reduce((s, x) => s + x.cents, 0)
+  return { list, total, regular, extra: total - regular }
+}
+

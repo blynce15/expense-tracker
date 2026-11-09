@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { buildAnalytics, creepOf, placesFrom, shiftMonth, shiftPeriod, verdictOf } from '../src/lib/analytics'
+import { buildAnalytics, creepOf, incomeSources, placesFrom, shiftMonth, shiftPeriod, verdictOf } from '../src/lib/analytics'
 
 // "Today" is Saturday 17 October 2026: October is still running, September is a full month
 beforeEach(() => {
@@ -136,7 +136,12 @@ describe('Is spending creeping up', () => {
   const month = (k, spent) => t(`${k}-15`, 'expense', spent, { category_id: 'food' })
   const keys = ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09']
   test('needs 4 full months', () => {
-    const few = buildAnalytics(october, accounts, [], keys.slice(-3).map((k) => month(k, 1000)))
+    const few = buildAnalytics(
+      october,
+      accounts,
+      [],
+      keys.slice(-3).map((k) => month(k, 1000)),
+    )
     expect(creepOf(few)).toBeNull()
   })
   test('last 3 full months vs the 3 before (this month left out)', () => {
@@ -145,5 +150,27 @@ describe('Is spending creeping up', () => {
     expect(c.half).toBe(3)
     expect(c.diff).toBe(200)
     expect(c.trend).toBe('up')
+  })
+})
+
+describe('Income by source', () => {
+  const inc = (date, cents, cat, note) => t(date, 'income', cents, { category_id: cat, note })
+  const r = [
+    inc('2026-09-01', 200000, 'pay', 'Salary'),
+    inc('2026-10-01', 200000, 'pay', 'salary '),
+    inc('2026-10-12', 5000, 'gift', 'Grandma'),
+    inc('2026-10-14', 3000, 'pay', 'Bonus'),
+  ]
+  test('per income category this month, regular = named like a recurring income (any case)', () => {
+    const s = incomeSources(buildAnalytics(october, accounts, recurring, r))
+    expect(s.total).toBe(208000)
+    expect(s.regular).toBe(200000)
+    expect(s.extra).toBe(8000)
+    expect(s.list.map((x) => [x.id, x.cents, x.regular])).toEqual([
+      ['pay', 203000, 200000],
+      ['gift', 5000, 0],
+    ])
+    // the 12 months up to October: September and October for Salary's category
+    expect(s.list[0].months.slice(-2)).toEqual([200000, 203000])
   })
 })
