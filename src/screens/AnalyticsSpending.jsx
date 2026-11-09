@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BigAmount, NavyPeriodBar, NavyPill, NavyTop, Overlap, pct, Section, usePeriod, whole } from '../components/AnalyticsKit'
 import Icon from '../components/Icon'
 import MerchantIcon from '../components/MerchantIcon'
@@ -67,14 +67,20 @@ export default function AnalyticsSpending() {
               <Section n={2} title="At a glance">
                 <Glance a={a} />
               </Section>
-              <Section n={3} title="Top categories">
+              <Section
+                n={3}
+                title="Top categories"
+                right={
+                  <button onClick={() => navigate('/analytics/categories')} className="flex items-center text-[13.5px] font-bold text-cobalt">
+                    All categories
+                    <Icon name="chevronRight" size={15} strokeWidth={2.6} />
+                  </button>
+                }
+              >
                 <CategoryPie a={a} category={category} />
               </Section>
-              <Section n={4} title="Where exactly">
-                <Places a={a} category={category} />
-              </Section>
-              <Section n={5} title="The big ones">
-                <Biggest a={a} category={category} />
+              <Section n={4} title="Where it went">
+                <PlacesAndBig a={a} category={category} />
               </Section>
             </>
           ) : (
@@ -258,7 +264,7 @@ function CategoryPie({ a, category }) {
     })),
     ...(rest > 0 ? [{ key: 'rest', id: undefined, cents: rest, color: '#94a3c4', name: 'Other', icon: '•' }] : []),
   ]
-  const size = 150
+  const size = 176
   const R = size / 2
   let at = -Math.PI / 2
   const arcs = slices.map((s) => {
@@ -276,7 +282,7 @@ function CategoryPie({ a, category }) {
   })
   return (
     <div className={card}>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0" role="img" aria-label="Spending by category">
           {arcs.map((s) => (
             <path key={s.key} d={s.d} fill={s.color} stroke="var(--color-card)" strokeWidth="2" strokeLinejoin="round" />
@@ -289,7 +295,7 @@ function CategoryPie({ a, category }) {
                 x={s.lx}
                 y={s.ly + 4}
                 textAnchor="middle"
-                fontSize="12"
+                fontSize="13"
                 fontWeight="800"
                 fill="#fff"
                 style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,.18)', strokeWidth: 2 }}
@@ -316,10 +322,6 @@ function CategoryPie({ a, category }) {
           ))}
         </ul>
       </div>
-      <button onClick={() => navigate('/analytics/categories')} className="mt-2 flex w-full items-center justify-center text-[13.5px] font-bold text-cobalt">
-        All categories
-        <Icon name="chevronRight" size={15} strokeWidth={2.6} />
-      </button>
     </div>
   )
 }
@@ -328,12 +330,14 @@ function CategoryPie({ a, category }) {
 function Places({ a, category }) {
   const places = placesFrom(a.expenses, 5)
   const count = a.expenses.length
-  if (!places.length) return <p className={`${card} text-center text-sm text-muted`}>Name your expenses to see where you spend most.</p>
+  if (!places.length) return <p className="py-6 text-center text-sm text-muted">Name your expenses to see where you spend most.</p>
   const max = places[0].cents || 1
   return (
-    <div className={card}>
-      <Title right={`${count} ${count === 1 ? 'purchase' : 'purchases'} · ${whole(a.totals.spent / count)} average`}>Top places</Title>
-      <ul className="mt-1.5">
+    <div>
+      <p className="tabular text-[12.5px] text-muted">
+        {count} {count === 1 ? 'purchase' : 'purchases'} · {whole(a.totals.spent / count)} average
+      </p>
+      <ul className="mt-1">
         {places.map((g, i) => {
           const cat = category(g.categoryId)
           return (
@@ -561,9 +565,11 @@ function Biggest({ a, category }) {
   const list = [...a.expenses].sort((x, y) => y.amount_cents - x.amount_cents).slice(0, 5)
   const share = list.reduce((s, t) => s + t.amount_cents, 0) / (a.totals.spent || 1)
   return (
-    <div className={card}>
-      <Title right={`top ${list.length} = ${pct(share)} of spending`}>Biggest purchases</Title>
-      <ul className="mt-1.5">
+    <div>
+      <p className="tabular text-[12.5px] text-muted">
+        Top {list.length} = {pct(share)} of your spending
+      </p>
+      <ul className="mt-1">
         {list.map((t, i) => {
           const cat = category(t.category_id)
           return (
@@ -583,6 +589,51 @@ function Biggest({ a, category }) {
           )
         })}
       </ul>
+    </div>
+  )
+}
+
+// ---------- Where it went: top places and the biggest purchases in one card ----------
+// Two tabs; swipe sideways between them (or tap a tab)
+function PlacesAndBig({ a, category }) {
+  const [tab, setTab] = useState(0)
+  const ref = useRef(null)
+  const go = (i) => {
+    setTab(i)
+    ref.current?.scrollTo({ left: i * ref.current.clientWidth, behavior: 'smooth' })
+  }
+  return (
+    <div className={`${card} overflow-hidden px-0 pb-2`}>
+      <div className="mx-4 flex rounded-full bg-paper p-[3px]" role="tablist">
+        {['Top places', 'Biggest purchases'].map((t, i) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === i}
+            onClick={() => go(i)}
+            className={`flex-1 rounded-full py-1.5 text-[13px] font-semibold transition ${tab === i ? 'bg-card text-ink shadow-sm' : 'text-muted'}`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+      <div
+        ref={ref}
+        onScroll={(e) => setTab(Math.round(e.currentTarget.scrollLeft / e.currentTarget.clientWidth))}
+        className="mt-3 flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <div className="w-full shrink-0 snap-start px-4">
+          <Places a={a} category={category} />
+        </div>
+        <div className="w-full shrink-0 snap-start px-4">
+          <Biggest a={a} category={category} />
+        </div>
+      </div>
+      <div className="mt-1 flex justify-center gap-1" aria-hidden="true">
+        {[0, 1].map((i) => (
+          <span key={i} className={`h-1.5 rounded-full transition-all ${tab === i ? 'w-4 bg-ink' : 'w-1.5 bg-line'}`} />
+        ))}
+      </div>
     </div>
   )
 }
