@@ -164,7 +164,7 @@ function screenFor(route, session, dataVersion, tx) {
     const id = route.slice('/analytics/categories/'.length)
     const cat = lookupCache.lookups?.categories.find((c) => c.id === id)
     const title = cat ? `${cat.icon} ${cat.name}` : id === 'none' ? 'No category' : 'Category'
-    return { title, back: '/analytics/categories', body: <CategoryDetail key={`${id}-${dataVersion}`} id={id} /> }
+    return { title, back: '/analytics/categories', navy: true, body: <CategoryDetail key={`${id}-${dataVersion}`} id={id} /> }
   }
   // Investments → Pension; "?update" (from the monthly reminder) opens the update sheet
   if (route.startsWith('/investments/pension')) {
@@ -203,7 +203,7 @@ function screenFor(route, session, dataVersion, tx) {
     case '/analytics':
       return { title: 'Analytics', navy: true, body: <Analytics key={dataVersion} /> }
     case '/analytics/categories':
-      return { title: 'Categories', back: '/analytics/spending', body: <AnalyticsCategories key={dataVersion} /> }
+      return { title: 'Categories', back: '/analytics/spending', navy: true, body: <AnalyticsCategories key={dataVersion} /> }
     case '/analytics/saving':
       return { title: 'Savings & Investments', back: '/analytics', navy: true, body: <AnalyticsSaving key={dataVersion} /> }
     case '/analytics/trends':

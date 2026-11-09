@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
-import { pct, PeriodBar, usePeriod, whole } from '../components/AnalyticsKit'
-import Icon from '../components/Icon'
+import { BigAmount, NavyPeriodBar, NavyPill, NavyTop, Overlap, pct, Section, usePeriod, whole } from '../components/AnalyticsKit'
 import MerchantIcon from '../components/MerchantIcon'
-import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel } from '../lib/analytics'
+import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, placesFrom, prevLabel, verdictOf } from '../lib/analytics'
 import { todayISO } from '../lib/dates'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
@@ -84,20 +83,121 @@ function ChangePill({ now, usual, small = false }) {
   )
 }
 
-const card = 'rounded-[24px] bg-card p-4'
-const Label = ({ children }) => <h2 className="mt-5 mb-2.5 px-1 text-[11.5px] font-bold tracking-[0.08em] text-muted uppercase">{children}</h2>
+const card = 'rounded-[24px] bg-card p-4 shadow-[0_14px_30px_-24px_rgba(11,27,69,0.45)]'
+// The Spending card's orange (Analytics → Explore), as the top of the categories list
+const ORANGE_TOP = 'radial-gradient(120% 90% at 85% 0%, #ffb066 0%, #f0701e 45%, #b8410a 100%)'
+const WHITES = ['#fff', 'rgba(255,255,255,.78)', 'rgba(255,255,255,.6)', 'rgba(255,255,255,.44)', 'rgba(255,255,255,.3)', 'rgba(255,255,255,.2)']
+// A category's colour as a top: lighter at the corner, darker at the bottom
+const topFor = (hex) => `radial-gradient(120% 90% at 85% 0%, ${lighter(hex)} 0%, ${hex} 45%, ${darker(hex, 0.45)} 100%)`
+function lighter(hex, by = 0.35) {
+  const n = parseInt((hex ?? GREY).replace('#', ''), 16)
+  const ch = (s) => Math.round(((n >> s) & 255) + (255 - ((n >> s) & 255)) * by)
+  return `rgb(${ch(16)},${ch(8)},${ch(0)})`
+}
 
-// ---------- Analytics → Categories ----------
+// A ring (white on the coloured top): `share` filled, an optional dot at `dot` (how far through the month)
+function Ring({ share, dot, size = 108, children }) {
+  const r = size / 2 - 7
+  const C = 2 * Math.PI * r
+  const a = (dot ?? 0) * 2 * Math.PI - Math.PI / 2
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,.18)" strokeWidth="12" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="#fff"
+          strokeWidth="12"
+          strokeLinecap="round"
+          strokeDasharray={`${Math.min(1, share) * C} ${C}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+        {dot != null && <circle cx={size / 2 + Math.cos(a) * r} cy={size / 2 + Math.sin(a) * r} r="5" fill="#fff" stroke="rgba(0,0,0,.18)" strokeWidth="2" />}
+      </svg>
+      <span className="absolute inset-0 grid place-items-center text-center">{children}</span>
+    </div>
+  )
+}
+
+// A donut of the categories, white shades on the orange top
+function Donut({ parts, size = 108, children }) {
+  const r = size / 2 - 8
+  const C = 2 * Math.PI * r
+  const total = parts.reduce((s, c) => s + c, 0) || 1
+  const gap = parts.length > 1 ? 3 : 0
+  let at = 0
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} aria-hidden="true" className="-rotate-90">
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,.14)" strokeWidth="14" />
+        {parts.map((c, i) => {
+          const len = (c / total) * C
+          const el = (
+            <circle
+              key={i}
+              cx={size / 2}
+              cy={size / 2}
+              r={r}
+              fill="none"
+              stroke={WHITES[Math.min(i, WHITES.length - 1)]}
+              strokeWidth="14"
+              strokeDasharray={`${Math.max(0.5, len - gap)} ${C}`}
+              strokeDashoffset={-at}
+            />
+          )
+          at += len
+          return el
+        })}
+      </svg>
+      <span className="absolute inset-0 grid place-items-center text-center">{children}</span>
+    </div>
+  )
+}
+
+// ---------- Analytics → Categories (owner chose "L1 · Tiles", .harness/analytics-v9-categories.html) ----------
 export default function AnalyticsCategories() {
   const { period, setPeriod, a, category, error } = useCategoryData()
-  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load your categories: {error}</p>
+  if (error) return <p className="px-5 pt-6 text-loss">Couldn&apos;t load your categories: {error}</p>
+  const year = a?.period.kind === 'year'
+  const v = a ? verdictOf(a).spending.change : null
 
   return (
-    <div className="px-4 pt-1 pb-6">
-      <PeriodBar period={period} onChange={setPeriod} />
+    <div className="pb-6">
+      <NavyTop background={ORANGE_TOP}>
+        <NavyPeriodBar period={period} onChange={setPeriod} />
+        {a ? (
+          <div className="flex items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <BigAmount cents={a.totals.spent} label={a.current ? 'Spent so far' : `Spent in ${year ? a.period.key : periodLabel(a.period).split(' ')[0]}`} />
+              {v !== null && Math.abs(v) >= 0.03 && (
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  <NavyPill>
+                    {v < 0 ? '▼' : '▲'} {Math.round(Math.abs(v) * 100)}% vs {year ? prevLabel(a.period) : 'usual'}
+                  </NavyPill>
+                </div>
+              )}
+            </div>
+            {a.categories.length > 0 && (
+              <Donut parts={a.categories.map((c) => c.cents)}>
+                <span>
+                  <b className="block font-display text-xl leading-none">{a.categories.length}</b>
+                  <span className="text-[11px] text-white/80">{a.categories.length === 1 ? 'category' : 'categories'}</span>
+                </span>
+              </Donut>
+            )}
+          </div>
+        ) : (
+          <div className="h-[108px]" />
+        )}
+      </NavyTop>
       {a &&
         (a.categories.length === 0 ? (
-          <p className="mt-3 rounded-[24px] bg-card px-5 py-8 text-center text-muted">No spending in {periodLabel(period)}.</p>
+          <Overlap>
+            <p className={`${card} px-5 py-8 text-center text-muted`}>No spending in {periodLabel(period)}.</p>
+          </Overlap>
         ) : (
           <CategoryList a={a} category={category} />
         ))}
@@ -107,8 +207,6 @@ export default function AnalyticsCategories() {
 
 function CategoryList({ a, category }) {
   const total = a.totals.spent || 1
-  const counts = new Map()
-  for (const t of a.expenses) counts.set(idFor(t.category_id), (counts.get(idFor(t.category_id)) ?? 0) + 1)
   const colorOf = (id) => category(id)?.color ?? GREY
   const rows = a.categories.map((c) => {
     const { months, usual } = monthsOf(a, c.id)
@@ -122,211 +220,215 @@ function CategoryList({ a, category }) {
 
   return (
     <>
-      <section className="relative mt-3 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#ff9f43] to-[#e8590c] p-4 text-white shadow-[0_18px_30px_-20px_rgba(232,89,12,0.9)]">
-        <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/[.12]" />
-        <p className="relative text-[13.5px] font-semibold text-white/90">Spent across {count(a.categories.length, 'category', 'categories')}</p>
-        <p className="tabular relative font-display text-[34px] leading-tight font-bold">{whole(a.totals.spent)}</p>
-        <div className="relative mt-2.5 flex h-3 gap-0.5 overflow-hidden rounded-full bg-white/25 ring-2 ring-white/35">
-          {a.categories.map((c) => (
-            <span key={idFor(c.id)} style={{ flex: c.cents, background: colorOf(c.id) }} />
-          ))}
+      <Overlap>
+        <div className={card}>
+          <b className="font-display text-[17px]">Biggest moves</b>
+          {rise || fall ? (
+            <div className={`mt-2.5 grid gap-2.5 ${rise && fall ? 'grid-cols-2' : ''}`}>
+              {[rise, fall].map((m, i) =>
+                m ? (
+                  <button
+                    key={idFor(m.id)}
+                    onClick={() => navigate(`/analytics/categories/${idFor(m.id)}`)}
+                    className="relative overflow-hidden rounded-[18px] bg-paper p-3 text-left"
+                  >
+                    <span
+                      className="pointer-events-none absolute -top-5 -right-5 size-14 rounded-full"
+                      style={{ background: `${i ? '#0f8a5f' : '#e8590c'}1f` }}
+                    />
+                    <span className="relative block text-[11px] font-extrabold tracking-[0.06em] text-muted uppercase">
+                      {i ? 'Biggest fall' : 'Biggest rise'}
+                    </span>
+                    <span className="relative mt-1.5 flex items-center gap-1.5">
+                      <span className="text-lg">{category(m.id)?.icon ?? '❔'}</span>
+                      <b className="truncate text-[14px]">{category(m.id)?.name ?? 'No category'}</b>
+                    </span>
+                    <b className={`tabular relative block font-display text-xl ${i ? 'text-gain' : 'text-orange-text'}`}>
+                      {i ? '−' : '+'}
+                      {whole(Math.abs(m.diff))}
+                    </b>
+                    <span className="relative block text-[11.5px] text-muted">vs {year ? prevLabel(a.period) : 'usual'} by now</span>
+                  </button>
+                ) : null,
+              )}
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[13.5px] text-muted">Every category is close to its usual.</p>
+          )}
         </div>
-        <div className="relative mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-          {a.categories.slice(0, 4).map((c) => (
-            <span key={idFor(c.id)} className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-white" style={{ boxShadow: `inset 0 0 0 3px ${colorOf(c.id)}` }} />
-              {category(c.id)?.name ?? 'No category'} {pct(c.cents / total)}
-            </span>
-          ))}
-        </div>
-      </section>
+      </Overlap>
 
-      {(rise || fall) && (
-        <>
-          <Label>Biggest moves vs {year ? prevLabel(a.period) : 'usual'}</Label>
-          <div className="grid grid-cols-2 gap-2.5">
-            {[rise, fall].map((m, i) =>
-              m ? (
-                <button
-                  key={idFor(m.id)}
-                  onClick={() => navigate(`/analytics/categories/${idFor(m.id)}`)}
-                  className={`rounded-[20px] border-t-4 bg-card p-3 text-left ${i === 0 ? 'border-[#f08c00]' : 'border-[#0f8a5f]'}`}
-                >
-                  <span className="text-xl">{category(m.id)?.icon ?? '❔'}</span>
-                  <b className="mt-1 block truncate text-sm">{category(m.id)?.name ?? 'No category'}</b>
-                  <span className="tabular block truncate text-[12.5px] text-muted">
-                    {whole(m.cents)} · {year ? prevLabel(a.period) : 'usually'} {whole(m.usual)}
+      <Section n={1} title="All categories" right={year ? `vs ${prevLabel(a.period)}` : 'vs usual'}>
+        <div className="grid grid-cols-2 gap-2.5">
+          {rows.map((c) => {
+            const cat = category(c.id)
+            const color = colorOf(c.id)
+            const spark = c.months.slice(-6).filter((m) => !m.future)
+            return (
+              <button
+                key={idFor(c.id)}
+                onClick={() => navigate(`/analytics/categories/${idFor(c.id)}`)}
+                className={`${card} relative overflow-hidden p-3.5 text-left`}
+              >
+                <span className="pointer-events-none absolute -top-6 -right-6 size-[70px] rounded-full" style={{ background: `${color}1f` }} />
+                <span className="relative flex items-start justify-between gap-1">
+                  <span className="grid size-10 place-items-center rounded-[13px] text-lg" style={{ background: `${color}29` }}>
+                    {cat?.icon ?? '❔'}
                   </span>
-                  <span className={`tabular mt-1.5 inline-block rounded-full px-2 py-0.5 text-xs font-bold ${i === 0 ? 'bg-warn-bg text-orange-text' : 'bg-gain/12 text-gain'}`}>
-                    {i === 0 ? '▲' : '▼'} {whole(Math.abs(m.diff))}
-                  </span>
-                </button>
-              ) : (
-                <span key={i} />
-              ),
-            )}
-          </div>
-        </>
-      )}
-
-      <Label>All categories</Label>
-      <ul className="overflow-hidden rounded-[24px] bg-card px-4">
-        {rows.map((c) => {
-          const cat = category(c.id)
-          const spark = c.months.slice(-6).filter((m) => !m.future)
-          return (
-            <li key={idFor(c.id)} className="border-b border-line last:border-0">
-              <button onClick={() => navigate(`/analytics/categories/${idFor(c.id)}`)} className="flex w-full items-center gap-3 py-3 text-left">
-                <span className="grid size-9 shrink-0 place-items-center rounded-[11px] text-[17px]" style={{ background: `${colorOf(c.id)}22` }}>
-                  {cat?.icon ?? '❔'}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <b className="block truncate text-[14.5px]">{cat?.name ?? 'No category'}</b>
-                  <span className="block truncate text-xs text-muted">
-                    {pct(c.cents / total)} · {count(counts.get(idFor(c.id)) ?? 0, 'time', 'times')}
-                  </span>
-                </span>
-                <Sparkline values={spark.map((m) => m.cents)} color={colorOf(c.id)} />
-                <span className="flex w-[64px] shrink-0 flex-col items-end gap-0.5">
-                  <b className="tabular font-display text-[15px]">{whole(c.cents)}</b>
                   <ChangePill now={c.cents} usual={c.usual} small />
                 </span>
-                <Icon name="chevronRight" size={16} className="-mr-1 shrink-0 text-muted/60" />
+                <b className="relative mt-2.5 block truncate text-[14.5px]">{cat?.name ?? 'No category'}</b>
+                <span className="relative block">
+                  <b className="tabular font-display text-[19px]">{whole(c.cents)}</b>
+                  <span className="text-xs text-muted"> · {pct(c.cents / total)}</span>
+                </span>
+                <span className="relative mt-1.5 block">
+                  <Sparkline values={spark.map((m) => m.cents)} color={color} wide />
+                </span>
               </button>
-            </li>
-          )
-        })}
-      </ul>
-      <p className="mt-2.5 px-1 text-xs text-muted">
-        Compared with {year ? `${prevLabel(a.period)}` : 'your usual month'}
-        {a.current ? ' up to the same day' : ''} · lines show the last 6 months
-      </p>
+            )
+          })}
+        </div>
+        <p className="mt-2.5 px-1 text-xs text-muted">
+          Compared with {year ? `${prevLabel(a.period)}` : 'your usual month'}
+          {a.current ? ' up to the same day' : ''} · lines show the last 6 months
+        </p>
+      </Section>
     </>
   )
 }
 
-function Sparkline({ values, color }) {
-  if (values.length < 2) return <span className="w-[52px] shrink-0" />
+function Sparkline({ values, color, wide = false }) {
+  const W = wide ? 130 : 52
+  if (values.length < 2) return <span className="block h-6" />
   const max = Math.max(1, ...values)
-  const pts = values.map((v, i) => [(i / (values.length - 1)) * 48 + 2, 21 - (v / max) * 17])
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * (W - 4) + 2, 21 - (v / max) * 17])
   return (
-    <svg width="52" height="24" viewBox="0 0 52 24" className="shrink-0 overflow-visible" aria-hidden="true">
-      <polyline points={pts.map((p) => p.map((n) => n.toFixed(1)).join(',')).join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={pts.at(-1)[0]} cy={pts.at(-1)[1]} r="2.6" fill={color} />
+    <svg viewBox={`0 0 ${W} 24`} className={`${wide ? 'block h-6 w-full' : 'shrink-0'} overflow-visible`} preserveAspectRatio="none" aria-hidden="true">
+      <polyline
+        points={pts.map((p) => p.map((n) => n.toFixed(1)).join(',')).join(' ')}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   )
 }
 
-// ---------- Analytics → Categories → one category ----------
+// ---------- Analytics → Categories → one category (owner chose "C1 · Ring") ----------
 export function CategoryDetail({ id }) {
   const { period, setPeriod, a, category, error } = useCategoryData()
-  if (error) return <p className="px-5 pt-6 text-loss">Couldn't load this category: {error}</p>
-
+  if (error) return <p className="px-5 pt-6 text-loss">Couldn&apos;t load this category: {error}</p>
   const catId = id === 'none' ? null : id
+  const cat = a ? category(catId) : null
+  const color = cat?.color ?? GREY
+
   return (
-    <div className="px-4 pt-1 pb-6">
-      <PeriodBar period={period} onChange={setPeriod} />
-      {a && <CategoryBody a={a} cat={category(catId)} catId={catId} />}
+    <div className="pb-6">
+      <NavyTop background={topFor(color)}>
+        <NavyPeriodBar period={period} onChange={setPeriod} />
+        {a ? <CategoryTop a={a} catId={catId} /> : <div className="h-[108px]" />}
+      </NavyTop>
+      {a && <CategoryBody a={a} cat={cat} catId={catId} color={color} />}
     </div>
   )
 }
 
-function CategoryBody({ a, cat, catId }) {
-  const color = cat?.color ?? GREY
+// The coloured top: spent, against usual by now, and a ring of this month against a usual month (dot = how far
+// through the month). Year: against last year by now, no ring.
+function CategoryTop({ a, catId }) {
+  const year = a.period.kind === 'year'
+  const row = a.categories.find((c) => sameId(c.id, catId))
+  const cents = row?.cents ?? 0
+  const { usual } = monthsOf(a, catId)
+  const byNow = usualByNow(a, row, usual)
+  const change = byNow ? cents / byNow - 1 : null
+  const label = year ? a.period.key : periodLabel(a.period).split(' ')[0]
+  const ring = !year && usual > 0
+  return (
+    <div className="flex items-center gap-4">
+      <div className="min-w-0 flex-1">
+        <BigAmount cents={cents} label={a.current ? 'Spent so far' : `Spent in ${label}`} />
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {change !== null && Math.abs(change) >= 0.03 && (
+            <NavyPill>
+              {change > 0 ? '▲' : '▼'} {Math.round(Math.abs(change) * 100)}% vs {year ? prevLabel(a.period) : 'usual'}
+              {a.current ? ' by now' : ''}
+            </NavyPill>
+          )}
+          {year && byNow > 0 && (
+            <NavyPill>
+              {prevLabel(a.period)} by now {whole(byNow)}
+            </NavyPill>
+          )}
+        </div>
+      </div>
+      {ring && (
+        <Ring share={cents / usual} dot={a.current ? a.days.passed / a.days.total : null}>
+          <span>
+            <b className="block font-display text-xl leading-none">{pct(cents / usual)}</b>
+            <span className="block text-[10px] leading-tight text-white/80">
+              of a usual
+              <br />
+              month
+            </span>
+          </span>
+        </Ring>
+      )}
+    </div>
+  )
+}
+
+function CategoryBody({ a, cat, catId, color }) {
   const row = a.categories.find((c) => sameId(c.id, catId))
   const cents = row?.cents ?? 0
   const rank = a.categories.findIndex((c) => sameId(c.id, catId)) + 1
   const mine = a.expenses.filter((t) => sameId(t.category_id, catId))
   const { months, usual } = monthsOf(a, catId)
-  const byNow = usualByNow(a, row, usual)
-
-  return (
-    <>
-      <Hero a={a} cat={cat} color={color} cents={cents} usual={usual} byNow={byNow} rank={rank} visits={mine.length} />
-      <TwelveMonths a={a} months={months} usual={usual} color={color} catId={catId} />
-      {mine.length > 0 ? (
-        <>
-          <Where mine={mine} cat={cat} color={color} />
-          <When a={a} mine={mine} cat={cat} color={color} />
-          <Biggest mine={mine} cat={cat} color={color} />
-        </>
-      ) : (
-        <p className="mt-3 rounded-[24px] bg-card px-5 py-6 text-center text-muted">Nothing in {periodLabel(a.period)}.</p>
-      )}
-    </>
-  )
-}
-
-// The category's own colour: spent, against usual (with a bar for this month so far), share, per visit, per day
-function Hero({ a, cat, color, cents, usual, byNow, rank, visits }) {
   const year = a.period.kind === 'year'
-  const [euros, decimals] = formatCents(cents).split(',')
-  const label = year ? a.period.key : periodLabel(a.period).split(' ')[0]
-  const change = byNow ? cents / byNow - 1 : null
-  const showBar = !year && usual !== null && usual > 0
-  const share = showBar ? cents / usual : 0
   const perDay = a.days.passed ? cents / a.days.passed : 0
   const facts = [
     ['Share', a.totals.spent ? pct(cents / a.totals.spent) : '—', rank > 0 ? `#${rank} category` : ''],
-    ['Per visit', visits ? whole(cents / visits) : '—', count(visits, 'visit', 'visits')],
+    ['Per visit', mine.length ? whole(cents / mine.length) : '—', count(mine.length, 'visit', 'visits')],
     year ? ['Per month', whole(perDay * 30.44), 'average'] : ['Per day', whole(perDay), 'average'],
   ]
-
+  let n = 1
   return (
-    <section
-      className="relative mt-3 overflow-hidden rounded-[24px] p-4 text-white"
-      style={{ background: `linear-gradient(145deg, ${color}, ${darker(color)})`, boxShadow: `0 18px 30px -20px ${darker(color, 0.1)}` }}
-    >
-      <span className="pointer-events-none absolute -top-16 -right-12 size-44 rounded-full bg-white/[.12]" />
-      <div className="relative flex items-center justify-between gap-2">
-        <p className="text-[13.5px] font-semibold text-white/90">Spent in {label}</p>
-        {change !== null && Math.abs(change) >= 0.03 && (
-          <span className={`tabular rounded-full bg-white px-2.5 py-0.5 text-xs font-bold ${change > 0 ? 'text-[#c26b00]' : 'text-[#0f8a5f]'}`}>
-            {change > 0 ? '▲' : '▼'} {Math.round(Math.abs(change) * 100)}% vs {year ? prevLabel(a.period) : 'usual'}
-          </span>
-        )}
-      </div>
-      <p className="tabular relative font-display leading-tight font-bold">
-        <span className="text-[36px]">{euros}</span>
-        <span className="text-lg text-white/60">,{decimals}</span>
-      </p>
-      {showBar && (
-        <div className="relative mt-2">
-          <div className="flex justify-between text-xs text-white/90">
-            <span>{a.current ? 'So far this month' : 'This month'}</span>
-            <span className="tabular">
-              usual month <b>{whole(usual)}</b>
-            </span>
-          </div>
-          <div className="relative mt-1.5 h-2.5 rounded-full bg-white/[.22]">
-            <div className="h-full rounded-full bg-white" style={{ width: `${Math.min(100, share * 100)}%` }} />
-            {share > 1 && <span className="absolute -top-1 h-[18px] border-l-2 border-[#ffd43b]" style={{ left: `${100 / share}%` }} />}
-          </div>
-          <span className="tabular mt-1 block text-[11.5px] text-white/85">
-            {share > 1
-              ? `Already ${whole(cents - usual)} above a usual month`
-              : a.current && byNow
-                ? `Usually ${whole(byNow)} by day ${a.days.passed} of ${a.days.total}`
-                : `${whole(usual - cents)} below a usual month`}
-          </span>
+    <>
+      <Overlap>
+        <div className={`${card} grid grid-cols-3 px-1 py-3.5 text-center`}>
+          {facts.map(([l, v, s], i) => (
+            <div key={l} className={`min-w-0 px-2 ${i ? 'border-l border-line' : ''}`}>
+              <span className="block text-xs text-muted">{l}</span>
+              <b className="tabular block truncate font-display text-[17px]">{v}</b>
+              <span className="block truncate text-[11px] text-muted">{s}</span>
+            </div>
+          ))}
+          {!cat && <p className="col-span-3 mt-2 text-xs text-muted">Expenses without a category.</p>}
         </div>
+      </Overlap>
+      <Section n={n++} title="Last 12 months">
+        <TwelveMonths a={a} months={months} usual={usual} color={color} />
+      </Section>
+      {mine.length > 0 ? (
+        <>
+          <Section n={n++} title="Where">
+            <Where mine={mine} cat={cat} color={color} />
+          </Section>
+          <Section n={n++} title="When">
+            <When a={a} mine={mine} cat={cat} color={color} />
+          </Section>
+          <Section n={n++} title="Biggest purchases">
+            <Biggest mine={mine} cat={cat} color={color} />
+          </Section>
+        </>
+      ) : (
+        <p className={`${card} mx-4 mt-4 text-center text-muted`}>Nothing in {periodLabel(a.period)}.</p>
       )}
-      {year && byNow > 0 && (
-        <p className="tabular relative mt-1 text-[12.5px] text-white/90">
-          {prevLabel(a.period)} by now: {whole(byNow)}
-        </p>
-      )}
-      <div className="relative mt-3 grid grid-cols-3 rounded-2xl bg-white/[.14]">
-        {facts.map(([l, v, s], i) => (
-          <div key={l} className={`min-w-0 px-3 py-2 ${i ? 'border-l border-white/15' : ''}`}>
-            <span className="block text-[10.5px] font-semibold text-white/80">{l}</span>
-            <b className="tabular block truncate font-display text-base">{v}</b>
-            <span className="block truncate text-[10.5px] text-white/80">{s}</span>
-          </div>
-        ))}
-      </div>
-      {!cat && <p className="relative mt-2 text-xs text-white/85">Expenses without a category.</p>}
-    </section>
+    </>
   )
 }
 
@@ -344,9 +446,8 @@ function TwelveMonths({ a, months, usual, color }) {
   const p = picked === null ? null : months[picked]
 
   return (
-    <section className={`${card} mt-3`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <b className="font-display text-[17px]">Last 12 months</b>
+    <section className={card}>
+      <div className="flex items-baseline justify-end gap-2">
         {pace !== null && (
           <span className="tabular text-[12.5px] text-muted">
             on pace for <b className="text-ink">{whole(pace)}</b>
@@ -361,7 +462,15 @@ function TwelveMonths({ a, months, usual, color }) {
               <rect x={i * step} y="-12" width={step} height={H + 28} fill="transparent" />
               {m.partial && pace > m.cents && <rect x={x} y={y(pace)} width={bw} height={H - y(pace)} rx="5" fill={color} opacity=".22" />}
               {m.cents > 0 && (
-                <rect x={x} y={y(m.cents)} width={bw} height={Math.max(2, H - y(m.cents))} rx="5" fill={color} opacity={picked === i || (picked === null && m.partial) ? 1 : 0.45} />
+                <rect
+                  x={x}
+                  y={y(m.cents)}
+                  width={bw}
+                  height={Math.max(2, H - y(m.cents))}
+                  rx="5"
+                  fill={color}
+                  opacity={picked === i || (picked === null && m.partial) ? 1 : 0.45}
+                />
               )}
               <text x={x + bw / 2} y={H + 13} textAnchor="middle" fontSize="9.5" className={picked === i || m.partial ? 'fill-ink font-bold' : 'fill-muted'}>
                 {monthShort(m.key)[0]}
@@ -397,9 +506,8 @@ function Where({ mine, cat, color }) {
   if (!places.length) return null
   const max = places[0].cents || 1
   return (
-    <section className={`${card} mt-3`}>
-      <b className="font-display text-[17px]">Where</b>
-      <ul className="mt-1.5">
+    <section className={`${card} py-2`}>
+      <ul>
         {places.map((g, i) => (
           <li key={g.name} className={`flex items-center gap-3 py-2.5 ${i ? 'border-t border-line' : ''}`}>
             <MerchantIcon name={g.name} className="size-9 rounded-[11px] text-[17px]" style={{ background: `${color}22` }}>
@@ -439,9 +547,8 @@ function When({ a, mine, cat, color }) {
   const top = avgs.reduce((b, v, i) => (v > avgs[b] ? i : b), 0)
   const max = Math.max(1, ...avgs)
   return (
-    <section className={`${card} mt-3`}>
-      <b className="font-display text-[17px]">When</b>
-      <div className="mt-2.5 flex h-[66px] items-end gap-2">
+    <section className={card}>
+      <div className="flex h-[66px] items-end gap-2">
         {avgs.map((v, i) => (
           <div key={i} className="flex-1 text-center">
             <span className={`tabular text-[10px] ${i === top && v > 0 ? 'font-bold' : 'text-muted'}`} style={i === top && v > 0 ? { color } : undefined}>
@@ -470,9 +577,8 @@ function When({ a, mine, cat, color }) {
 function Biggest({ mine, cat, color }) {
   const list = [...mine].sort((x, y) => y.amount_cents - x.amount_cents).slice(0, 5)
   return (
-    <section className={`${card} mt-3`}>
-      <b className="font-display text-[17px]">Biggest purchases</b>
-      <ul className="mt-1.5">
+    <section className={`${card} py-2`}>
+      <ul>
         {list.map((t, i) => (
           <li key={i} className={`flex items-center gap-3 py-2.5 ${i ? 'border-t border-line' : ''}`}>
             <MerchantIcon name={t.note} className="size-9 rounded-[11px] text-[17px]" style={{ background: `${color}22` }}>
