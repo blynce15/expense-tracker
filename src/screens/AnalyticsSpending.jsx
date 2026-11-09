@@ -6,11 +6,12 @@ import { cachedAnalytics, fetchAnalytics, monthShort, periodLabel, placesFrom, p
 import { todayISO } from '../lib/dates'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { formatCents } from '../lib/money'
-import { monthlyCents } from '../lib/recurring'
 import { navigate } from '../lib/useRoute'
 
 const pad = (n) => String(n).padStart(2, '0')
 const DEEP = '#e8590c'
+// The Spending card's orange (Analytics → Explore), as the top of this page
+const ORANGE_TOP = 'radial-gradient(120% 90% at 85% 0%, #ffb066 0%, #f0701e 45%, #b8410a 100%)'
 const VIOLET = '#7c4dff'
 const WEEKDAYS = ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays']
 const dayMonth = (iso) => {
@@ -18,9 +19,10 @@ const dayMonth = (iso) => {
   return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }).replace('Sept', 'Sep')
 }
 
-/// Analytics → Spending: the navy top with the total (vs your usual), the spending pace card on its edge, then
-// one section per question: what it went on, where exactly, fixed or not, when you spend, the big ones.
-// Month view works in days; Year view in months.
+/// Analytics → Spending (owner chose "B · Daily allowance first" + C's "At a glance" tiles + categories as a pie,
+// .harness/analytics-v10-spending.html): the orange top with the total (vs your usual, on track for); how much a day
+// keeps you at your usual month on its edge; then when you spend (calendar + weekdays), at a glance, top categories
+// as a pie, where exactly, the big ones. Fixed costs live on the Recurring page. Month view works in days; Year in months.
 export default function AnalyticsSpending() {
   const [period, setPeriod] = usePeriod()
   const [data, setData] = useState(() => cachedAnalytics(period))
@@ -48,28 +50,28 @@ export default function AnalyticsSpending() {
 
   return (
     <div className="pb-6">
-      <NavyTop>
+      <NavyTop background={ORANGE_TOP}>
         <NavyPeriodBar period={period} onChange={setPeriod} />
         {a ? <Top a={a} /> : <div className="h-[92px]" />}
       </NavyTop>
       {a && (
         <>
           <Overlap>
-            <Pace a={a} />
+            <Allowance a={a} />
           </Overlap>
           {a.expenses.length > 0 ? (
             <>
-              <Section n={1} title="What it went on" right={a.period.kind === 'year' ? `vs ${prevLabel(a.period)}` : 'vs usual'}>
-                <WentOn a={a} category={category} />
-              </Section>
-              <Section n={2} title="Where exactly">
-                <Places a={a} category={category} />
-              </Section>
-              <Section n={3} title="Fixed or everyday">
-                <Fixed a={a} />
-              </Section>
-              <Section n={4} title="When you spend">
+              <Section n={1} title="When you spend">
                 <When a={a} />
+              </Section>
+              <Section n={2} title="At a glance">
+                <Glance a={a} />
+              </Section>
+              <Section n={3} title="Top categories">
+                <CategoryPie a={a} category={category} />
+              </Section>
+              <Section n={4} title="Where exactly">
+                <Places a={a} category={category} />
               </Section>
               <Section n={5} title="The big ones">
                 <Biggest a={a} category={category} />
@@ -91,23 +93,6 @@ const Title = ({ children, right }) => (
     {right && <span className="text-right text-[12.5px] text-muted">{right}</span>}
   </div>
 )
-
-// "▲ 18%" chips: orange when spending is up, green when down
-function Change({ now, usual, isNew = false }) {
-  if (isNew) return <span className="min-w-[58px] rounded-full bg-cobalt/10 px-2 py-0.5 text-center text-xs font-bold text-cobalt">new</span>
-  if (!usual) return <span className="min-w-[58px]" />
-  const c = now / usual - 1
-  const size = Math.round(Math.abs(c) * 100)
-  if (Math.abs(c) < 0.03) return <span className="min-w-[58px] rounded-full bg-line/70 px-2 py-0.5 text-center text-xs font-bold text-muted">= same</span>
-  const up = c > 0
-  return (
-    <span
-      className={`tabular min-w-[58px] rounded-full px-2 py-0.5 text-center text-xs font-bold ${up ? 'bg-warn-bg text-orange-text' : 'bg-gain/12 text-gain'}`}
-    >
-      {up ? '▲' : '▼'} {size >= 200 ? `${Math.round(now / usual)}×` : `${size}%`}
-    </span>
-  )
-}
 
 // ---------- The navy top: how much you spent ----------
 function Top({ a }) {
@@ -131,197 +116,207 @@ function Top({ a }) {
   )
 }
 
-// ---------- The pace card (on the navy edge) ----------
-// The running total through the period against your usual pace (month: your usual month as a straight line;
-// year: last year month by month), dotted on to where it's heading.
-function Pace({ a }) {
+// ---------- The daily allowance (the card on the orange edge) ----------
+// Month in progress: how much a day keeps you at your usual month, with a ring of this month against a usual one
+// (dot = how far through the month). A finished month or a year: how it ended against your usual / last year.
+function Allowance({ a }) {
   const year = a.period.kind === 'year'
-  const v = verdictOf(a)
-  const { pace } = a.spending
-  const usualTotal = year ? (pace.previous.at(-1) ?? 0) : (a.avgOut ?? 0)
-
-  const W = 300
-  const H = 90
-  const n = pace.length
-  const cur = pace.current
-  const top = Math.max(1, a.spending.onTrack ?? 0, usualTotal, ...cur, ...(year ? pace.previous : [])) * 1.05
-  const x = (i) => (n > 1 ? (i / (n - 1)) * W : 0)
-  const y = (c) => H - (c / top) * H
-  const line = cur.length ? `M${cur.map((c, i) => `${x(i).toFixed(1)},${y(c).toFixed(1)}`).join(' L')}` : ''
-  const lastI = cur.length - 1
-  const usualPath = year
-    ? pace.previous.some((c) => c > 0)
-      ? `M${pace.previous.map((c, i) => `${x(i).toFixed(1)},${y(c).toFixed(1)}`).join(' L')}`
-      : null
-    : usualTotal > 0
-      ? `M0,${H} L${W},${y(usualTotal).toFixed(1)}`
-      : null
-  const start = year ? `Jan` : `1 ${monthShort(a.period.key)}`
-  const end = year ? `Dec` : `${n} ${monthShort(a.period.key)}`
-  const stats = [
-    [year ? 'Per month' : 'Per day', whole(a.spending.perDay * (year ? 30.44 : 1))],
-    a.current
-      ? [year ? `${prevLabel(a.period)} by now` : 'Usual by now', v.spending.usual !== null ? whole(v.spending.usual) : '—']
-      : [year ? prevLabel(a.period) : 'Usual month', usualTotal ? whole(usualTotal) : '—'],
-    a.current
-      ? [year ? 'Months left' : 'Days left', String(year ? 12 - Number(todayISO().slice(5, 7)) : a.days.total - a.days.passed)]
-      : ['Biggest day', a.spending.biggestDay ? whole(a.spending.biggestDay.cents) : '—'],
-  ]
-
+  const spent = a.totals.spent
+  const usual = year ? (a.spending.pace.previous.at(-1) ?? 0) : (a.avgOut ?? 0)
+  const card2 = 'rounded-[24px] bg-card p-4 shadow-[0_14px_30px_-22px_rgba(11,27,69,0.45)]'
+  if (!usual) {
+    return (
+      <div className={card2}>
+        <b className="font-display text-[17px]">{whole(a.spending.perDay * (year ? 30.44 : 1))}</b>
+        <span className="text-[13px] text-muted"> a {year ? 'month' : 'day'} on average · not enough history yet to compare</span>
+      </div>
+    )
+  }
+  const share = spent / usual
+  const daysLeft = a.days.total - a.days.passed
+  const left = usual - spent
+  const running = a.current && !year
+  const size = 86
+  const r = 36
+  const C = 2 * Math.PI * r
+  const dotA = (a.days.passed / a.days.total) * 2 * Math.PI - Math.PI / 2
   return (
-    <div className="rounded-[24px] bg-card p-4 shadow-[0_14px_30px_-22px_rgba(11,27,69,0.45)]">
-      <div className="flex items-baseline justify-between gap-2">
-        <b className="font-display text-[17px]">Spending pace</b>
-        <span className="flex items-center gap-3 text-[11.5px] text-muted">
-          <span className="flex items-center gap-1.5">
-            <span className="h-[3px] w-3 rounded-full bg-[#e8590c]" /> {year ? a.period.key : 'You'}
-          </span>
-          {usualPath && (
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 border-t-[1.5px] border-dashed border-muted" /> {year ? prevLabel(a.period) : 'Usual'}
-            </span>
+    <div className={`${card2} flex items-center gap-3.5`}>
+      <div className="relative shrink-0" style={{ width: size, height: size }}>
+        <svg width={size} height={size} aria-hidden="true">
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={DEEP} strokeOpacity=".15" strokeWidth="10" />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={DEEP}
+            strokeWidth="10"
+            strokeLinecap="round"
+            strokeDasharray={`${Math.min(1, share) * C} ${C}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+          {a.current && (
+            <circle cx={size / 2 + Math.cos(dotA) * r} cy={size / 2 + Math.sin(dotA) * r} r="4.5" fill="var(--color-card)" stroke={DEEP} strokeWidth="2.5" />
           )}
+        </svg>
+        <span className="absolute inset-0 grid place-items-center text-center leading-tight">
+          <span>
+            <b className="tabular block font-display text-base">{pct(share)}</b>
+            <span className="text-[9.5px] font-bold text-muted">of {year ? prevLabel(a.period) : 'usual'}</span>
+          </span>
         </span>
       </div>
-      {cur.length > 0 && (
-        <svg viewBox={`-4 -6 ${W + 8} ${H + 24}`} className="mt-3 block h-auto w-full overflow-visible" role="img" aria-label="Spending through the period">
-          <defs>
-            <linearGradient id="pace-fill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0" stopColor={DEEP} stopOpacity=".22" />
-              <stop offset="1" stopColor={DEEP} stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {usualPath && <path d={usualPath} fill="none" stroke="var(--color-muted)" strokeOpacity=".7" strokeWidth="1.6" strokeDasharray="4 5" />}
-          {cur.length > 1 && <path d={`${line} L${x(lastI)},${H} L0,${H} Z`} fill="url(#pace-fill)" />}
-          <path d={line} fill="none" stroke={DEEP} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-          {a.spending.onTrack !== null && a.current && lastI < n - 1 && (
-            <line
-              x1={x(lastI)}
-              y1={y(cur[lastI])}
-              x2={W}
-              y2={y(a.spending.onTrack)}
-              stroke={DEEP}
-              strokeWidth="2"
-              strokeDasharray="2 5"
-              strokeLinecap="round"
-              opacity=".55"
-            />
-          )}
-          <circle cx={x(lastI)} cy={y(cur[lastI])} r="5" fill={DEEP} stroke="var(--color-card)" strokeWidth="2" />
-          <text x="0" y={H + 15} fontSize="10.5" className="fill-muted">
-            {start}
-          </text>
-          <text x={W} y={H + 15} fontSize="10.5" className="fill-muted" textAnchor="end">
-            {end}
-          </text>
-        </svg>
-      )}
-      <div className="mt-3 grid grid-cols-3 text-center">
-        {stats.map(([l, val], i) => (
-          <div key={l} className={i ? 'border-l border-line' : ''}>
-            <span className="block text-xs text-muted">{l}</span>
-            <b className="tabular font-display text-base">{val}</b>
-          </div>
-        ))}
+      <div className="min-w-0 flex-1">
+        {running && left > 0 && daysLeft > 0 ? (
+          <>
+            <span className="block text-[12.5px] text-muted">To stay at your usual month</span>
+            <b className="tabular block font-display text-2xl leading-tight">
+              {whole(left / daysLeft)} <span className="font-sans text-[13px] font-medium text-muted">a day</span>
+            </b>
+            <span className="tabular block text-[12.5px] text-muted">
+              {whole(left)} left of {whole(usual)} · {daysLeft} {daysLeft === 1 ? 'day' : 'days'}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="block text-[12.5px] text-muted">
+              {year ? `${a.period.key} vs ${prevLabel(a.period)}` : a.current ? 'This month' : periodLabel(a.period)}
+            </span>
+            <b className={`tabular block font-display text-2xl leading-tight ${left < 0 ? 'text-orange-text' : 'text-gain'}`}>
+              {whole(Math.abs(left))} {left < 0 ? 'over' : 'under'}
+            </b>
+            <span className="tabular block text-[12.5px] text-muted">
+              {year ? prevLabel(a.period) : 'a usual month'}: {whole(usual)}
+            </span>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
-// ---------- 2 · What it went on ----------
-// A donut of the categories and each one against its usual (month: your usual month by now; year: last year by now)
-function WentOn({ a, category }) {
+// ---------- At a glance ----------
+// Month: per day, no-spend days, priciest day, weekends' share. Year: per month, no-spend days, priciest month, weekends.
+function Glance({ a }) {
   const year = a.period.kind === 'year'
-  const share = a.current ? a.days.passed / a.days.total : 1
-  const months = a.activeMonths.filter((k) => k !== a.period.key)
-  const noHistory = year ? !a.compare.spent : !months.length
-  const usualOf = (c) => {
-    if (noHistory) return null
-    if (year) return c.prev
-    if (!months.length) return null
-    return Math.round((months.reduce((s, k) => s + (a.catBy.get(`${k}|${c.id}`) ?? 0), 0) / months.length) * share)
+  const [y0, m0, d0] = (year ? `${a.period.key}-01-01` : `${a.period.key}-01`).split('-').map(Number)
+  let noSpend = 0
+  for (let d = new Date(y0, m0 - 1, d0), i = 0; i < a.days.passed; i += 1, d.setDate(d.getDate() + 1)) {
+    const iso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    if (!(a.spentByDay.get(iso) > 0)) noSpend += 1
   }
-  const total = a.totals.spent || 1
-  const list = a.categories.slice(0, 6)
-  const rest = a.categories.slice(6).reduce((s, c) => s + c.cents, 0)
-  const colorOf = (id) => category(id)?.color ?? '#94a3c4'
-  const segs = [...list.map((c) => [c.cents / total, colorOf(c.id)]), ...(rest > 0 ? [[rest / total, 'var(--color-line)']] : [])]
-  const top = a.categories[0]
-  const topCat = category(top.id)
-  const r = 44
-  const C = 2 * Math.PI * r
-  let off = 0
+  let weekend = 0
+  for (const t of a.expenses) {
+    const [y, m, d] = t.date.split('-').map(Number)
+    if ([0, 6].includes(new Date(y, m - 1, d).getDay())) weekend += t.amount_cents
+  }
+  let top = null
+  if (year) {
+    for (const k of a.last12.filter((k) => k.slice(0, 4) === a.period.key)) {
+      const c = a.byMonth.get(k)?.spent ?? 0
+      if (c > 0 && (!top || c > top.cents)) top = { label: monthShort(k), cents: c }
+    }
+  } else if (a.spending.biggestDay) {
+    top = { label: dayMonth(a.spending.biggestDay.date), cents: a.spending.biggestDay.cents }
+  }
+  const tiles = [
+    [year ? 'Per month' : 'Per day', whole(a.spending.perDay * (year ? 30.44 : 1)), 'on average', DEEP],
+    ['No-spend days', String(noSpend), `of ${a.days.passed} so far`, '#0f8a5f'],
+    [year ? 'Priciest month' : 'Priciest day', top ? whole(top.cents) : '—', top?.label ?? 'nothing yet', '#c26b00'],
+    ['Weekends', a.totals.spent ? pct(weekend / a.totals.spent) : '—', 'of your spending', VIOLET],
+  ]
+  return (
+    <div className="grid grid-cols-2 gap-2.5">
+      {tiles.map(([l, v, s, c]) => (
+        <div key={l} className={`${card} relative overflow-hidden p-3.5`}>
+          <span className="pointer-events-none absolute -top-5 -right-5 size-16 rounded-full" style={{ background: `${c}1f` }} />
+          <span className="relative block text-xs text-muted">{l}</span>
+          <b className="tabular relative block font-display text-[22px] leading-tight" style={{ color: c }}>
+            {v}
+          </b>
+          <span className="relative block truncate text-[11.5px] text-muted">{s}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
+// ---------- Top categories: a pie with percentages ----------
+function CategoryPie({ a, category }) {
+  const total = a.totals.spent || 1
+  const top = a.categories.slice(0, 5)
+  const rest = a.categories.slice(5).reduce((s, c) => s + c.cents, 0)
+  const slices = [
+    ...top.map((c) => ({
+      key: c.id ?? 'none',
+      id: c.id,
+      cents: c.cents,
+      color: category(c.id)?.color ?? '#94a3c4',
+      name: category(c.id)?.name ?? 'No category',
+      icon: category(c.id)?.icon ?? '❔',
+    })),
+    ...(rest > 0 ? [{ key: 'rest', id: undefined, cents: rest, color: '#94a3c4', name: 'Other', icon: '•' }] : []),
+  ]
+  const size = 150
+  const R = size / 2
+  let at = -Math.PI / 2
+  const arcs = slices.map((s) => {
+    const f = s.cents / total
+    const a0 = at
+    const a1 = at + f * 2 * Math.PI
+    at = a1
+    const large = a1 - a0 > Math.PI ? 1 : 0
+    const p = (ang, rad) => [R + Math.cos(ang) * rad, R + Math.sin(ang) * rad]
+    const [x0, y0] = p(a0, R)
+    const [x1, y1] = p(a1, R)
+    const d = f >= 0.9999 ? `M${R} 0 A${R} ${R} 0 1 1 ${R - 0.01} 0 Z` : `M${R} ${R} L${x0} ${y0} A${R} ${R} 0 ${large} 1 ${x1} ${y1} Z`
+    const [lx, ly] = p((a0 + a1) / 2, R * 0.62)
+    return { ...s, f, d, lx, ly }
+  })
   return (
     <div className={card}>
       <div className="flex items-center gap-4">
-        <div className="relative shrink-0">
-          <svg width="112" height="112" className="-rotate-90" aria-hidden="true">
-            {segs.map(([f, col], i) => {
-              const el = (
-                <circle
-                  key={i}
-                  cx="56"
-                  cy="56"
-                  r={r}
-                  fill="none"
-                  stroke={col}
-                  strokeWidth="16"
-                  strokeDasharray={`${Math.max(0, f * C - (segs.length > 1 ? 2 : 0))} ${C}`}
-                  strokeDashoffset={-off * C}
-                />
-              )
-              off += f
-              return el
-            })}
-          </svg>
-          <span className="absolute inset-0 grid place-items-center text-center">
-            <span>
-              <b className="block font-display text-[17px]">{a.categories.length}</b>
-              <span className="text-[10.5px] text-muted">{a.categories.length === 1 ? 'category' : 'categories'}</span>
-            </span>
-          </span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <span className="text-[12.5px] text-muted">Most of it went on</span>
-          <b className="block truncate font-display text-xl leading-tight">
-            {topCat?.icon ?? '❔'} {topCat?.name ?? 'No category'}
-          </b>
-          <span className="tabular text-[12.5px] text-muted">
-            {whole(top.cents)} · {pct(top.cents / total)} of spending
-          </span>
-        </div>
-      </div>
-      <ul className="mt-2.5">
-        {list.map((c) => {
-          const cat = category(c.id)
-          const usual = usualOf(c)
-          return (
-            <li key={c.id ?? 'none'} className="border-t border-line">
-              <button onClick={() => navigate(`/analytics/categories/${c.id ?? 'none'}`)} className="flex w-full items-center gap-3 py-2.5 text-left">
-                <span className="grid size-9 shrink-0 place-items-center rounded-[11px] text-[17px]" style={{ background: `${colorOf(c.id)}22` }}>
-                  {cat?.icon ?? '❔'}
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0" role="img" aria-label="Spending by category">
+          {arcs.map((s) => (
+            <path key={s.key} d={s.d} fill={s.color} stroke="var(--color-card)" strokeWidth="2" strokeLinejoin="round" />
+          ))}
+          {arcs
+            .filter((s) => s.f >= 0.08)
+            .map((s) => (
+              <text
+                key={s.key}
+                x={s.lx}
+                y={s.ly + 4}
+                textAnchor="middle"
+                fontSize="12"
+                fontWeight="800"
+                fill="#fff"
+                style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,.18)', strokeWidth: 2 }}
+              >
+                {pct(s.f)}
+              </text>
+            ))}
+        </svg>
+        <ul className="min-w-0 flex-1">
+          {arcs.map((s) => (
+            <li key={s.key}>
+              <button
+                disabled={s.id === undefined}
+                onClick={() => navigate(`/analytics/categories/${s.id ?? 'none'}`)}
+                className="flex w-full items-center gap-2 py-1 text-left text-[13px]"
+              >
+                <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: s.color }} />
+                <span className="min-w-0 flex-1 truncate">
+                  {s.icon} {s.name}
                 </span>
-                <span className="min-w-0 flex-1">
-                  <b className="block truncate text-[14.5px]">{cat?.name ?? 'No category'}</b>
-                  <span className="mt-1 block h-[5px] overflow-hidden rounded-full bg-paper">
-                    <span
-                      className="block h-full rounded-full"
-                      style={{
-                        width: `${(c.cents / total) * 100}%`,
-                        background: colorOf(c.id),
-                      }}
-                    />
-                  </span>
-                </span>
-                <b className="tabular w-14 text-right font-display text-[15px]">{whole(c.cents)}</b>
-                <Change now={c.cents} usual={usual} isNew={usual === 0} />
+                <b className="tabular">{pct(s.f)}</b>
               </button>
             </li>
-          )
-        })}
-      </ul>
-      <button onClick={() => navigate('/analytics/categories')} className="mt-1 flex w-full items-center justify-center text-[13.5px] font-bold text-cobalt">
+          ))}
+        </ul>
+      </div>
+      <button onClick={() => navigate('/analytics/categories')} className="mt-2 flex w-full items-center justify-center text-[13.5px] font-bold text-cobalt">
         All categories
         <Icon name="chevronRight" size={15} strokeWidth={2.6} />
       </button>
@@ -362,85 +357,6 @@ function Places({ a, category }) {
           )
         })}
       </ul>
-    </div>
-  )
-}
-
-// ---------- 4 · Fixed or not ----------
-// Fixed = expenses named like a recurring payment; then your active subscriptions (recurring payments)
-function Fixed({ a }) {
-  const key = (t) => (t.note ?? '').trim().toLowerCase()
-  let fixed = 0
-  let fixedCount = 0
-  for (const t of a.expenses) {
-    if (a.fixedNames.has(key(t))) {
-      fixed += t.amount_cents
-      fixedCount += 1
-    }
-  }
-  const spent = a.totals.spent || 1
-  const everyday = a.totals.spent - fixed
-  const subs = (a.recurring ?? []).filter((r) => r.active && r.type !== 'income').sort((x, y) => monthlyCents(y) - monthlyCents(x))
-  const perMonth = subs.reduce((s, r) => s + monthlyCents(r), 0)
-  const added = (r) => {
-    const day = (r.created_at ?? '').slice(0, 10)
-    return a.period.kind === 'year' ? day.slice(0, 4) === a.period.key : day.slice(0, 7) === a.period.key
-  }
-  const per = { weekly: 'weekly', monthly: 'monthly', yearly: 'yearly' }
-
-  return (
-    <div className={card}>
-      <Title>Fixed bills vs everyday</Title>
-      <div className="mt-3 flex h-3.5 gap-[3px] overflow-hidden rounded-full">
-        {fixed > 0 && <span style={{ flex: fixed, background: VIOLET }} />}
-        {everyday > 0 && <span style={{ flex: everyday, background: '#f08c00' }} />}
-      </div>
-      <div className="mt-2.5 grid grid-cols-2 gap-2">
-        <div className="rounded-2xl bg-violet/12 px-3 py-2.5">
-          <span className="flex items-center gap-1 text-[11.5px] font-bold text-violet uppercase">
-            <Icon name="repeat" size={12} strokeWidth={2.6} />
-            Fixed · {fixedCount} {fixedCount === 1 ? 'bill' : 'bills'}
-          </span>
-          <b className="tabular block font-display text-[19px]">{whole(fixed)}</b>
-          <span className="text-[11.5px] text-muted">{pct(fixed / spent)} · recurring payments</span>
-        </div>
-        <div className="rounded-2xl bg-warn-bg px-3 py-2.5">
-          <span className="text-[11.5px] font-bold text-orange-text uppercase">
-            Everyday · {a.expenses.length - fixedCount} {a.expenses.length - fixedCount === 1 ? 'buy' : 'buys'}
-          </span>
-          <b className="tabular block font-display text-[19px]">{whole(everyday)}</b>
-          <span className="text-[11.5px] text-muted">{pct(everyday / spent)} · what you can change</span>
-        </div>
-      </div>
-      {subs.length > 0 && (
-        <>
-          <div className="mt-4 flex items-baseline justify-between gap-2">
-            <b className="text-sm">Subscriptions</b>
-            <span className="tabular text-[12.5px] text-muted">
-              {whole(perMonth)} a month · {whole(perMonth * 12)} a year
-            </span>
-          </div>
-          <ul className="mt-1.5">
-            {subs.slice(0, 6).map((r) => (
-              <li key={r.id}>
-                <button onClick={() => navigate('/recurring')} className="flex w-full items-center gap-3 border-t border-line py-2.5 text-left">
-                  <MerchantIcon name={r.name} className="size-8 rounded-[10px] bg-paper text-base">
-                    {r.icon}
-                  </MerchantIcon>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <b className="truncate text-sm">{r.name}</b>
-                      {added(r) && <span className="rounded-full bg-cobalt/10 px-1.5 py-px text-[10.5px] font-bold text-cobalt">new</span>}
-                    </span>
-                    <span className="block text-[11.5px] text-muted">{per[r.frequency] ?? 'monthly'}</span>
-                  </span>
-                  <b className="tabular font-display text-[14.5px]">{formatCents(r.amount_cents)}</b>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
     </div>
   )
 }
