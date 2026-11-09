@@ -50,11 +50,11 @@ export default function Analytics() {
           <Noticing items={noticings(data, category, whole)} />
           <h2 className="mt-6 mb-2.5 px-5 font-display text-[19px] font-bold">Explore</h2>
           <div className="grid grid-cols-2 gap-2.5 px-4">
+            <IncomeTile a={data} />
             <SpendTile a={data} />
             <SaveTile a={data} />
-            <TimeTile w={w} />
             <RecurringTile a={data} />
-            <IncomeTile a={data} />
+            <TimeTile w={w} />
           </div>
         </>
       )}
@@ -367,7 +367,8 @@ function SaveTile({ a }) {
   )
 }
 
-// Net worth's change over the months shown: as a % when it started from a real amount, else in euros
+// Over time, the wide card at the bottom: net worth's change over the months shown (as a % when it started from a
+// real amount, else in euros) and its line on the right
 function TimeTile({ w }) {
   const values = w.line.map((p) => p.cents)
   const months = values.length - 1
@@ -375,13 +376,13 @@ function TimeTile({ w }) {
   const share = months > 0 && first > 0 && Math.abs(w.lineChange / first) < 2 ? w.lineChange / first : null
   const arrow = w.lineChange >= 0 ? '▲' : '▼'
   const value = months < 1 ? '—' : share !== null ? `${arrow} ${Math.abs(Math.round(share * 100))}%` : `${arrow} ${whole(Math.abs(w.lineChange))}`
-  const W = 140
-  const H = 30
+  const W = 120
+  const H = 44
   const max = Math.max(...values)
   const min = Math.min(...values)
-  const pts = values.map((v, i) => [months ? (i / months) * W : W, H - ((v - min) / (max - min || 1)) * (H - 6) - 3])
+  const pts = values.map((v, i) => [months ? (i / months) * W : W, H - ((v - min) / (max - min || 1)) * (H - 8) - 4])
   return (
-    <ColourCard
+    <WideCard
       to="/analytics/trends"
       icon="invest"
       title="Over time"
@@ -397,14 +398,36 @@ function TimeTile({ w }) {
             d={pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')}
             fill="none"
             stroke="#fff"
-            strokeWidth="2.2"
+            strokeWidth="2.4"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <circle cx={pts.at(-1)[0]} cy={pts.at(-1)[1]} r="3.5" fill="#fff" stroke="#3f6df0" strokeWidth="2" />
         </svg>
       )}
-    </ColourCard>
+    </WideCard>
+  )
+}
+
+// A colour card across both columns: icon, title, value and line on the left, a small picture on the right
+function WideCard({ to, icon, title, value, sub, from, toColor, glow, children }) {
+  return (
+    <button
+      onClick={() => navigate(to)}
+      className="relative col-span-2 flex items-center gap-3.5 overflow-hidden rounded-[24px] p-3.5 text-left text-white transition active:scale-[0.98]"
+      style={{ background: `linear-gradient(135deg, ${from}, ${toColor})`, boxShadow: `0 16px 28px -20px ${glow}` }}
+    >
+      <span className="pointer-events-none absolute -top-10 -right-8 size-[120px] rounded-full bg-white/[.12]" />
+      <span className="relative grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-white/20">
+        <Icon name={icon} size={17} strokeWidth={2.4} />
+      </span>
+      <span className="relative min-w-0 flex-1">
+        <b className="block text-[13.5px] text-white/90">{title}</b>
+        <b className="tabular block truncate font-display text-[22px] leading-tight">{value}</b>
+        <span className="block truncate text-[11.5px] text-white/85">{sub}</span>
+      </span>
+      <span className="relative block w-[120px] shrink-0">{children}</span>
+    </button>
   )
 }
 
@@ -437,55 +460,31 @@ function RecurringTile({ a }) {
   )
 }
 
-// Income: a wide green card under the four (owner's choice with the Income page, .harness/analytics-v8-income.html):
-// this month's income vs usual, how many sources, and the 12 months as small white bars
+// Income (first card, next to Spending): this month's income vs usual, how many sources, the 12 months as white bars
 function IncomeTile({ a }) {
   const c = verdictOf(a).income.change
   const n = incomeSources(a).list.length
-  const sub = [
-    !a.totals.income
-      ? 'Nothing yet this month'
-      : c === null
-        ? 'so far this month'
-        : Math.abs(c) < 0.03
-          ? 'about your usual'
-          : `${Math.round(Math.abs(c) * 100)}% ${c < 0 ? 'below' : 'above'} usual`,
-    n ? `${n} ${n === 1 ? 'source' : 'sources'}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  const sub = !a.totals.income
+    ? 'Nothing yet this month'
+    : c === null
+      ? `${n} ${n === 1 ? 'source' : 'sources'}`
+      : Math.abs(c) < 0.03
+        ? 'about your usual'
+        : `${Math.round(Math.abs(c) * 100)}% ${c < 0 ? 'below' : 'above'} usual`
   const rows = a.trend
   const max = Math.max(1, ...rows.map((t) => t.income))
+  const W = 140
+  const H = 30
+  const step = W / 12
   return (
-    <button
-      onClick={() => navigate('/analytics/income')}
-      className="relative col-span-2 flex items-center gap-3.5 overflow-hidden rounded-[24px] bg-gradient-to-br from-[#5fd38f] to-[#2b8a3e] p-3.5 text-left text-white shadow-[0_16px_28px_-20px_#2b8a3e] transition active:scale-[0.98]"
-    >
-      <span className="pointer-events-none absolute -top-10 -right-8 size-[120px] rounded-full bg-white/[.12]" />
-      <span className="relative grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-white/20">
-        <Icon name="moneyIn" size={17} strokeWidth={2.4} />
-      </span>
-      <span className="relative min-w-0 flex-1">
-        <b className="block text-[13.5px] text-white/90">Income</b>
-        <b className="tabular block truncate font-display text-[22px] leading-tight">{whole(a.totals.income)}</b>
-        <span className="block truncate text-[11.5px] text-white/85">{sub}</span>
-      </span>
-      <svg viewBox="0 0 110 44" className="relative block w-[110px] shrink-0" aria-hidden="true">
-        {rows.map((t, i) =>
-          t.future ? null : (
-            <rect
-              key={t.key}
-              x={i * (110 / 12) + 2}
-              y={44 - Math.max(2, (t.income / max) * 44)}
-              width="5"
-              height={Math.max(2, (t.income / max) * 44)}
-              rx="2"
-              fill="#fff"
-              opacity={t.partial ? 0.55 : 0.95}
-            />
-          ),
-        )}
+    <ColourCard to="/analytics/income" icon="moneyIn" title="Income" value={whole(a.totals.income)} sub={sub} from="#5fd38f" toColor="#2b8a3e" glow="#2b8a3e">
+      <svg viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full" aria-hidden="true">
+        {rows.map((t, i) => {
+          if (t.future) return null
+          const h = Math.max(2, (t.income / max) * H)
+          return <rect key={t.key} x={i * step + step * 0.2} y={H - h} width={step * 0.6} height={h} rx="2" fill="#fff" opacity={t.partial ? 0.55 : 0.92} />
+        })}
       </svg>
-    </button>
+    </ColourCard>
   )
 }
