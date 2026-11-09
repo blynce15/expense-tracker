@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { buildAnalytics, creepOf, incomeSources, placesFrom, shiftMonth, shiftPeriod, verdictOf } from '../src/lib/analytics'
+import { buildAnalytics, creepOf, incomeSources, placesFrom, worthHistory, shiftMonth, shiftPeriod, verdictOf } from '../src/lib/analytics'
 
 // "Today" is Saturday 17 October 2026: October is still running, September is a full month
 beforeEach(() => {
@@ -172,5 +172,22 @@ describe('Income by source', () => {
     ])
     // the 12 months up to October: September and October for Salary's category
     expect(s.list[0].months.slice(-2)).toEqual([200000, 203000])
+  })
+})
+
+describe('Net worth over all time', () => {
+  test('from the first month to now, backwards from today, savings part included', () => {
+    const r = [
+      t('2026-06-03', 'income', 50000),
+      t('2026-08-10', 'transfer', 20000, { to_account_id: 'sav' }),
+      t('2026-09-01', 'expense', 10000),
+      t('2026-10-02', 'invest', 30000),
+    ]
+    const h = worthHistory(accounts, r)
+    expect(h.line.map((p) => p.key)).toEqual(['2026-06', '2026-07', '2026-08', '2026-09', '2026-10'])
+    // today: 120.000 (100.000 + 20.000 savings); October −30.000 invested; September −10.000
+    expect(h.line.map((p) => p.cents)).toEqual([160000, 160000, 160000, 150000, 120000])
+    expect(h.line.map((p) => p.savings)).toEqual([0, 0, 20000, 20000, 20000])
+    expect(h.byMonth.get('2026-10').investNet).toBe(30000)
   })
 })

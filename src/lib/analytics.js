@@ -575,3 +575,62 @@ export function incomeSources(a) {
   return { list, total, regular, extra: total - regular }
 }
 
+
+// ---------- Net worth over all time (Over time → All time) ----------
+
+// Accounts and savings at the end of every month from the first transaction to now, worked out backwards from
+// today's balances like buildAnalytics' line: { byMonth (Map key → { investNet }), line: [{ key, cents, savings }] }.
+// Money invested left the accounts, so the investments part is added by netWorthOf (src/lib/networth.js).
+export function worthHistory(accounts, rows) {
+  const typeOf = new Map(accounts.map((a) => [a.id, a.type]))
+  const byMonth = new Map()
+  const month = (k) => byMonth.get(k) ?? byMonth.set(k, { change: 0, saved: 0, investNet: 0 }).get(k)
+  const intoSavings = (m, id, cents) => typeOf.get(id) === 'savings' && (m.saved += cents)
+  for (const t of rows) {
+    const m = month(t.date.slice(0, 7))
+    if (t.type === 'income') {
+      m.change += t.amount_cents
+      intoSavings(m, t.account_id, t.amount_cents)
+    } else if (t.type === 'expense') {
+      m.change -= t.amount_cents
+      intoSavings(m, t.account_id, -t.amount_cents)
+    } else if (t.type === 'invest' || t.type === 'divest') {
+      const cents = t.type === 'invest' ? t.amount_cents : -t.amount_cents
+      m.change -= cents
+      m.investNet += cents
+      intoSavings(m, t.account_id, -cents)
+    } else {
+      intoSavings(m, t.account_id, -t.amount_cents)
+      intoSavings(m, t.to_account_id, t.amount_cents)
+    }
+  }
+  const now = todayISO().slice(0, 7)
+  const keys = [...byMonth.keys()].sort()
+  const first = keys[0] ?? now
+  const total = accounts.reduce((s, a) => s + a.balance_cents, 0)
+  const savings = accounts.filter((a) => a.type === 'savings').reduce((s, a) => s + a.balance_cents, 0)
+  const line = []
+  for (let k = first; k <= now; k = shiftMonth(k, 1)) line.push({ key: k })
+  // Backwards from today: the end of month k = today minus everything after k
+  let afterTotal = 0
+  let afterSaved = 0
+  for (let i = line.length - 1; i >= 0; i--) {
+    line[i].cents = total - afterTotal
+    line[i].savings = savings - afterSaved
+    const m = byMonth.get(line[i].key)
+    if (m) {
+      afterTotal += m.change
+      afterSaved += m.saved
+    }
+  }
+  return { byMonth, line }
+}
+
+// Every transaction there is (only the columns net worth needs), in pages of 1.000
+export async function fetchWorthHistory() {
+  const [accounts, rows] = await Promise.all([
+    fetchAccountsWithBalances(),
+    fetchAll(() => supabase.from('transactions').select('type, amount_cents, date, account_id, to_account_id')),
+  ])
+  return worthHistory(accounts, rows)
+}

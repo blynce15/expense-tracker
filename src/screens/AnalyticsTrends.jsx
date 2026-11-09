@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BigAmount, NavyPeriodBar, NavyPill, NavyTop, Overlap, pct, Section, usePeriod, useWorthExtras, whole, WORTH_PARTS } from '../components/AnalyticsKit'
-import { cachedAnalytics, creepOf, fetchAnalytics, monthShort, periodLabel, prevLabel, verdictOf } from '../lib/analytics'
+import { cachedAnalytics, creepOf, fetchAnalytics, fetchWorthHistory, monthShort, periodLabel, prevLabel, verdictOf } from '../lib/analytics'
 import { fetchLookups, lookupCache } from '../lib/lookups'
 import { netWorthOf } from '../lib/networth'
 import { navigate } from '../lib/useRoute'
@@ -19,6 +19,20 @@ export default function AnalyticsTrends() {
   const [categories, setCategories] = useState(() => lookupCache.lookups?.categories ?? null)
   const { invest, pension } = useWorthExtras()
   const [error, setError] = useState(null)
+  // Net worth's line: the 12 months up to the period, or all time (every month since the first transaction,
+  // loaded only when asked for and kept while the app is open)
+  const [range, setRange] = useState('12')
+  const [history, setHistory] = useState(() => allTime)
+  const [loadingAll, setLoadingAll] = useState(false)
+  const showAll = (next) => {
+    setRange(next)
+    if (next !== 'all' || allTime) return
+    setLoadingAll(true)
+    fetchWorthHistory()
+      .then((h) => setHistory((allTime = h)))
+      .catch(() => setRange('12'))
+      .finally(() => setLoadingAll(false))
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -36,7 +50,8 @@ export default function AnalyticsTrends() {
 
   if (error) return <p className="px-5 pt-6 text-loss">Couldn&apos;t load your history: {error}</p>
   const a = data && data.period === period && categories ? data : null
-  const w = a && invest && pension ? netWorthOf(a, invest, pension) : null
+  const all = range === 'all' && history
+  const w = a && invest && pension ? netWorthOf(all ? { ...a, byMonth: history.byMonth, worth: { ...a.worth, line: history.line } } : a, invest, pension) : null
   const category = (id) => categories?.find((c) => (c.id ?? 'none') === (id ?? 'none'))
   // Full months with any activity in the 12 months (not the one still running)
   const full = a ? a.trend.filter((t) => !t.partial && !t.future && (t.income || t.spent)) : []
@@ -45,7 +60,7 @@ export default function AnalyticsTrends() {
     <div className="pb-6">
       <NavyTop background={BLUE_TOP}>
         <NavyPeriodBar period={period} onChange={setPeriod} />
-        {w ? <Top a={a} w={w} /> : <div className="h-[92px]" />}
+        {w ? <Top a={a} w={w} all={!!all} range={range} onRange={showAll} loading={loadingAll} /> : <div className="h-[92px]" />}
       </NavyTop>
       {a && w && (
         <>
@@ -94,7 +109,9 @@ const Legend = ({ items }) => (
 
 // ---------- The blue top: net worth and its line ----------
 // (owner chose "A · Line on top" with C's last-year cards, .harness/analytics-v7-time.html)
-function Top({ a, w }) {
+let allTime = null
+
+function Top({ a, w, all, range, onRange, loading }) {
   const first = w.line[0]?.cents ?? 0
   const months = w.line.length - 1
   // As a % only when it started from a real amount (a start near €0 gives silly percentages)
@@ -106,7 +123,14 @@ function Top({ a, w }) {
   const min = Math.min(...values)
   const pts = values.map((v, i) => [months ? (i / months) * W : W, H - ((v - min) / (max - min || 1)) * (H - 8) - 4])
   const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ')
-  const span = months === 1 ? 'a month' : months >= 11 ? 'a year' : `${months} months`
+  const span = all
+    ? `since ${monthShort(w.line[0].key)} ${w.line[0].key.slice(0, 4)}`
+    : months === 1
+      ? 'in a month'
+      : months >= 11
+        ? 'in a year'
+        : `in ${months} months`
+  const label = (k) => (all ? `${monthShort(k)} ${k.slice(2, 4)}` : monthShort(k))
   return (
     <>
       <BigAmount
@@ -116,7 +140,7 @@ function Top({ a, w }) {
       {months > 0 && w.lineChange !== 0 && (
         <div className="mt-2.5 flex flex-wrap gap-1.5">
           <NavyPill>
-            {w.lineChange > 0 ? '▲' : '▼'} {whole(Math.abs(w.lineChange))} in {span}
+            {w.lineChange > 0 ? '▲' : '▼'} {whole(Math.abs(w.lineChange))} {span}
           </NavyPill>
           {share !== null && Math.round(share * 100) !== 0 && (
             <NavyPill>
@@ -133,11 +157,29 @@ function Top({ a, w }) {
             <circle cx={pts.at(-1)[0]} cy={pts.at(-1)[1]} r="5" fill="#fff" />
           </svg>
           <div className="mt-1 flex justify-between text-[10.5px] text-white/70">
-            <span>{monthShort(w.line[0].key)}</span>
-            <span>{monthShort(w.line.at(-1).key)}</span>
+            <span>{label(w.line[0].key)}</span>
+            <span>{label(w.line.at(-1).key)}</span>
           </div>
         </>
       )}
+      <div className="mt-3 flex justify-center">
+        <div className="flex rounded-full bg-white/12 p-[3px]" role="tablist" aria-label="Net worth over">
+          {[
+            ['12', '12 months'],
+            ['all', 'All time'],
+          ].map(([key, text]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={range === key}
+              onClick={() => range !== key && onRange(key)}
+              className={`rounded-full px-3.5 py-1 text-[12.5px] font-semibold ${range === key ? 'bg-white text-[#14318f]' : 'text-white/75'}`}
+            >
+              {key === 'all' && loading ? 'Loading…' : text}
+            </button>
+          ))}
+        </div>
+      </div>
     </>
   )
 }
