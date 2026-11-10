@@ -1,11 +1,13 @@
 // Monthly data backup (runs on the owner's PC, see CLAUDE.md → Data backup).
 // Copies every table in the database's public schema into a dated folder (BACKUP_DIR):
 // backup.json (everything, for restoring) + one CSV per table (to open in Excel).
+// Then writes the monthly Obsidian notes (scripts/monthly-report.mjs) into REPORT_DIR, if set.
 // The database address (DATABASE_URL) and the folder (BACKUP_DIR) live in .env.backup, on this PC only (never committed).
-import { mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
+import { buildMonthlyReport, monthsToReport, reportFileName } from './monthly-report.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 try {
@@ -16,6 +18,33 @@ try {
 // Without BACKUP_DIR: a "LynxOS backups" folder in OneDrive
 const backupsDir = process.env.BACKUP_DIR || join(process.env.OneDrive || join(process.env.USERPROFILE, 'OneDrive'), 'LynxOS backups')
 const failedNote = join(backupsDir, 'BACKUP FAILED.txt')
+const reportFailedNote = join(backupsDir, 'REPORT FAILED.txt')
+const lisbonToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Lisbon' }) // 2026-10-17
+
+// Monthly notes for Obsidian (REPORT_DIR in .env.backup): one per finished month that has no note yet,
+// so a missed month catches up and a note is never overwritten. A failure here never stops the backup.
+function writeReports(data) {
+  const dir = process.env.REPORT_DIR
+  if (!dir) return []
+  try {
+    mkdirSync(dir, { recursive: true })
+    const today = lisbonToday()
+    const written = []
+    for (const key of monthsToReport(data, readdirSync(dir), today)) {
+      writeFileSync(join(dir, reportFileName(key)), buildMonthlyReport(data, key, { createdOn: today }))
+      written.push(reportFileName(key))
+    }
+    if (existsSync(reportFailedNote)) rmSync(reportFailedNote)
+    return written
+  } catch (error) {
+    writeFileSync(reportFailedNote, `The LynxOS monthly report on ${new Date().toString()} did not work (the backup itself is fine).
+
+${error.message}
+`)
+    console.error('Report failed:', error.message)
+    return []
+  }
+}
 
 function csvCell(value) {
   if (value === null || value === undefined) return ''
@@ -46,7 +75,7 @@ async function run() {
       "select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE' order by table_name",
     )
 
-    const stamp = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Lisbon' }) // 2026-10-17
+    const stamp = lisbonToday()
     const folder = join(backupsDir, `LynxOS backup ${stamp}`)
     rmSync(folder, { recursive: true, force: true }) // a second run the same day starts fresh
     mkdirSync(folder, { recursive: true })
@@ -68,6 +97,8 @@ async function run() {
     writeFileSync(join(folder, 'what is in here.txt'), `LynxOS backup, ${new Date().toString()}\r\n\r\nRows per table:\r\n${counts.join('\r\n')}\r\n`)
     if (existsSync(failedNote)) rmSync(failedNote)
     console.log(`Backup saved to ${folder}\n${counts.join('\n')}`)
+    const reports = writeReports(data)
+    if (reports.length) console.log(`Monthly report: ${reports.join(', ')}`)
   } finally {
     await client.end()
   }
