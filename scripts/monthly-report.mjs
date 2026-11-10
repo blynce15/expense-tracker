@@ -44,7 +44,7 @@ const daysIn = (key) => {
   return new Date(y, m, 0).getDate()
 }
 export const monthTitle = (key) => `${MONTHS[Number(key.slice(5, 7)) - 1]} ${key.slice(0, 4)}`
-export const reportFileName = (key) => `${key} ${MONTHS[Number(key.slice(5, 7)) - 1]}.md`
+export const reportFileName = (key) => `${monthTitle(key)}.md` // "October 2026.md"
 
 const dayLabel = (iso) => {
   const [y, m, d] = iso.split('-').map(Number)
