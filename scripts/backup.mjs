@@ -1,13 +1,15 @@
 // Monthly data backup (runs on the owner's PC, see CLAUDE.md → Data backup).
 // Copies every table in the database's public schema into a dated folder (BACKUP_DIR):
 // backup.json (everything, for restoring) + one CSV per table (to open in Excel).
-// Then writes the monthly Obsidian notes (scripts/monthly-report.mjs) into REPORT_DIR, if set.
+// Then writes the monthly Obsidian notes (scripts/monthly-report.mjs) into REPORT_DIR, if set,
+// and emails last month's report (scripts/email-report.mjs) once Gmail is set up.
 // The database address (DATABASE_URL) and the folder (BACKUP_DIR) live in .env.backup, on this PC only (never committed).
 import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import pg from 'pg'
-import { buildMonthlyReport, monthsToReport, reportFileName } from './monthly-report.mjs'
+import { buildMonthlyReport, isoDate, monthsToReport, reportFileName, shiftMonth } from './monthly-report.mjs'
+import { markSent, sendEmailReport, wasSent } from './email-report.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 try {
@@ -19,6 +21,7 @@ try {
 const backupsDir = process.env.BACKUP_DIR || join(process.env.OneDrive || join(process.env.USERPROFILE, 'OneDrive'), 'LynxOS backups')
 const failedNote = join(backupsDir, 'BACKUP FAILED.txt')
 const reportFailedNote = join(backupsDir, 'REPORT FAILED.txt')
+const emailFailedNote = join(backupsDir, 'EMAIL FAILED.txt')
 const lisbonToday = () => new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Lisbon' }) // 2026-10-17
 
 // Monthly notes for Obsidian (REPORT_DIR in .env.backup): one per finished month that has no note yet,
@@ -37,12 +40,25 @@ function writeReports(data) {
     if (existsSync(reportFailedNote)) rmSync(reportFailedNote)
     return written
   } catch (error) {
-    writeFileSync(reportFailedNote, `The LynxOS monthly report on ${new Date().toString()} did not work (the backup itself is fine).
-
-${error.message}
-`)
+    writeFileSync(reportFailedNote, `The LynxOS monthly report on ${new Date().toString()} did not work (the backup itself is fine).\r\n\r\n${error.message}\r\n`)
     console.error('Report failed:', error.message)
     return []
+  }
+}
+
+// Monthly email (scripts/email-report.mjs): last month's report, once, after the note. Only once the owner has run
+// `npm run email-setup`. A month that couldn't be sent (no internet, Gmail down) is tried again on the next run.
+async function sendMonthlyEmail(data) {
+  if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) return
+  const key = shiftMonth(lisbonToday().slice(0, 7), -1)
+  if (wasSent(backupsDir, key) || !data.transactions?.some((t) => isoDate(t.date).startsWith(key))) return
+  try {
+    console.log(`Email sent: ${await sendEmailReport(data, key, { text: buildMonthlyReport(data, key) })}`)
+    markSent(backupsDir, key)
+    if (existsSync(emailFailedNote)) rmSync(emailFailedNote)
+  } catch (error) {
+    writeFileSync(emailFailedNote, `The LynxOS monthly email on ${new Date().toString()} did not go out (the backup and the note are fine). It will be tried again on the next backup.\r\n\r\n${error.message}\r\n`)
+    console.error('Email failed:', error.message)
   }
 }
 
@@ -99,6 +115,7 @@ async function run() {
     console.log(`Backup saved to ${folder}\n${counts.join('\n')}`)
     const reports = writeReports(data)
     if (reports.length) console.log(`Monthly report: ${reports.join(', ')}`)
+    await sendMonthlyEmail(data)
   } finally {
     await client.end()
   }

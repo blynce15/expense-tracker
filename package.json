@@ -10,6 +10,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "backup": "node scripts/backup.mjs",
+    "email-setup": "node scripts/email-setup.mjs",
+    "email-report": "node scripts/email-report.mjs",
     "test": "vitest run"
   },
   "dependencies": {
@@ -24,6 +26,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "nodemailer": "^10.5.0",
     "oxlint": "^1.81.0",
     "pg": "^8.23.1",
     "vite": "^8.3.0",
