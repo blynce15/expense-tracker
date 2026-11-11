@@ -78,6 +78,6 @@ describe('monthly report', () => {
   it('only reports finished months that have no note yet', () => {
     expect(monthsToReport(tables, [], '2026-11-10')).toEqual(['2026-09', '2026-10'])
     expect(monthsToReport(tables, [reportFileName('2026-09')], '2026-11-10')).toEqual(['2026-10'])
-    expect(reportFileName('2026-10')).toBe('October 2026.md')
+    expect(reportFileName('2026-10')).toBe('2026-10.md')
   })
 })
